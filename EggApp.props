@@ -4,7 +4,9 @@
   <PropertyGroup Label="UserMacros">
     <EggPath>PATH=C:\sdk\assimp\bin\x64</EggPath>
   </PropertyGroup>
-  <PropertyGroup />
+  <PropertyGroup>
+    <LibraryPath>D:\Development\External\DirectXTex\lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>
       <AdditionalDependencies>Egg.lib;%(AdditionalDependencies)</AdditionalDependencies>

@@ -3,12 +3,12 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <IncludePath>C:\sdk\DirectXTex\include;C:\sdk\assimp\include;$(SolutionDir);$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
-    <LibraryPath>C:\sdk\assimp\lib\x64;C:\sdk\DirectXTex\lib;$(OutDir);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
+    <IncludePath>D:\Development\External\Assimp30\include;C:\sdk\assimp\include;$(SolutionDir);$(VC_IncludePath);$(WindowsSDK_IncludePath);D:\Development\External\DirectXTex\include</IncludePath>
+    <LibraryPath>D:\Development\External\DirectXTex\lib;D:\Development\External\Assimp30\lib\x64;C:\sdk\assimp\lib\x64;$(OutDir);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Lib>
-      <AdditionalDependencies>assimp-vc140-mt.lib;DirectXTex.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>assimp.lib;DirectXtex.lib%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup />

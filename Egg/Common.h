@@ -8,14 +8,10 @@
 #include "d3dx12.h"
 #include <memory>
 #include <vector>
+#include <string>
 
-#ifdef LEGACY_VERSION
-#include <dxgi1_5.h>
 #include <wrl.h>
-using IDXGIFactory6 = IDXGIFactory5;
-#else
 #include <dxgi1_6.h>
-#endif
 
 template<typename T>
 using com_ptr = Microsoft::WRL::ComPtr<T>;

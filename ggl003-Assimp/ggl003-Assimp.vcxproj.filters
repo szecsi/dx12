@@ -20,10 +20,10 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ConstantBufferTypes.h">
+    <ClInclude Include="ggl003App.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ggl003App.h">
+    <ClInclude Include="ConstantBufferTypes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
