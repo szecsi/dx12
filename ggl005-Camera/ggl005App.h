@@ -9,7 +9,7 @@
 
 using namespace Egg::Math;
 
-class ggl004App : public Egg::SimpleApp {
+class ggl005App : public Egg::SimpleApp {
 protected:
 	Egg::Mesh::Shaded::P shadedMesh;
 	Float4x4 rotation;
