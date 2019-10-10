@@ -44,7 +44,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="ConstantBufferTypes.h" />
-    <ClInclude Include="ggl004App.h" />
+    <ClInclude Include="ggl005App.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
