@@ -113,6 +113,7 @@ namespace Egg {
 
 		virtual void Render() = 0;
 		virtual void Update(float dt, float T) = 0;
+		virtual void ProcessMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {}
 
 		virtual void LoadAssets() { }
 

@@ -22,6 +22,9 @@
     <Filter Include="Mesh">
       <UniqueIdentifier>{3975ca39-e5c6-4edb-ad6d-5072b939714f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Cam">
+      <UniqueIdentifier>{25f7c716-138c-4d34-8662-3e50a5732b55}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Utility.h">
@@ -159,6 +162,12 @@
     <ClInclude Include="Texture2D.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Cam\Base.h">
+      <Filter>Cam</Filter>
+    </ClInclude>
+    <ClInclude Include="Cam\FirstPerson.h">
+      <Filter>Cam</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Utility.cpp">
@@ -229,6 +238,9 @@
     </ClCompile>
     <ClCompile Include="Texture2D.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Cam\FirstPerson.cpp">
+      <Filter>Cam</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

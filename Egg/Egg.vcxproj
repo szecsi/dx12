@@ -43,6 +43,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="App.h" />
+    <ClInclude Include="Cam\Base.h" />
+    <ClInclude Include="Cam\FirstPerson.h" />
     <ClInclude Include="Common.h" />
     <ClInclude Include="ConstantBuffer.hpp" />
     <ClInclude Include="d3dx12.h" />
@@ -89,6 +91,7 @@
     <ClInclude Include="Vertex.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Cam\FirstPerson.cpp" />
     <ClCompile Include="Importer.cpp" />
     <ClCompile Include="Internal.cpp" />
     <ClCompile Include="Math\Bool1.cpp" />
