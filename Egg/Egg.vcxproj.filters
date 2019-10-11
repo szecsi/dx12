@@ -168,6 +168,9 @@
     <ClInclude Include="Cam\FirstPerson.h">
       <Filter>Cam</Filter>
     </ClInclude>
+    <ClInclude Include="TextureCube.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Utility.cpp">
@@ -241,6 +244,9 @@
     </ClCompile>
     <ClCompile Include="Cam\FirstPerson.cpp">
       <Filter>Cam</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureCube.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
