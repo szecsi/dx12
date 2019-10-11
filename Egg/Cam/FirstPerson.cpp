@@ -5,7 +5,7 @@ using namespace Egg::Math;
 
 Cam::FirstPerson::FirstPerson()
 {
-	position = Float3::Zero;
+	position = Float3::UnitZ * -10.0;
 	ahead = Float3::UnitZ;
 	right = Float3::UnitX;
 	yaw = 0.0;

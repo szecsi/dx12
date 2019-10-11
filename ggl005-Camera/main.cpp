@@ -39,6 +39,19 @@ LRESULT CALLBACK WindowProcess(HWND windowHandle, UINT message, WPARAM wParam, L
 	case WM_PAINT:
 		app->Run();
 		break;
+	case WM_KEYDOWN:
+	case WM_KEYUP:
+	case WM_MOUSEMOVE:
+	case WM_MOUSEWHEEL:
+	case WM_KILLFOCUS:
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONUP:
+	case WM_MBUTTONDOWN:
+	case WM_MBUTTONUP:
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONUP:
+		app->ProcessMessage(windowHandle, message, wParam, lParam);
+		break;
 	}
 
 	return DefWindowProcW(windowHandle, message, wParam, lParam);

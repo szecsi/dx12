@@ -3,8 +3,10 @@
 #include <Egg/SimpleApp.h>
 #include <Egg/Importer.h>
 #include <Egg/Math/Math.h>
+#include <Egg/Mesh/Prefabs.h>
 #include <Egg/ConstantBuffer.hpp>
 
+#include <Egg/Cam/FirstPerson.h>
 #include "ConstantBufferTypes.h"
 
 using namespace Egg::Math;
@@ -16,11 +18,23 @@ protected:
 	Egg::ConstantBuffer<PerObjectCb> cb;
 	com_ptr<ID3D12DescriptorHeap> srvHeap;
 	Egg::Texture2D tex;
+
+	Egg::Cam::FirstPerson::P camera;
+	Egg::ConstantBuffer<PerFrameCb> perFrameCb;
+
+	Egg::TextureCube env;
+	Egg::Mesh::Shaded::P backgroundMesh;
 public:
 	virtual void Update(float dt, float T) override {
 		rotation *= Float4x4::Rotation(Float3::UnitY, dt);
 		cb->modelTransform = Float4x4::Translation(Float3{ 0.0f, 0.0f, -0.5f }) * rotation * Float4x4::Translation(Float3{ 0.0f, 0.0f, 0.5f });
 		cb.Upload();
+		camera->Animate(dt);
+		perFrameCb->viewProjTransform =
+			camera->GetViewMatrix() * 
+			camera->GetProjMatrix();
+		perFrameCb->rayDirTransform = camera->GetRayDirMatrix();
+		perFrameCb.Upload();
 	}
 
 	virtual void PopulateCommandList() override {
@@ -45,8 +59,14 @@ public:
 
 		shadedMesh->SetPipelineState(commandList.Get());
 		shadedMesh->BindConstantBuffer(commandList.Get(), cb);
-		commandList->SetGraphicsRootDescriptorTable(1, srvHeap->GetGPUDescriptorHandleForHeapStart());
+		shadedMesh->BindConstantBuffer(commandList.Get(), perFrameCb);
+		commandList->SetGraphicsRootDescriptorTable(2, srvHeap->GetGPUDescriptorHandleForHeapStart());
 		shadedMesh->Draw(commandList.Get());
+
+		backgroundMesh->SetPipelineState(commandList.Get());
+		backgroundMesh->BindConstantBuffer(commandList.Get(), perFrameCb);
+		commandList->SetGraphicsRootDescriptorTable(2, srvHeap->GetGPUDescriptorHandleForHeapStart());
+		backgroundMesh->Draw(commandList.Get());
 
 		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
@@ -64,6 +84,7 @@ public:
 			commandList->Reset(commandAllocator.Get(), nullptr);
 
 		tex.UploadResource(commandList.Get());
+		env.UploadResource(commandList.Get());
 
 		DX_API("Failed to close command list (UploadResources)")
 			commandList->Close();
@@ -74,6 +95,7 @@ public:
 		WaitForPreviousFrame();
 
 		tex.ReleaseUploadResources();
+		env.ReleaseUploadResources();
 	}
 
 	virtual void CreateResources() override {
@@ -82,11 +104,13 @@ public:
 		D3D12_DESCRIPTOR_HEAP_DESC dhd;
 		dhd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		dhd.NodeMask = 0;
-		dhd.NumDescriptors = 1;
+		dhd.NumDescriptors = 2;
 		dhd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
 		DX_API("Failed to create descriptor heap for texture")
 			device->CreateDescriptorHeap(&dhd, IID_PPV_ARGS(srvHeap.GetAddressOf()));
+		
+		camera = Egg::Cam::FirstPerson::Create();
 	}
 
 	virtual void ReleaseResources() override {
@@ -97,8 +121,9 @@ public:
 
 	virtual void LoadAssets() override {
 		cb.CreateResources(device.Get());
+		perFrameCb.CreateResources(device.Get());
 
-		com_ptr<ID3DBlob> vertexShader = Egg::Shader::LoadCso("Shaders/cbBasicVS.cso");
+		com_ptr<ID3DBlob> vertexShader = Egg::Shader::LoadCso("Shaders/trafoVS.cso");
 		com_ptr<ID3DBlob> pixelShader = Egg::Shader::LoadCso("Shaders/DefaultPS.cso");
 		com_ptr<ID3D12RootSignature> rootSig = Egg::Shader::LoadRootSignature(device.Get(), vertexShader.Get());
 
@@ -112,10 +137,32 @@ public:
 		Egg::Mesh::Geometry::P geometry = Egg::Importer::ImportSimpleObj(device.Get(), "giraffe.obj");
 
 		shadedMesh = Egg::Mesh::Shaded::Create(psoManager.get(), material, geometry);
+		
+		com_ptr<ID3DBlob> bgVertexShader = Egg::Shader::LoadCso("Shaders/quadVS.cso");
+		com_ptr<ID3DBlob> bgPixelShader = Egg::Shader::LoadCso("Shaders/bgPS.cso");
+
+		Egg::Mesh::Material::P bgMaterial = Egg::Mesh::Material::Create();
+		bgMaterial->SetRootSignature(rootSig);
+		bgMaterial->SetVertexShader(bgVertexShader);
+		bgMaterial->SetPixelShader(bgPixelShader);
+		bgMaterial->SetDepthStencilState(CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT));
+		bgMaterial->SetDSVFormat(DXGI_FORMAT_D32_FLOAT);
+		
+		backgroundMesh = Egg::Mesh::Shaded::Create(psoManager.get(), 
+			bgMaterial,
+			Egg::Mesh::Prefabs::FullScreenQuad(device.Get()));
 
 		tex = Egg::Importer::ImportTexture2D(device.Get(), "giraffe.jpg");
 		tex.CreateSRV(device.Get(), srvHeap.Get(), 0);
+		env = Egg::Importer::ImportTextureCube(device.Get(), "cloudynoon.dds");
+		env.CreateSRV(device.Get(), srvHeap.Get(), 1);
+
 		UploadResources();
+	}
+
+	void ProcessMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) override
+	{
+		camera->ProcessMessage(hWnd, uMsg, wParam, lParam);
 	}
 
 };
