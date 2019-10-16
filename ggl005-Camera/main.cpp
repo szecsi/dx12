@@ -1,7 +1,7 @@
 #include <Egg/App.h>
 #include <Egg/Utility.h>
 #include <chrono>
-#include "ggl005App.h"
+#include "ggl006App.h"
 
 std::unique_ptr<Egg::App> app{ nullptr };
 

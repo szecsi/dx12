@@ -27,6 +27,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl005-Camera", "ggl005-Cam
 		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl006-Shading", "ggl006-Shading\ggl006-Shading.vcxproj", "{2487F74A-88E0-443E-B321-646BBD786882}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -44,6 +49,8 @@ Global
 		{31F132A4-D509-4D43-BE62-6EC96816AC3B}.Debug|x64.Build.0 = Debug|x64
 		{8286BB15-CEF9-4508-B90F-DB4B2A2FDA2E}.Debug|x64.ActiveCfg = Debug|x64
 		{8286BB15-CEF9-4508-B90F-DB4B2A2FDA2E}.Debug|x64.Build.0 = Debug|x64
+		{2487F74A-88E0-443E-B321-646BBD786882}.Debug|x64.ActiveCfg = Debug|x64
+		{2487F74A-88E0-443E-B321-646BBD786882}.Debug|x64.Build.0 = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
