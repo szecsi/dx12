@@ -100,7 +100,17 @@ namespace Egg {
 				commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 				commandList->DrawInstanced(vertexCount, 1, 0, 0);
 			}
-	
+
+			void SetData(const void* data, unsigned int sizeInBytes) {
+				CD3DX12_RANGE readRange{ 0, 0 };
+				void* mappedPtr = nullptr;
+
+				DX_API("Failed to map vertex buffer (VertexStreamGeometry)")
+					vertexBuffer->Map(0, &readRange, &mappedPtr);
+
+				memcpy(mappedPtr, data, sizeInBytes);
+				vertexBuffer->Unmap(0, nullptr);
+			}
 		GG_ENDCLASS
 
 		GG_SUBCLASS(IndexedGeometry, Geometry)
