@@ -37,6 +37,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl008-Fire", "ggl008-Fire\
 		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl010-Scene", "ggl010-Scene\ggl010-Scene.vcxproj", "{B95916BA-54CB-42F6-A063-55A54170802A}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -58,6 +63,8 @@ Global
 		{2487F74A-88E0-443E-B321-646BBD786882}.Debug|x64.Build.0 = Debug|x64
 		{ED23D399-448D-48E1-ABEE-6E0ED4C80027}.Debug|x64.ActiveCfg = Debug|x64
 		{ED23D399-448D-48E1-ABEE-6E0ED4C80027}.Debug|x64.Build.0 = Debug|x64
+		{B95916BA-54CB-42F6-A063-55A54170802A}.Debug|x64.ActiveCfg = Debug|x64
+		{B95916BA-54CB-42F6-A063-55A54170802A}.Debug|x64.Build.0 = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

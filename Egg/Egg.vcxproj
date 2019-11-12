@@ -79,11 +79,16 @@
     <ClInclude Include="Math\UInt3Swizzle.hpp" />
     <ClInclude Include="Math\UInt4.h" />
     <ClInclude Include="Math\UInt4Swizzle.hpp" />
+    <ClInclude Include="Mesh\Flip.h" />
     <ClInclude Include="Mesh\Geometry.h" />
     <ClInclude Include="Mesh\Material.h" />
+    <ClInclude Include="Mesh\Multi.h" />
     <ClInclude Include="Mesh\Prefabs.h" />
     <ClInclude Include="Mesh\Shaded.h" />
     <ClInclude Include="PsoManager.h" />
+    <ClInclude Include="Scene\Entity.h" />
+    <ClInclude Include="Scene\PerObjectData.h" />
+    <ClInclude Include="Scene\StaticEntity.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="SimpleApp.h" />
     <ClInclude Include="Texture2D.h" />
@@ -154,6 +159,9 @@
     <FxCompile Include="Shaders\DefaultVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cpp.hint" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
