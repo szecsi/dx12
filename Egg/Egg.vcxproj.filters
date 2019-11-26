@@ -28,6 +28,9 @@
     <Filter Include="Scene">
       <UniqueIdentifier>{93cd60b3-2fde-42ab-b221-206618429d68}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Script">
+      <UniqueIdentifier>{fee87dfb-fe34-47c0-95c3-51e43097cbff}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Utility.h">
@@ -189,6 +192,30 @@
     <ClInclude Include="Scene\StaticEntity.h">
       <Filter>Scene</Filter>
     </ClInclude>
+    <ClInclude Include="Scene\ManagerApp.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\ConstantBufferTypes.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Script\AiEnumReflections.h">
+      <Filter>Script</Filter>
+    </ClInclude>
+    <ClInclude Include="Script\EnumReflectionMap.h">
+      <Filter>Script</Filter>
+    </ClInclude>
+    <ClInclude Include="Script\LuaTable.h">
+      <Filter>Script</Filter>
+    </ClInclude>
+    <ClInclude Include="Script\ScriptedApp.h">
+      <Filter>Script</Filter>
+    </ClInclude>
+    <ClInclude Include="Script\luabindGetPointer.h">
+      <Filter>Script</Filter>
+    </ClInclude>
+    <ClInclude Include="Script\Shader.h">
+      <Filter>Script</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Utility.cpp">
@@ -266,6 +293,15 @@
     <ClCompile Include="TextureCube.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Scene\ManagerApp.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Script\AiEnumReflections.cpp">
+      <Filter>Script</Filter>
+    </ClCompile>
+    <ClCompile Include="Script\ScriptedApp.cpp">
+      <Filter>Script</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\DefaultPS.hlsl">
@@ -295,6 +331,15 @@
     <FxCompile Include="Shaders\MaxBlinnPS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\TessVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\TessHS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\TessDS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="Shaders\RootSignatures.hlsli">
@@ -303,5 +348,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
+    <None Include="Shaders\Tess.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

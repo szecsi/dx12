@@ -20,6 +20,16 @@ namespace Egg {
 				return submeshes.at(index);
 			}
 
+			Egg::Mesh::Geometry::P GetGeometry(unsigned int mien, unsigned int index) {
+				return submeshes.at(index)->GetShaded(mien)->GetGeometry();
+			}
+
+			void SetTopology(D3D_PRIMITIVE_TOPOLOGY topo) {
+				for (auto& i : submeshes) {
+					i->SetTopology(topo);
+				}
+			}
+
 			void Draw(ID3D12GraphicsCommandList* commandList, unsigned int mien, unsigned int objectIndex = 0) {
 				for (auto& i : submeshes) {
 					i->Draw(commandList, mien, objectIndex);

@@ -24,6 +24,7 @@ cbuffer PerFrameCb : register(b1) {
 	float4 cameraPos;
 	float4 lightPos;
 	float4 lightPowerDensity;
+	float4 billboardSize;
 }
 
 [RootSignature(RootSig4)]

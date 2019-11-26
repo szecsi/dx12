@@ -5,7 +5,8 @@
     <EggPath>PATH=C:\sdk\assimp\bin\x64</EggPath>
   </PropertyGroup>
   <PropertyGroup>
-    <LibraryPath>D:\Development\External\DirectXTex\lib;$(LibraryPath)</LibraryPath>
+    <LibraryPath>$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir)\Lua;$(SolutionDir)\LuaBind;D:\Development\External\boost_1_68_0;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>

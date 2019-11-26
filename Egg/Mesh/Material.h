@@ -10,6 +10,8 @@ namespace Egg {
 
 			com_ptr<ID3D12RootSignature> rootSignature;
 			com_ptr<ID3DBlob> vertexShader;
+			com_ptr<ID3DBlob> hullShader;
+			com_ptr<ID3DBlob> domainShader;
 			com_ptr<ID3DBlob> geometryShader;
 			com_ptr<ID3DBlob> pixelShader;
 			D3D12_BLEND_DESC blendState;
@@ -19,6 +21,8 @@ namespace Egg {
 
 			com_ptr<ID3D12RootSignatureDeserializer> rsDeserializer;
 			com_ptr<ID3D12ShaderReflection> vsReflection;
+			com_ptr<ID3D12ShaderReflection> hsReflection;
+			com_ptr<ID3D12ShaderReflection> dsReflection;
 			com_ptr<ID3D12ShaderReflection> gsReflection;
 			com_ptr<ID3D12ShaderReflection> psReflection;
 
@@ -26,15 +30,19 @@ namespace Egg {
 				D3D12_GPU_VIRTUAL_ADDRESS address;
 				unsigned int perObjectByteStride;
 			};
-			std::map<unsigned int, BufferAddressing > constantBufferBindings;
+			std::map<unsigned int, BufferAddressing >
+				constantBufferBindings;
 			com_ptr<ID3D12DescriptorHeap> srvHeap;
+			unsigned int srvHeapByteOffset;
 			unsigned int srvDescriptorTableRootParameterIndex;
 
 		public:
 
 			Material() : rootSignature{ nullptr }, vertexShader{ nullptr }, geometryShader{ nullptr }, pixelShader{ nullptr }, blendState{}, rasterizerState{}, depthStencilState{}
 				, rsDeserializer{ nullptr }, vsReflection{ nullptr }, gsReflection{ nullptr }, psReflection{ nullptr },
-				srvHeap{nullptr}
+				srvHeap{nullptr},
+				domainShader{ nullptr }, hullShader{nullptr},
+				dsReflection{ nullptr }, hsReflection{nullptr}
 			{
 				blendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 				rasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
@@ -84,9 +92,27 @@ namespace Egg {
 				}
 			}
 
-			void SetSrvHeap(unsigned int srvDescriptorTableRootParameterIndex, com_ptr<ID3D12DescriptorHeap> srvHeap) {
+			void SetHullShader(com_ptr<ID3DBlob> hs) {
+				hullShader = hs;
+				DX_API("Failed to reflect pixel shader")
+					D3DReflect(hs->GetBufferPointer(), hs->GetBufferSize(), IID_PPV_ARGS(hsReflection.GetAddressOf()));
+			}
+
+			void SetDomainShader(com_ptr<ID3DBlob> ds) {
+				domainShader = ds;
+				DX_API("Failed to reflect pixel shader")
+					D3DReflect(ds->GetBufferPointer(), ds->GetBufferSize(), IID_PPV_ARGS(dsReflection.GetAddressOf()));
+			}
+
+
+			void SetSrvHeap(
+					unsigned int srvDescriptorTableRootParameterIndex,
+					com_ptr<ID3D12DescriptorHeap> srvHeap,
+					unsigned int materialByteOffset = 0
+				) {
 				this->srvDescriptorTableRootParameterIndex = srvDescriptorTableRootParameterIndex;
 				this->srvHeap = srvHeap;
+				this->srvHeapByteOffset = materialByteOffset;
 			}
 
 			void SetDSVFormat(DXGI_FORMAT format) {
@@ -98,6 +124,12 @@ namespace Egg {
 				psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
 				if(geometryShader != nullptr) {
 					psoDesc.GS = CD3DX12_SHADER_BYTECODE(geometryShader.Get());
+				}
+				if (hullShader != nullptr) {
+					psoDesc.HS = CD3DX12_SHADER_BYTECODE(hullShader.Get());
+				}
+				if (domainShader != nullptr) {
+					psoDesc.DS = CD3DX12_SHADER_BYTECODE(domainShader.Get());
 				}
 				psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
 				psoDesc.BlendState = blendState;
@@ -121,7 +153,11 @@ namespace Egg {
 				if (srvHeap) {
 					ID3D12DescriptorHeap* descriptorHeaps[] = { srvHeap.Get() };
 					commandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-					commandList->SetGraphicsRootDescriptorTable(srvDescriptorTableRootParameterIndex, srvHeap->GetGPUDescriptorHandleForHeapStart());
+					CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandle{
+						srvHeap->GetGPUDescriptorHandleForHeapStart(),
+						(int)srvHeapByteOffset };
+					commandList->SetGraphicsRootDescriptorTable(srvDescriptorTableRootParameterIndex,
+						gpuHandle);
 				}
 			}
 
@@ -137,7 +173,8 @@ namespace Egg {
 				D3D12_SHADER_INPUT_BIND_DESC bindDesc;
 
 				ID3D12ShaderReflection* reflections[] = {
-					vsReflection.Get(), gsReflection.Get(), psReflection.Get()
+					vsReflection.Get(), gsReflection.Get(), psReflection.Get(),
+					hsReflection.Get(), dsReflection.Get()
 				};
 
 				HRESULT hr;

@@ -30,7 +30,9 @@
     <Import Project="..\EggLib.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IncludePath>$(IncludePath)</IncludePath>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -86,9 +88,17 @@
     <ClInclude Include="Mesh\Prefabs.h" />
     <ClInclude Include="Mesh\Shaded.h" />
     <ClInclude Include="PsoManager.h" />
+    <ClInclude Include="Scene\ConstantBufferTypes.h" />
     <ClInclude Include="Scene\Entity.h" />
+    <ClInclude Include="Scene\ManagerApp.h" />
     <ClInclude Include="Scene\PerObjectData.h" />
     <ClInclude Include="Scene\StaticEntity.h" />
+    <ClInclude Include="Script\AiEnumReflections.h" />
+    <ClInclude Include="Script\EnumReflectionMap.h" />
+    <ClInclude Include="Script\luabindGetPointer.h" />
+    <ClInclude Include="Script\LuaTable.h" />
+    <ClInclude Include="Script\ScriptedApp.h" />
+    <ClInclude Include="Script\Shader.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="SimpleApp.h" />
     <ClInclude Include="Texture2D.h" />
@@ -118,6 +128,9 @@
     <ClCompile Include="Math\UInt3.cpp" />
     <ClCompile Include="Math\UInt4.cpp" />
     <ClCompile Include="PsoManager.cpp" />
+    <ClCompile Include="Scene\ManagerApp.cpp" />
+    <ClCompile Include="Script\AiEnumReflections.cpp" />
+    <ClCompile Include="Script\ScriptedApp.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="Texture2D.cpp" />
     <ClCompile Include="TextureCube.cpp" />
@@ -147,6 +160,17 @@
     <FxCompile Include="Shaders\quadVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
+    <FxCompile Include="Shaders\TessDS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Domain</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.0</ShaderModel>
+    </FxCompile>
+    <FxCompile Include="Shaders\TessHS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Hull</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.0</ShaderModel>
+    </FxCompile>
+    <FxCompile Include="Shaders\TessVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
     <FxCompile Include="Shaders\trafoVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
@@ -162,6 +186,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
+    <None Include="Shaders\Tess.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

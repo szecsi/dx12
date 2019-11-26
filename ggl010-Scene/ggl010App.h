@@ -8,6 +8,7 @@
 #include <Egg/ConstantBuffer.hpp>
 
 #include <Egg/Cam/FirstPerson.h>
+#include <Egg/Scene/StaticEntity.h>
 #include "ConstantBufferTypes.h"
 #include "Particle.h"
 #include <vector>
@@ -21,8 +22,10 @@ class ggl010App : public Egg::SimpleApp {
 protected:
 	Egg::Mesh::Shaded::P shadedMesh;
 	Egg::Mesh::Multi::P multiMesh;
+	std::vector<Egg::Scene::Entity::P> entities;
 	Float4x4 rotation;
 	Egg::ConstantBuffer<PerObjectCb> cb;
+
 	com_ptr<ID3D12DescriptorHeap> srvHeap;
 	com_ptr<ID3D12DescriptorHeap> particleSrvHeap;
 	Egg::Texture2D tex;
@@ -40,9 +43,12 @@ protected:
 public:
 	virtual void Update(float dt, float T) override {
 		rotation *= Float4x4::Rotation(Float3::UnitY, dt);
-		for (int i = 0; i < 100; i++) {
-			cb->objects[i].modelTransform = Float4x4::Translation(Float3{ -(float)i, 0.0f, -0.5f }) * rotation * Float4x4::Translation(Float3{ (float)i, 0.0f, 0.5f });
-			cb->objects[i].modelTransformInverse = cb->objects[0].modelTransform.Invert();
+		//for (int i = 0; i < 100; i++) {
+		//	cb->objects[i].modelTransform = Float4x4::Translation(Float3{ -(float)i, 0.0f, -0.5f }) * rotation * Float4x4::Translation(Float3{ (float)i, 0.0f, 0.5f });
+		//	cb->objects[i].modelTransformInverse = cb->objects[0].modelTransform.Invert();
+		//}
+		for (int i = 0; i < entities.size(); i++) {
+			entities[i]->Update(dt, T, cb->objects[i]);
 		}
 		cb.Upload();
 		camera->Animate(dt);
@@ -98,8 +104,11 @@ public:
 //		shadedMesh->BindConstantBuffer(commandList.Get(), perFrameCb);
 //		commandList->SetGraphicsRootDescriptorTable(2, srvHeap->GetGPUDescriptorHandleForHeapStart());
 //		shadedMesh->Draw(commandList.Get());
-		for (int i = 0; i < 100; i++) {
-			multiMesh->Draw(commandList.Get(), 0, i);
+//		for (int i = 0; i < 100; i++) {
+//			multiMesh->Draw(commandList.Get(), 0, i);
+//		}
+		for (int i = 0; i < entities.size(); i++) {
+			entities[i]->Draw(commandList.Get(), 0, i);
 		}
 
 //		backgroundMesh->SetPipelineState(commandList.Get());
@@ -309,6 +318,12 @@ public:
 			psoManager.get(), fireMaterial, particlesGeometry);
 
 		///////// END
+
+		for (int i = 0; i < 100; i++) {
+			auto e = Egg::Scene::StaticEntity::Create(multiMesh);
+			e->Translate(Float3(i, 0, 0));
+			entities.push_back( e );
+		}
 
 		UploadResources();
 	}

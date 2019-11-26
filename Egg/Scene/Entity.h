@@ -38,8 +38,10 @@ namespace Egg {
 			/// Returns the inverse of the rotation matrix. To be used for the view transformation of attached cameras.
 			virtual Egg::Math::Float4x4 GetRotationMatrixInverse()=0;
 
+			/// Updates time-varying entity properties. Returns whether the entity should be kept.
 			/// Copies matrix data to constant buffer ???? TODO parameters
-			virtual void Update(PerObjectData& data) {
+			/// @param dt time step in seconds
+			virtual void Update(float dt, float t, PerObjectData& data) {
 				data.modelTransform = GetModelMatrix();
 				data.modelTransformInverse = GetModelMatrixInverse();
 			};
@@ -49,11 +51,7 @@ namespace Egg {
 				multiMesh->Draw(commandList, mien, objectIndex);
 			}
 
-		/// Updates time-varying entity properties. Returns whether the entity should be kept.
-		/// @param dt time step in seconds
-		virtual bool animate(float dt){return true;}
-
-		// Removes entity-associated objects from all linked systems (e.g. Physics actor)
-		virtual void kill(){}
+			// Removes entity-associated objects from all linked systems (e.g. Physics actor)
+			virtual void Kill(){}
 	};
 }}

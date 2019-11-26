@@ -3,8 +3,8 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <IncludePath>D:\Development\External\Assimp30\include;C:\sdk\assimp\include;$(SolutionDir);$(VC_IncludePath);$(WindowsSDK_IncludePath);D:\Development\External\DirectXTex\include</IncludePath>
-    <LibraryPath>D:\Development\External\DirectXTex\lib;D:\Development\External\Assimp30\lib\x64;C:\sdk\assimp\lib\x64;$(OutDir);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
+    <IncludePath>D:\Development\External\Assimp30\include;C:\sdk\assimp\include;$(SolutionDir);$(VC_IncludePath);$(WindowsSDK_IncludePath);D:\Development\External\boost_1_68_0;$(SolutionDir)\Lua;$(SolutionDir)\LuaBind;$(SolutionDir)\DirectXTex\DirectXTex</IncludePath>
+    <LibraryPath>D:\Development\External\Assimp30\lib\x64;C:\sdk\assimp\lib\x64;$(OutDir);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Lib>

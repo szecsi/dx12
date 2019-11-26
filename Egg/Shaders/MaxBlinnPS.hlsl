@@ -22,17 +22,14 @@ SamplerState sampl : register(s0);
 [RootSignature(RootSig4)]
 float4 main(VSOutput vso) : SV_Target{
 	float3 viewDir = normalize(cameraPos.xyz - vso.worldPos.xyz);
-	float3 lightDir = lightPos.xyz;
+	float3 lightDir = normalize(lightPos.xyz);
 	float3 halfWay = normalize(viewDir + lightDir);
 	float3 normal = normalize(vso.normal);
-	if (dot(vso.normal, lightPos.xyz) < 0)
-		return 0;
-	float cosa = saturate(dot(vso.normal, lightDir));
-	float cosb = saturate(dot(vso.normal, viewDir));
-	return (txt.Sample(sampl, vso.texCoord) *
-		saturate(dot(vso.normal, lightPos.xyz))
+	float cosa = saturate(dot(normal, lightDir));
+	float cosb = saturate(dot(normal, viewDir));
+	return (txt.Sample(sampl, vso.texCoord) * cosa
 		+
-		float4(4, 4, 4, 4) * pow(saturate(dot(halfWay, normal)), 15)
+		float4(2, 2, 2, 1) * pow(saturate(dot(halfWay, normal)), 50)
 		* cosa / max(cosb, cosa)
 		)* lightPowerDensity;
 }

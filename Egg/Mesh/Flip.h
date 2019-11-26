@@ -24,6 +24,12 @@ namespace Egg {
 				return mienShadedMap[mien];
 			}
 
+			void SetTopology(D3D_PRIMITIVE_TOPOLOGY topo) {
+				for (auto& i : mienShadedMap) {
+					i.second->SetTopology(topo);
+				}
+			}
+
 			void Draw(ID3D12GraphicsCommandList* commandList, unsigned int mien, unsigned int objectIndex = 0) {
 				auto i = mienShadedMap.find(mien);
 				if (i != mienShadedMap.end()) {

@@ -28,6 +28,14 @@ namespace Egg {
 				pipelineState = psoMan->Get(gpsoDesc);
 			}
 
+			Egg::Mesh::Geometry::P GetGeometry() {
+				return geometry;
+			}
+
+			void SetTopology(D3D_PRIMITIVE_TOPOLOGY topo) {
+				geometry->SetTopology(topo);
+			}
+
 			// Deprecated. Constant buffers should be set to Materials, and automatically bound when Shaded meshes are drawn.
 			template<typename T>
 			void BindConstantBuffer(ID3D12GraphicsCommandList * commandList, const T & resource, const std::string & nameOverride = "") {
