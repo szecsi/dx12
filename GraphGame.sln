@@ -60,6 +60,16 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl012-Script", "ggl012-Scr
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DirectXTex", "DirectXTex\DirectXTex\DirectXTex_Desktop_2019_Win10.vcxproj", "{371B9FA9-4C90-4AC6-A123-ACED756D6C77}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl013-Physics", "ggl013-Physics\ggl013-Physics.vcxproj", "{2A05A08E-1BAE-4562-8007-76027C58D36B}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl014-Control", "ggl014-Control\ggl014-Control.vcxproj", "{54C78249-A87C-45ED-B4F5-76B954AC5459}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -214,6 +224,28 @@ Global
 		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Release|x64.Build.0 = Release|x64
 		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Release|x86.ActiveCfg = Release|Win32
 		{371B9FA9-4C90-4AC6-A123-ACED756D6C77}.Release|x86.Build.0 = Release|Win32
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Debug|x64.ActiveCfg = Debug|x64
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Debug|x64.Build.0 = Debug|x64
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Debug|x86.ActiveCfg = Debug|x64
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Profile|x64.ActiveCfg = Debug|x64
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Profile|x64.Build.0 = Debug|x64
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Profile|x86.ActiveCfg = Debug|x64
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Profile|x86.Build.0 = Debug|x64
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Release|x64.ActiveCfg = Debug|x64
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Release|x64.Build.0 = Debug|x64
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Release|x86.ActiveCfg = Debug|x64
+		{2A05A08E-1BAE-4562-8007-76027C58D36B}.Release|x86.Build.0 = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Debug|x64.ActiveCfg = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Debug|x64.Build.0 = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Debug|x86.ActiveCfg = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Profile|x64.ActiveCfg = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Profile|x64.Build.0 = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Profile|x86.ActiveCfg = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Profile|x86.Build.0 = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Release|x64.ActiveCfg = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Release|x64.Build.0 = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Release|x86.ActiveCfg = Debug|x64
+		{54C78249-A87C-45ED-B4F5-76B954AC5459}.Release|x86.Build.0 = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

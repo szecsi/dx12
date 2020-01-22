@@ -6,6 +6,7 @@
 #include "Egg/Mesh/Multi.h"
 #include "Egg/Mesh/Material.h"
 #include "Egg/Cam/FirstPerson.h"
+#include "Egg/Cam/Fixed.h"
 #include "Egg/Importer.h"
 #include "Egg/SimpleApp.h"
 #include "Egg/ConstantBuffer.hpp"
@@ -13,6 +14,7 @@
 #include "ConstantBufferTypes.h"
 
 #include <map>
+#include <algorithm>
 
 namespace Egg {
 	namespace Scene {
@@ -107,9 +109,23 @@ namespace Egg {
 			virtual void Update(float dt, float T) override {
 				using namespace Egg::Math;
 				unsigned int iEntity = 0;
-				for (auto entity : entities) {
-					entity->Update(dt, T, perObjectCb->objects[iEntity]);
-					iEntity++;
+				std::vector<int> casualties;
+				try {
+					for (auto entity : entities) {
+						bool alive = entity->Update(dt, T, perObjectCb->objects[iEntity]);
+						if (!alive)
+							casualties.push_back(iEntity);
+						iEntity++;
+					}
+				}
+				catch (std::exception e) {
+					Stop();
+					MessageBoxA(NULL, e.what(), "Fatal Error", MB_OK);
+					exit(-1);
+				}
+				std::reverse(casualties.begin(), casualties.end());
+				for (auto i : casualties) {
+					entities.erase(entities.begin()+i);
 				}
 				perObjectCb.Upload();
 
@@ -179,14 +195,15 @@ namespace Egg {
 			{
 				if (cameras.empty())
 					return;
+				if (uMsg == WM_KEYDOWN && wParam == VK_RETURN)
+					currentCameraIndex = (currentCameraIndex + 1) % cameras.size();
 				cameras[currentCameraIndex]->ProcessMessage(hWnd, uMsg, wParam, lParam);
 			}
 
 			void CreateSwapChainResources() override {
 				__super::CreateSwapChainResources();
-				if (cameras.empty())
-					return;
-				cameras[currentCameraIndex]->SetAspect(aspectRatio);
+				for(auto c : cameras)
+					c->SetAspect(aspectRatio);
 			}
 
 			virtual void PopulateCommandList() override {

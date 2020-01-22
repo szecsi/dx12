@@ -28,6 +28,8 @@ namespace Egg {
 		unsigned long long fenceValue;
 		unsigned int frameIndex;
 
+		bool stopped;
+		std::string stopMessage;
 	private:
 		// time objects
 		using clock_type = std::chrono::high_resolution_clock;
@@ -39,11 +41,17 @@ namespace Egg {
 		virtual ~App() = default;
 
 		App() {
+			stopped = false;
 			timestampStart = clock_type::now();
 			timestampEnd = timestampStart;
 		}
 
+		void Stop() {
+			stopped = true;
+		}
+
 		void Run() {
+			if (stopped) return;
 			timestampEnd = clock_type::now();
 			float deltaTime = std::chrono::duration<float>(timestampEnd - timestampStart).count();
 			elapsedTime += deltaTime;

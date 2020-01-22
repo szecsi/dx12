@@ -1,6 +1,7 @@
 #include "ScriptedApp.h"
 #include "LuaTable.h"
-#include "Egg/Scene/StaticEntity.h"
+#include "Egg/Scene/Entity.h"
+#include "Egg/Scene/FixedRigidBody.h"
 #include "Egg/Cam/FirstPerson.h"
 //#include "Egg/Cam/Fixed.h"
 #include "AiEnumReflections.h"
@@ -41,7 +42,9 @@ void Script::ScriptedApp::LoadAssets() {
 			.def("getGeometry", &Mesh::Multi::GetGeometry),
 		class_<Mesh::Material>("CMaterial"),
 		class_< Egg::Script::Shader >("CShader"),
-		class_<Scene::StaticEntity>("CStaticEntity"),
+		class_<Scene::Entity>("CEntity"),
+		class_<Cam::FirstPerson>("CFPSC"),
+		class_<Cam::Fixed>("CFixedCam"),
 
 		class_<Script::ScriptedApp>("ScriptedApp")
 		.def("IndexedGeometry", &Script::ScriptedApp::CreateIndexedGeometry)
@@ -55,6 +58,7 @@ void Script::ScriptedApp::LoadAssets() {
 		.def("MultiMeshFromFile", &Script::ScriptedApp::CreateMultiMeshFromFile)
 		.def("StaticEntity", &Script::ScriptedApp::CreateStaticEntity)
 		.def("FirstPersonCam", &Script::ScriptedApp::CreateFirstPersonCam)
+		.def("FixedCam", &Script::ScriptedApp::CreateFixedCam)
 		];
 
 	AiEnumReflections::initialize();
@@ -243,12 +247,15 @@ Egg::Mesh::Multi::P Script::ScriptedApp::CreateMultiMeshFromFile(luabind::object
 		if (topo == "patch") {
 			multi->SetTopology(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
 		}
+		if (topo == "patch4") {
+			multi->SetTopology(D3D_PRIMITIVE_TOPOLOGY_4_CONTROL_POINT_PATCHLIST);
+		}
 		return multi;
 	}
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
 }
 
-Egg::Scene::StaticEntity::P Script::ScriptedApp::CreateStaticEntity(luabind::object nil, luabind::object attributes)
+Egg::Scene::Entity::P Script::ScriptedApp::CreateStaticEntity(luabind::object nil, luabind::object attributes)
 {
 	LuaTable attributeTable(attributes, "StaticEntity");
 	try
@@ -258,9 +265,12 @@ Egg::Scene::StaticEntity::P Script::ScriptedApp::CreateStaticEntity(luabind::obj
 		Float3 position = attributeTable.getFloat3("position");
 		Float3 axis = attributeTable.getFloat3("orientationAxis", Float3(0, 1, 0));
 		float angle = attributeTable.getFloat("orientationAngle");
-		Egg::Scene::StaticEntity::P staticEntity = Egg::Scene::StaticEntity::Create(multiMesh);
-		staticEntity->Translate(position);
-		staticEntity->Rotate(axis, angle);
+		Egg::Scene::FixedRigidBody::P fixedRigidBody =
+			Egg::Scene::FixedRigidBody::Create();
+		fixedRigidBody->Translate(position);
+		fixedRigidBody->Rotate(axis, angle);
+		Egg::Scene::Entity::P staticEntity =
+			Egg::Scene::Entity::Create(multiMesh, fixedRigidBody);
 		AddEntity(staticEntity);
 		return staticEntity;
 	}
@@ -283,6 +293,29 @@ Egg::Cam::FirstPerson::P Script::ScriptedApp::CreateFirstPersonCam(luabind::obje
 	}
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
 }
+
+	Egg::Cam::Fixed::P Script::ScriptedApp::CreateFixedCam(luabind::object nil, luabind::object attributes)
+	{
+		LuaTable attributeTable(attributes, "FixedCam");
+		try
+		{
+			using namespace Egg::Math;
+			Egg::Cam::Fixed::P fixedCam = Egg::Cam::Fixed::Create(
+				attributeTable.get<Egg::Scene::Entity>("owner"),
+				attributeTable.getFloat3("position", Float3::Zero),
+				attributeTable.getFloat3("ahead", Float3::UnitX),
+				attributeTable.getFloat3("up", Float3::UnitY),
+				attributeTable.getFloat("fov", 1.2),
+				attributeTable.getFloat("aspect", 1),
+				attributeTable.getFloat("front", 0.1),
+				attributeTable.getFloat("back", 1000.0)
+			);
+
+			cameras.push_back(fixedCam);
+			return fixedCam;
+		}
+		catch (std::exception exception) { ExitWithErrorMessage(exception); }
+	}
 
 void Script::ScriptedApp::RunScript(const std::string& luaFilename)
 {

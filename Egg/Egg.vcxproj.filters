@@ -31,6 +31,12 @@
     <Filter Include="Script">
       <UniqueIdentifier>{fee87dfb-fe34-47c0-95c3-51e43097cbff}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Control">
+      <UniqueIdentifier>{15a16d64-7453-4961-a781-6d034c469760}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Physics">
+      <UniqueIdentifier>{33479411-7950-4c03-b779-590e8f891a9c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Utility.h">
@@ -189,9 +195,6 @@
     <ClInclude Include="Scene\PerObjectData.h">
       <Filter>Scene</Filter>
     </ClInclude>
-    <ClInclude Include="Scene\StaticEntity.h">
-      <Filter>Scene</Filter>
-    </ClInclude>
     <ClInclude Include="Scene\ManagerApp.h">
       <Filter>Scene</Filter>
     </ClInclude>
@@ -215,6 +218,45 @@
     </ClInclude>
     <ClInclude Include="Script\Shader.h">
       <Filter>Script</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\PhysicsApp.h">
+      <Filter>Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\PhysicsMathConversions.h">
+      <Filter>Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\PxEnumReflections.h">
+      <Filter>Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\ControlState.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\FixedRigidBody.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\RigidBody.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\ControlParameters.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\PhysicsRigidBody.h">
+      <Filter>Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\Model.h">
+      <Filter>Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\Material.h">
+      <Filter>Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Control\ControlApp.h">
+      <Filter>Control</Filter>
+    </ClInclude>
+    <ClInclude Include="Control\LuaControlState.h">
+      <Filter>Control</Filter>
+    </ClInclude>
+    <ClInclude Include="Cam\Fixed.h">
+      <Filter>Cam</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -301,6 +343,24 @@
     </ClCompile>
     <ClCompile Include="Script\ScriptedApp.cpp">
       <Filter>Script</Filter>
+    </ClCompile>
+    <ClCompile Include="Physics\PhysicsApp.cpp">
+      <Filter>Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="Physics\PxEnumReflections.cpp">
+      <Filter>Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene\Entity.cpp">
+      <Filter>Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="Physics\PhysicsRigidBody.cpp">
+      <Filter>Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="Control\ControlApp.cpp">
+      <Filter>Control</Filter>
+    </ClCompile>
+    <ClCompile Include="Cam\Fixed.cpp">
+      <Filter>Cam</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

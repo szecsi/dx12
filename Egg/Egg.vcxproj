@@ -47,8 +47,11 @@
     <ClInclude Include="App.h" />
     <ClInclude Include="Cam\Base.h" />
     <ClInclude Include="Cam\FirstPerson.h" />
+    <ClInclude Include="Cam\Fixed.h" />
     <ClInclude Include="Common.h" />
     <ClInclude Include="ConstantBuffer.hpp" />
+    <ClInclude Include="Control\ControlApp.h" />
+    <ClInclude Include="Control\LuaControlState.h" />
     <ClInclude Include="d3dx12.h" />
     <ClInclude Include="Importer.h" />
     <ClInclude Include="Math\Bool1.h" />
@@ -87,12 +90,21 @@
     <ClInclude Include="Mesh\Multi.h" />
     <ClInclude Include="Mesh\Prefabs.h" />
     <ClInclude Include="Mesh\Shaded.h" />
+    <ClInclude Include="Physics\Material.h" />
+    <ClInclude Include="Physics\Model.h" />
+    <ClInclude Include="Physics\PhysicsApp.h" />
+    <ClInclude Include="Physics\PhysicsRigidBody.h" />
+    <ClInclude Include="Physics\PhysicsMathConversions.h" />
+    <ClInclude Include="Physics\PxEnumReflections.h" />
     <ClInclude Include="PsoManager.h" />
     <ClInclude Include="Scene\ConstantBufferTypes.h" />
+    <ClInclude Include="Scene\ControlParameters.h" />
+    <ClInclude Include="Scene\ControlState.h" />
     <ClInclude Include="Scene\Entity.h" />
+    <ClInclude Include="Scene\FixedRigidBody.h" />
     <ClInclude Include="Scene\ManagerApp.h" />
     <ClInclude Include="Scene\PerObjectData.h" />
-    <ClInclude Include="Scene\StaticEntity.h" />
+    <ClInclude Include="Scene\RigidBody.h" />
     <ClInclude Include="Script\AiEnumReflections.h" />
     <ClInclude Include="Script\EnumReflectionMap.h" />
     <ClInclude Include="Script\luabindGetPointer.h" />
@@ -108,6 +120,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Cam\FirstPerson.cpp" />
+    <ClCompile Include="Cam\Fixed.cpp" />
+    <ClCompile Include="Control\ControlApp.cpp" />
     <ClCompile Include="Importer.cpp" />
     <ClCompile Include="Internal.cpp" />
     <ClCompile Include="Math\Bool1.cpp" />
@@ -127,7 +141,11 @@
     <ClCompile Include="Math\UInt2.cpp" />
     <ClCompile Include="Math\UInt3.cpp" />
     <ClCompile Include="Math\UInt4.cpp" />
+    <ClCompile Include="Physics\PhysicsApp.cpp" />
+    <ClCompile Include="Physics\PhysicsRigidBody.cpp" />
+    <ClCompile Include="Physics\PxEnumReflections.cpp" />
     <ClCompile Include="PsoManager.cpp" />
+    <ClCompile Include="Scene\Entity.cpp" />
     <ClCompile Include="Scene\ManagerApp.cpp" />
     <ClCompile Include="Script\AiEnumReflections.cpp" />
     <ClCompile Include="Script\ScriptedApp.cpp" />

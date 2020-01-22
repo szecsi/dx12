@@ -81,7 +81,6 @@ materials.tess = O:Material(_, {
   O:setTextureCube(_, {file='cloudynoon.dds'})
 end )
 
-
 multiMeshes.tessPod = O:MultiMesh(_, {}, function(_)
   O:FlipMesh(_, {}, function(_)
     O:ShadedMesh(_, {mien=0, geometry=geometries.patchChassis, material=materials.tess})
@@ -94,12 +93,22 @@ end )
 entities.tessPod = O:StaticEntity(_, {multiMesh=multiMeshes.tessPod, position = { x=-20, y=-10, z=0} } )
 
 ---------------
-multiMeshes.y = O:MultiMeshFromFile(_, {file='YbranchLow.obj', topology="patch"})
+materials.tessQuad = O:Material(_, {
+	wireframe=true,
+	vs=shaders.tessVs,
+	hs=shaders.tessQuadHs,
+	ds=shaders.tessQuadDs,
+	ps=shaders.ps}, function(_)
+  O:setTexture2D(_, {file='giraffe.jpg'})
+  O:setTextureCube(_, {file='cloudynoon.dds'})
+end )
+
+multiMeshes.y = O:MultiMeshFromFile(_, {file='YbranchLow.obj', topology="patch4", flags={}})
 geometries.y = multiMeshes.y:getGeometry(0, 0)
 
 multiMeshes.tessPod = O:MultiMesh(_, {}, function(_)
   O:FlipMesh(_, {}, function(_)
-    O:ShadedMesh(_, {mien=0, geometry=geometries.y, material=materials.tess})
+    O:ShadedMesh(_, {mien=0, geometry=geometries.y, material=materials.tessQuad})
   end )
 end )
 

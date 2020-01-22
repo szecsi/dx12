@@ -365,7 +365,7 @@ LUABIND_BINARY_OP_DEF(<, lua_lessthan)
           other.m_interpreter = 0;
       }
 
-      ~iterator_proxy()
+      ~iterator_proxy() noexcept(false)
       {
           if (m_interpreter)
               lua_pop(m_interpreter, 2);
@@ -597,7 +597,7 @@ namespace adl
           other.m_interpreter = 0;
       }
 
-      ~index_proxy()
+      ~index_proxy() noexcept(false)
       {
           if (m_interpreter)
               lua_pop(m_interpreter, 1);
@@ -1108,7 +1108,7 @@ namespace adl
           other.value_wrapper = 0;
       }
 
-      ~call_proxy()
+      ~call_proxy() noexcept(false)
       {
           if (value_wrapper)
               call((detail::null_type*)0);

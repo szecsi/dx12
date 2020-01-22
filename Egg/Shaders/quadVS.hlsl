@@ -20,7 +20,7 @@ cbuffer PerFrameCb : register(b1) {
 [RootSignature(RootSig4)]
 VSOutput main(IAOutput iao) {
 	VSOutput vso;
-	vso.position = float4(iao.position.xy, 0.999f, 1.0f);
+	vso.position = float4(iao.position.xy, 0.999999f, 1.0f);
     vso.texCoord = iao.texCoord;
 	vso.rayDir = mul(rayDirMat, float4(iao.position, 1.0f)).xyz;
 	return vso;

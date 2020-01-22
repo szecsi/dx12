@@ -6,12 +6,15 @@
   </PropertyGroup>
   <PropertyGroup>
     <LibraryPath>$(LibraryPath)</LibraryPath>
-    <IncludePath>$(SolutionDir)\Lua;$(SolutionDir)\LuaBind;D:\Development\External\boost_1_68_0;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)\Lua;$(SolutionDir)\LuaBind;$(SolutionDir)PhysX_3.4\Include\;$(SolutionDir)PxShared\Include\;D:\Development\External\boost_1_68_0;D:\Education\GraphGame20\PhysX\physx\include;D:\Education\GraphGame20\PhysX\pxshared\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>
       <AdditionalDependencies>Egg.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <ClCompile>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <BuildMacro Include="EggPath">

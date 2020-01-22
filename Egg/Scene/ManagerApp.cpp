@@ -32,9 +32,9 @@ Egg::Mesh::IndexedGeometry::P indexedMeshFromAssimpMesh(ID3D12Device* device, ai
 
 	for (unsigned int i = 0; i < mesh->mNumFaces; ++i) {
 		aiFace face = mesh->mFaces[i];
-		indices.emplace_back(face.mIndices[0]);
-		indices.emplace_back(face.mIndices[1]);
-		indices.emplace_back(face.mIndices[2]);
+		for (unsigned int j = 0; j < face.mNumIndices; j++) {
+			indices.emplace_back(face.mIndices[j]);
+		}
 	}
 
 	Egg::Mesh::IndexedGeometry::P geometry = Egg::Mesh::IndexedGeometry::Create(device, &(vertices.at(0)), (unsigned int)(vertices.size() * sizeof(Egg::PNT_Vertex)), (unsigned int)sizeof(Egg::PNT_Vertex),
