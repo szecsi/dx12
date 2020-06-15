@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros">
+    <EggPath>PATH=C:\sdk\assimp\bin\x64</EggPath>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LibraryPath>$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir)\Lua;$(SolutionDir)\LuaBind;$(SolutionDir)PhysX_3.4\Include\;$(SolutionDir)PxShared\Include\;D:\Development\External\boost_1_68_0;D:\Education\GraphGame20\PhysX\physx\include;D:\Education\GraphGame20\PhysX\pxshared\include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Link>
+      <AdditionalDependencies>Egg.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <ClCompile>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <BuildMacro Include="EggPath">
+      <Value>$(EggPath)</Value>
+    </BuildMacro>
+  </ItemGroup>
+</Project>
