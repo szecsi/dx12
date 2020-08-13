@@ -160,6 +160,16 @@ public:
 	}
 
 	virtual void CreateResources() {
+		// Create Render Target View Descriptor Heap, like a RenderTargetView** on the GPU. A set of pointers.
+		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
+		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+		rtvHeapDesc.NumDescriptors = BACKBUFFER_DEPTH;
+		rtvHeapDesc.NodeMask = 0;
+
+		DX_API("Failed to create render target view descriptor heap")
+			device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(rtvDescriptorHeap.GetAddressOf()));
+
 
 		// Create Root Signature
 
@@ -274,30 +284,17 @@ public:
 
 		viewPort.TopLeftX = 0;
 		viewPort.TopLeftY = 0;
-		viewPort.Width = scDesc.BufferDesc.Width;
-		viewPort.Height = scDesc.BufferDesc.Height;
+		viewPort.Width = static_cast<float>(scDesc.BufferDesc.Width);
+		viewPort.Height = static_cast<float>(scDesc.BufferDesc.Height);
 
 		scissorRect.left = 0;
 		scissorRect.top = 0;
 		scissorRect.right = scDesc.BufferDesc.Width;
 		scissorRect.bottom = scDesc.BufferDesc.Height;
 
-		// Create Render Target View Descriptor Heap, like a RenderTargetView** on the GPU. A set of pointers.
-
-		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
-		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-		rtvHeapDesc.NumDescriptors = BACKBUFFER_DEPTH;
-		rtvHeapDesc.NodeMask = 0;
-
-		DX_API("Failed to create render target view descriptor heap")
-			device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(rtvDescriptorHeap.GetAddressOf()));
-
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 		rtvDescriptorHandleIncrementSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-		// Create Render Target Views
 
 		for(unsigned int i = 0; i < BACKBUFFER_DEPTH; ++i) {
 			DX_API("Failed to get swap chain buffer")
@@ -325,7 +322,6 @@ public:
 		for(unsigned int i = 0; i < BACKBUFFER_DEPTH; ++i) {
 			renderTargets[i].Reset();
 		}
-		rtvDescriptorHeap.Reset();
 	}
 
 	virtual void Destroy() {

@@ -59,7 +59,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	HWND windowHandle = InitWindow(hInstance);
 	// DirectX stuff
 	com_ptr<ID3D12Debug> debugController{ nullptr };
-	com_ptr<IDXGIFactory6> dxgiFactory{ nullptr };
+	com_ptr<IDXGIFactory5> dxgiFactory{ nullptr };
 	com_ptr<IDXGISwapChain3> swapChain{ nullptr };
 	com_ptr<ID3D12Device> device{ nullptr };
 	com_ptr<ID3D12CommandQueue> commandQueue{ nullptr };

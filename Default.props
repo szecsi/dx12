@@ -5,8 +5,6 @@
   <PropertyGroup>
     <OutDir>$(SolutionDir)Bin\</OutDir>
     <IntDir>$(SolutionDir)Build\$(ProjectName)\</IntDir>
-    <IncludePath>$(SolutionDir);$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
-    <LibraryPath>$(OutDir);$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <FxCompile>
@@ -14,8 +12,14 @@
       <ObjectFileOutput>$(OutDir)Shaders\%(Filename).cso</ObjectFileOutput>
     </FxCompile>
     <Link>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxguid.lib;d3dcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;dxguid.lib;d3dcompiler.lib;DirectXTex.lib;assimp-vc142-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)Common\PhysX\lib\;$(SolutionDir)Common\assimp\lib\;$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Common\assimp\include\;$(SolutionDir)Common\DirectXTex\;$(SolutionDir)Common\LuaBind\;$(SolutionDir)Common\Lua\include\;$(SolutionDir)Common\boost\include\;$(SolutionDir)Common\PhysX\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp14</LanguageStandard>
+      <PreprocessorDefinitions>BOOST_BIND_NO_PLACEHOLDERS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup />
 </Project>

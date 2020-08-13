@@ -54,7 +54,7 @@ void Egg::Utility::Debugf(const char * format, ...) {
 	va_end(va);
 }
 
-void Egg::Utility::GetAdapters(IDXGIFactory6 * dxgiFactory, std::vector<com_ptr<IDXGIAdapter1>> & adapters) {
+void Egg::Utility::GetAdapters(IDXGIFactory5 * dxgiFactory, std::vector<com_ptr<IDXGIAdapter1>> & adapters) {
 	com_ptr<IDXGIAdapter1> tempAdapter{ nullptr };
 	OutputDebugStringW(L"Detected Video Adapters:\n");
 	unsigned int adapterId = 0;

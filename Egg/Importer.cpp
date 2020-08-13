@@ -9,7 +9,7 @@
 
 #include <system_error>
 
-#include <DirectXTex.h>
+#include <DirectXTex/DirectXTex.h>
 
 namespace Egg {
 	namespace Importer {

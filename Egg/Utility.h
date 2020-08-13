@@ -36,7 +36,7 @@ namespace Egg {
 		/*
 		Queries the available video adapters from the OS
 		*/
-		void GetAdapters(IDXGIFactory6 * dxgiFactory, std::vector<com_ptr<IDXGIAdapter1>> & adapters);
+		void GetAdapters(IDXGIFactory5 * dxgiFactory, std::vector<com_ptr<IDXGIAdapter1>> & adapters);
 
 	}
 

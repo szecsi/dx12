@@ -39,7 +39,7 @@ namespace Egg {
 			// Deprecated. Constant buffers should be set to Materials, and automatically bound when Shaded meshes are drawn.
 			template<typename T>
 			void BindConstantBuffer(ID3D12GraphicsCommandList * commandList, const T & resource, const std::string & nameOverride = "") {
-				material->SetConstantBuffer(resource, nameOverride);
+				material->SetConstantBuffer(resource, sizeof(T), nameOverride);
 				material->ApplyToCommandList(commandList);
 			}
 

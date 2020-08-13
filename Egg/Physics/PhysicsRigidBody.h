@@ -1,7 +1,7 @@
 #pragma once
 #include "../Common.h"
 #include "Egg/Scene/RigidBody.h"
-#include "PxPhysicsAPI.h"
+#include "physx/PxPhysicsAPI.h"
 #include "Model.h"
 
 namespace Egg { namespace Physics

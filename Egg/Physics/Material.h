@@ -1,6 +1,6 @@
 #pragma once
 #include "../Common.h"
-#include "PxPhysicsAPI.h"
+#include "physx/PxPhysicsAPI.h"
 #include <vector>
 
 namespace Egg {
@@ -17,6 +17,7 @@ namespace Egg {
 			physx::PxMaterial* GetPxMaterial() {
 				return material;
 			}
+
 		GG_ENDCLASS
 
 	}

@@ -1,4 +1,7 @@
 #pragma once
+
+#include <cmath>
+
 namespace Egg {
     namespace Math {
 

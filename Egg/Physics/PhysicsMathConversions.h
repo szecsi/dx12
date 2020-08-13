@@ -1,6 +1,6 @@
 #pragma once
 #include "Egg/Math/math.h"
-#include "PxPhysicsAPI.h"
+#include "physx/PxPhysicsAPI.h"
 
 namespace Egg { namespace Physics
 {

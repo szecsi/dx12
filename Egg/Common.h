@@ -10,8 +10,8 @@
 #include <vector>
 #include <string>
 
-#include <wrl.h>
-#include <dxgi1_6.h>
+#include <wrl/client.h>
+#include <dxgi1_5.h>
 
 template<typename T>
 using com_ptr = Microsoft::WRL::ComPtr<T>;

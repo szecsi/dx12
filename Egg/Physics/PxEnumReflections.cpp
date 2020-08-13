@@ -1,6 +1,6 @@
 #include "../Common.h"
 #include "Egg/Script/EnumReflectionMap.h"
-#include "PxPhysicsAPI.h"
+#include "physx/PxPhysicsAPI.h"
 #include "PxEnumReflections.h"
 
 #define ENUM(x) { typedef x STRUCTTYPE; Egg::Script::EnumReflectionMap< x :: Enum >::getMap()

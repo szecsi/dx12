@@ -1,6 +1,6 @@
 #pragma once
 #include "../Common.h"
-#include "PxPhysicsAPI.h"
+#include "physx/PxPhysicsAPI.h"
 #include <vector>
 
 namespace Egg { namespace Physics

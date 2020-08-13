@@ -14,7 +14,8 @@
 
 #include "d3d12.h"
 
-#if _EGG_SDK_VERSION <= 14393
+// if the SDK is old, then some classes/structs wont be available, therefore it wont compile
+#if EGG_SDK_BUILD_VERSION <= 14393
 #define LEGACY_VERSION
 #endif
 

@@ -48,7 +48,7 @@ HWND InitWindow(HINSTANCE hInstance) {
 	return wnd;
 }
 
-void GetAdapters(IDXGIFactory6 * dxgiFactory, std::vector<com_ptr<IDXGIAdapter1>> & adapters) {
+void GetAdapters(IDXGIFactory5 * dxgiFactory, std::vector<com_ptr<IDXGIAdapter1>> & adapters) {
 	HRESULT adapterQueryResult;
 	unsigned int adapterId = 0;
 	OutputDebugStringW(L"Detected Video Adapters:\n");
@@ -80,7 +80,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	HWND windowHandle = InitWindow(hInstance);
 	// DirectX stuff
 	com_ptr<ID3D12Debug> debugController{ nullptr };
-	com_ptr<IDXGIFactory6> dxgiFactory{ nullptr };
+	com_ptr<IDXGIFactory5> dxgiFactory{ nullptr };
 	com_ptr<IDXGISwapChain3> swapChain{ nullptr };
 	com_ptr<ID3D12Device> device{ nullptr };
 	com_ptr<ID3D12CommandQueue> commandQueue{ nullptr };
@@ -131,16 +131,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
 	swapChainDesc.Flags = 0;
 
-	DXGI_SWAP_CHAIN_FULLSCREEN_DESC swapChainFullscreenDesc = { 0 };
-	swapChainFullscreenDesc.RefreshRate = DXGI_RATIONAL{ 60, 1 };
-	swapChainFullscreenDesc.Windowed = true;
-	swapChainFullscreenDesc.Scaling = DXGI_MODE_SCALING_CENTERED;
-	swapChainFullscreenDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UPPER_FIELD_FIRST;
-
 	com_ptr<IDXGISwapChain1> tempSwapChain;
 
 	DX_API("Failed to create swap chain for HWND")
-		dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), windowHandle, &swapChainDesc, &swapChainFullscreenDesc, NULL, tempSwapChain.GetAddressOf());
+		dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), windowHandle, &swapChainDesc, NULL, NULL, tempSwapChain.GetAddressOf());
 
 	DX_API("Failed to cast swap chain")
 		tempSwapChain.As(&swapChain);
@@ -153,9 +147,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	app->SetDevice(device);
 	app->SetCommandQueue(commandQueue);
 	app->SetSwapChain(swapChain);
-	
-	app->CreateSwapChainResources();
+
 	app->CreateResources();
+	app->CreateSwapChainResources();
 	app->LoadAssets();
 
 	ShowWindow(windowHandle, nShowCmd);

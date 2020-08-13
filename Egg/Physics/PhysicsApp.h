@@ -1,8 +1,8 @@
 #pragma once
 #include "../Common.h"
 #include "Egg/Script/ScriptedApp.h"
-#include "PxPhysicsAPI.h"
-//#include "pvd/PxVisualDebugger.h"
+#include "physx/PxPhysicsAPI.h"
+//#include "physx/pvd/PxVisualDebugger.h"
 #include "Model.h"
 #include "Material.h"
 #include "PhysicsRigidBody.h"

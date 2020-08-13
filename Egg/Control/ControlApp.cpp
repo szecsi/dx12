@@ -11,11 +11,11 @@
 
 extern "C"
 {
-#include "Lua/lua.h"
-#include "Lua/lualib.h"
+#include "lua.h"
+#include "lualib.h"
 }
-#include "LuaBind/luabind/luabind.hpp"
-#include "LuaBind/luabind/adopt_policy.hpp"
+#include "luabind/luabind.hpp"
+#include "luabind/adopt_policy.hpp"
 
 void Egg::Control::ControlApp::LoadAssets() {
 	__super::LoadAssets();
