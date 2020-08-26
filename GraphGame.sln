@@ -76,6 +76,9 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UtilCopyDLL", "Common\UtilCopyDLL\UtilCopyDLL.vcxproj", "{12232603-76D5-4021-8249-91B3E156629E}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl007-Bump", "ggl007-Bump\ggl007-Bump.vcxproj", "{003D89D6-48D1-4DA6-AB8B-21F51FDC0513}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

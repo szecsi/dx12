@@ -68,15 +68,17 @@ public:
 		ID3D12DescriptorHeap* descriptorHeaps[] = { srvHeap.Get() };
 		commandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
+		UINT incrementSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
 		CD3DX12_GPU_DESCRIPTOR_HANDLE{ srvHeap->GetGPUDescriptorHandleForHeapStart(), 0, incrementSize };
 
 		D3D12_GPU_DESCRIPTOR_HANDLE texHandle = srvHeap->GetGPUDescriptorHandleForHeapStart();
-		texHandle.ptr += 
+		texHandle.ptr += incrementSize;
 
 		shadedMesh->SetPipelineState(commandList.Get());
 		shadedMesh->BindConstantBuffer(commandList.Get(), cb);
 		shadedMesh->BindConstantBuffer(commandList.Get(), perFrameCb);
-		commandList->SetGraphicsRootDescriptorTable(2, texHeap->GetGPUDescriptorHandleForHeapStart());
+		commandList->SetGraphicsRootDescriptorTable(2, srvHeap->GetGPUDescriptorHandleForHeapStart());
 		shadedMesh->Draw(commandList.Get());
 
 		envMapMesh->SetPipelineState(commandList.Get());
