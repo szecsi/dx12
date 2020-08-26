@@ -99,7 +99,7 @@ public:
 		cb.CreateResources(device.Get());
 
 		com_ptr<ID3DBlob> vertexShader = Egg::Shader::LoadCso("Shaders/cbBasicVS.cso");
-		com_ptr<ID3DBlob> pixelShader = Egg::Shader::LoadCso("Shaders/DefaultPS.cso");
+		com_ptr<ID3DBlob> pixelShader = Egg::Shader::LoadCso("Shaders/cbBasicPS.cso");
 		com_ptr<ID3D12RootSignature> rootSig = Egg::Shader::LoadRootSignature(device.Get(), vertexShader.Get());
 
 		Egg::Mesh::Material::P material = Egg::Mesh::Material::Create();

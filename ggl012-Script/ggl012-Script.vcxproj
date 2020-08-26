@@ -42,7 +42,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>luabind.lib;lua5.1.lib;Egg.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>luabind.lib;lua5.1.5-static.lib;Egg.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

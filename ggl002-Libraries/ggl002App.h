@@ -3,6 +3,10 @@
 #include "Box.h"
 #include <Egg/SimpleApp.h>
 
+struct V {
+	Egg::Math::Float3 f;
+	Egg::Math::Float3 k;
+};
 
 class ggl002App : public Egg::SimpleApp {
 protected:
@@ -42,7 +46,7 @@ public:
 
 	virtual void LoadAssets() override {
 		com_ptr<ID3DBlob> vertexShader = Egg::Shader::LoadCso("Shaders/cbBasicVS.cso");
-		com_ptr<ID3DBlob> pixelShader = Egg::Shader::LoadCso("Shaders/DefaultPS.cso");
+		com_ptr<ID3DBlob> pixelShader = Egg::Shader::LoadCso("Shaders/cbBasicPS.cso");
 		com_ptr<ID3D12RootSignature> rootSig = Egg::Shader::LoadRootSignature(device.Get(), vertexShader.Get());
 
 		Egg::Mesh::Material::P material = Egg::Mesh::Material::Create();

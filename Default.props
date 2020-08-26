@@ -13,7 +13,7 @@
     </FxCompile>
     <Link>
       <AdditionalDependencies>d3d12.lib;dxgi.lib;dxguid.lib;d3dcompiler.lib;DirectXTex.lib;assimp-vc142-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)Common\PhysX\lib\;$(SolutionDir)Common\assimp\lib\;$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)Common\Lua\lib;$(SolutionDir)Common\PhysX\lib\;$(SolutionDir)Common\assimp\lib\;$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)Common\assimp\include\;$(SolutionDir)Common\DirectXTex\;$(SolutionDir)Common\LuaBind\;$(SolutionDir)Common\Lua\include\;$(SolutionDir)Common\boost\include\;$(SolutionDir)Common\PhysX\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>

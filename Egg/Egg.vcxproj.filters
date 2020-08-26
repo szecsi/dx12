@@ -400,6 +400,9 @@
     <FxCompile Include="Shaders\TessDS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="cbBasicPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="Shaders\RootSignatures.hlsli">
