@@ -1,14 +1,5 @@
 #include "Shader.h"
 
-Egg::Shader::Shader(com_ptr<ID3DBlob> && blobRvalue) : byteCode{ std::move(blobRvalue) } { }
-
-D3D12_SHADER_BYTECODE Egg::Shader::GetByteCode() const {
-	D3D12_SHADER_BYTECODE bc;
-	bc.BytecodeLength = byteCode->GetBufferSize();
-	bc.pShaderBytecode = byteCode->GetBufferPointer();
-	return bc;
-}
-
 com_ptr<ID3D12RootSignature> Egg::Shader::LoadRootSignature(ID3D12Device * device, const std::string & filename) {
 	com_ptr<ID3DBlob> rootSigBlob = LoadCso(filename);
 

@@ -12,7 +12,7 @@ namespace Egg {
 			D3D12_INPUT_LAYOUT_DESC inputLayout;
 			D3D12_PRIMITIVE_TOPOLOGY topology;
 		public:
-			Geometry() : inputElements{}, inputLayout{}, topology{ D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST } {}
+			Geometry() : inputElements{}, inputLayout{}, topology{ D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST } {}
 
 			void SetTopology(D3D12_PRIMITIVE_TOPOLOGY top) {
 				topology = top;

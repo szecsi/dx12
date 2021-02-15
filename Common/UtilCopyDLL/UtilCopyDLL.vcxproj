@@ -10,7 +10,7 @@
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{12232603-76D5-4021-8249-91B3E156629E}</ProjectGuid>
     <RootNamespace>UtilCopyDLL</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.14393.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">

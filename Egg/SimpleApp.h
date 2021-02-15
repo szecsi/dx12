@@ -7,14 +7,14 @@
 
 namespace Egg {
 
-	class SimpleApp : public App {
+	GG_SUBCLASS(SimpleApp, App)
 	protected:
 		com_ptr<ID3D12CommandAllocator> commandAllocator;
 		com_ptr<ID3D12GraphicsCommandList> commandList;
 		com_ptr<ID3D12Resource> depthStencilBuffer;
 		com_ptr<ID3D12DescriptorHeap> dsvHeap;
 
-		std::unique_ptr<PsoManager> psoManager;
+		PsoManager::P psoManager;
 
 		virtual void PopulateCommandList() = 0;
 
@@ -54,7 +54,7 @@ namespace Egg {
 		virtual void CreateResources() override {
 			App::CreateResources();
 
-			psoManager.reset(new PsoManager{ device });
+			psoManager = PsoManager::Create( device );
 
 			DX_API("Failed to create command allocator")
 				device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(commandAllocator.GetAddressOf()));
@@ -68,7 +68,7 @@ namespace Egg {
 		}
 
 		virtual void ReleaseResources() override {
-			psoManager.reset(nullptr);
+			psoManager = nullptr;
 			commandList.Reset();
 			fence.Reset();
 			commandAllocator.Reset();
@@ -85,7 +85,6 @@ namespace Egg {
 
 			DX_API("Failed to create depth stencil descriptor heap")
 				device->CreateDescriptorHeap(&dsHeapDesc, IID_PPV_ARGS(dsvHeap.GetAddressOf()));
-
 
 			D3D12_CLEAR_VALUE depthOptimizedClearValue = {};
 			depthOptimizedClearValue.Format = DXGI_FORMAT_D32_FLOAT;
@@ -127,6 +126,6 @@ namespace Egg {
 			WaitForPreviousFrame();
 			App::Destroy();
 		}
-	};
+	GG_ENDCLASS
 
 }

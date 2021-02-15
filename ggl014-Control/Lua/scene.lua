@@ -45,8 +45,8 @@ shaders.ps = O:Shader(_, {file="Shaders/MaxBlinnPS.cso"})
 shaders.envmappedPs = O:Shader(_, {file="Shaders/EnvMapPS.cso"})
 
 multiMeshes.pod = O:MultiMeshFromFile(_, {file='geopod.x'})
-O:StaticEntity(_, {multiMesh=multiMeshes.pod,
-            position = { x=0, y=-10, z=0} } )
+--O:StaticEntity(_, {multiMesh=multiMeshes.pod,
+--            position = { x=0, y=-10, z=0} } )
 
 
 -- LABTODO: Giraffe with manual MultiMesh
@@ -75,7 +75,7 @@ multiMeshes.pod2 = O:MultiMesh(_, {}, function(_)
   end )
 end )
 
-entities.pod2 = O:StaticEntity(_, {multiMesh=multiMeshes.pod2, position = { x=20, y=-10, z=0} } )
+--entities.pod2 = O:StaticEntity(_, {multiMesh=multiMeshes.pod2, position = { x=20, y=-10, z=0} } )
 
 -------------------
 
@@ -126,7 +126,7 @@ multiMeshes.tessPod = O:MultiMesh(_, {}, function(_)
   end )
 end )
 
-entities.tessPod = O:StaticEntity(_, {multiMesh=multiMeshes.tessPod, position = { x=-20, y=-10, z=0} } )
+--entities.tessPod = O:StaticEntity(_, {multiMesh=multiMeshes.tessPod, position = { x=-20, y=-10, z=0} } )
 
 ---------------
 --[[
@@ -168,7 +168,7 @@ pxModels.geopod = O:PhysicsModel(_, { }, geopodShapes)
 pxModels.geopodHover = O:PhysicsModel(_, { actorFlags={"eDISABLE_GRAVITY"} }, geopodShapes)
 
 --O:PhysicsEntity(_, {model=pxModels.geopod, multiMesh=multiMeshes.pod, position={y=30}, linearVelocity={y=10}, angularVelocity={y=2}} )
-O:PhysicsEntity(_, {model=pxModels.geopodKin, multiMesh=multiMeshes.pod, linearVelocity={y=10}, position={x=30}, angularVelocity={y=2}} )
+--O:PhysicsEntity(_, {model=pxModels.geopodKin, multiMesh=multiMeshes.pod, linearVelocity={y=10}, position={x=30}, angularVelocity={y=2}} )
 
 -- A lua table that can be set as the controlState object of a PhysicsEntity. It must have a 'script' key, with a function value. PhysicsEntity::animate will call it.
 playerControlState = { 
@@ -232,9 +232,9 @@ cruiserControlState = {
 	end
 }
 
-O:ControlledEntity(_, {model=pxModels.geopodHover, position={y=60}, 
-	controlState=clone(cruiserControlState), multiMesh=multiMeshes.pod, 
-	linearDamping=1, angularDamping=1 } )
+--O:ControlledEntity(_, {model=pxModels.geopodHover, position={y=60}, 
+--	controlState=clone(cruiserControlState), multiMesh=multiMeshes.pod, 
+--	linearDamping=1, angularDamping=1 } )
 
 -----------------------------------------------
 multiMeshes.rocket = O:MultiMeshFromFile(_, {file='rocket.x'})

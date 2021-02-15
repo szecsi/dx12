@@ -1,27 +1,19 @@
-#include "RootSignatures.hlsli"
-
-struct IAOutput {
-	float3 position : POSITION;
-	float3 normal : NORMAL;
-	float2 texCoord : TEXCOORD;
-};
-
-struct VSOutput {
-    float4 position : SV_Position;
-    float3 rayDir: RAYDIR;
-	float2 texCoord : TEXCOORD;
-};
+#include "quad.hlsli"
 
 cbuffer PerFrameCb : register(b1) {
 	float4x4 viewProjMat;
 	float4x4 rayDirMat;
+	float4 eyePos;
+	float4 lightPos;
+	float4 lightPowerDensity;
 }
 
-[RootSignature(RootSig4)]
+[RootSignature(RootSig3)]
 VSOutput main(IAOutput iao) {
 	VSOutput vso;
-	vso.position = float4(iao.position.xy, 0.999999f, 1.0f);
-    vso.texCoord = iao.texCoord;
+	vso.position = float4(iao.position, 1.0f);
+	vso.position.z = 0.999999;
 	vso.rayDir = mul(rayDirMat, float4(iao.position, 1.0f)).xyz;
+	vso.tex = iao.tex;
 	return vso;
 }

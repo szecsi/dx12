@@ -9,10 +9,9 @@ extern "C"
 #include "luabind/luabind.hpp"
 #include "luabind/adopt_policy.hpp"
 
-namespace Egg {
-	namespace Control {
-		/// Application class with scene management
-		GG_SUBCLASS(LuaControlState, Egg::Scene::ControlState)
+namespace Egg { namespace Control {
+	/// Application class with scene management
+	GG_SUBCLASS(LuaControlState, Egg::Scene::ControlState)
 protected:
 			luabind::object controlState;
 		LuaControlState(Egg::Scene::Entity::P entity, luabind::object controlState) :
@@ -64,6 +63,5 @@ public:
 
 
 
-		GG_ENDCLASS
-	}
-}
+	GG_ENDCLASS
+}}

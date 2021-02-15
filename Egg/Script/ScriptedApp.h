@@ -5,6 +5,7 @@
 #include "Egg/Scene/FixedRigidBody.h"
 #include "Egg/Mesh/Material.h"
 #include "Egg/Mesh/Multi.h"
+#include "Egg/Cam/Fixed.h"
 #include "Shader.h"
 
 #include "Egg/Script/luabindGetPointer.h"
@@ -28,6 +29,7 @@ namespace Egg {
 		public:
 			Egg::Script::Shader::P CreateShader(luabind::object nil, luabind::object attributes);
 			Egg::Mesh::Geometry::P CreateIndexedGeometry(luabind::object nil, luabind::object attributes);
+			Egg::Mesh::Geometry::P CreateIndexedGeometryWithTangentSpace(luabind::object nil, luabind::object attributes);
 			Egg::Mesh::Material::P CreateMaterial(luabind::object nil, luabind::object attributes, luabind::object initalizer);
 			void AddTexture2DToMaterial(Egg::Mesh::Material::P material, luabind::object attributes);
 			void AddTextureCubeToMaterial(Egg::Mesh::Material::P material, luabind::object attributes);

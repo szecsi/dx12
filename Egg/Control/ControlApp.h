@@ -7,8 +7,7 @@ namespace Egg {
 		/// Application class with scene management
 		GG_SUBCLASS(ControlApp, Egg::Physics::PhysicsApp)
 
-			bool keyPressed[0xff];
-
+			bool keysPressed[0xff];
 			std::vector<Egg::Scene::Entity::P> spawnedEntities;
 
 			class SimulationEventCallback : public physx::PxSimulationEventCallback
@@ -24,7 +23,8 @@ namespace Egg {
 				void  onAdvance(const physx::PxRigidBody* const* bodyBuffer, const physx::PxTransform* poseBuffer, const physx::PxU32 count) {}
 			} simulationEventCallback;
 protected:
-		ControlApp() :simulationEventCallback(this) {}
+	ControlApp() :simulationEventCallback(this) {}
+
 public:
 		virtual void LoadAssets() override;
 		virtual void Update(float dt, float T) override;
@@ -34,13 +34,13 @@ public:
 			__super::ProcessMessage(hWnd, uMsg, wParam, lParam);
 
 			if (uMsg == WM_KEYDOWN)
-				keyPressed[wParam] = true;
+				keysPressed[wParam] = true;
 			else if (uMsg == WM_KEYUP)
-				keyPressed[wParam] = false;
+				keysPressed[wParam] = false;
 			else if (uMsg == WM_KILLFOCUS)
 			{
 				for (unsigned int i = 0; i < 0xff; i++)
-					keyPressed[i] = false;
+					keysPressed[i] = false;
 			}
 
 		}
@@ -48,8 +48,8 @@ public:
 		Egg::Scene::Entity::P CreateControlledEntity(luabind::object nil, luabind::object attributes);
 		void AddForceAndTorque(Egg::Scene::Entity::P entity, luabind::object attributes);
 		bool AddForceAndTorqueForTarget(Egg::Scene::Entity::P entity, luabind::object attributes);
-		Egg::Scene::Entity::P SpawnControlledEntity(Egg::Scene::Entity::P parentEntity, luabind::object attributes);
 
+		void SpawnControlledEntity(Egg::Scene::Entity::P parentEntity, luabind::object attributes);
 
 		GG_ENDCLASS
 	}
