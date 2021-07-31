@@ -11,6 +11,13 @@
 
 using namespace Egg::Math;
 
+__declspec(align(16)) struct PerBucketCb {
+	int bitOffset;
+	int dummy1;
+	int dummy2;
+	int dummy3;
+};
+
 class ggl005App : public Egg::SimpleApp {
 protected:
 	Egg::Mesh::Shaded::P shadedMesh;

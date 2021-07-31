@@ -39,7 +39,11 @@ multiMeshes.pod2 = O:MultiMesh(_, {}, function(_)
   end )
 end )
 
+
+
 entities.pod2 = O:StaticEntity(_, {multiMesh=multiMeshes.pod2, position = { x=20, y=-10, z=0} } )
+
+--[[
 
 -------------------
 
@@ -114,3 +118,4 @@ end )
 
 entities.y = O:StaticEntity(_, {multiMesh=multiMeshes.tessPod, position = { x=0, y=30, z=0} } )
 
+--]]

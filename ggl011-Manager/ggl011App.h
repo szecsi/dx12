@@ -8,7 +8,8 @@
 #include <Egg/ConstantBuffer.hpp>
 
 #include <Egg/Cam/FirstPerson.h>
-#include <Egg/Scene/StaticEntity.h>
+#include <Egg/Scene/FixedRigidBody.h>
+#include <Egg/Scene/Entity.h>
 #include "ConstantBufferTypes.h"
 #include "Particle.h"
 #include <vector>
@@ -84,8 +85,9 @@ public:
 
 
 		for (int i = 0; i < 100; i++) {
-			auto e = Egg::Scene::StaticEntity::Create(podMesh);
-			e->Translate(Float3(i, 0, 0));
+			auto rb = Egg::Scene::FixedRigidBody::Create();
+			rb->Translate(Float3(i, 0, 0));
+			auto e = Egg::Scene::Entity::Create(podMesh, rb);
 			ManagerApp::AddEntity(e);
 		}
 

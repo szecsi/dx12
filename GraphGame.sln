@@ -1,9 +1,12 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28307.1209
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30320.27
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl001-HelloTriangle", "ggl001-HelloTriangle\ggl001-HelloTriangle.vcxproj", "{226FA8CD-44EA-46B9-83A4-79EECED4CF3D}"
+	ProjectSection(ProjectDependencies) = postProject
+		{371B9FA9-4C90-4AC6-A123-ACED756D6C77} = {371B9FA9-4C90-4AC6-A123-ACED756D6C77}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl002-Libraries", "ggl002-Libraries\ggl002-Libraries.vcxproj", "{96607F87-0577-4DB9-8BD7-066E92F2EC0F}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -79,6 +82,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl007-Bump", "ggl007-Bump\
 	ProjectSection(ProjectDependencies) = postProject
 		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
 	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "f-RadixSort", "f-RadixSort\f-RadixSort.vcxproj", "{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -207,6 +212,13 @@ Global
 		{003D89D6-48D1-4DA6-AB8B-21F51FDC0513}.Release|x64.Build.0 = Debug|x64
 		{003D89D6-48D1-4DA6-AB8B-21F51FDC0513}.Release|x86.ActiveCfg = Debug|x64
 		{003D89D6-48D1-4DA6-AB8B-21F51FDC0513}.Release|x86.Build.0 = Debug|x64
+		{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}.Debug|x64.ActiveCfg = Debug|x64
+		{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}.Debug|x64.Build.0 = Debug|x64
+		{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}.Debug|x86.ActiveCfg = Debug|x64
+		{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}.Release|x64.ActiveCfg = Debug|x64
+		{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}.Release|x64.Build.0 = Debug|x64
+		{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}.Release|x86.ActiveCfg = Debug|x64
+		{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}.Release|x86.Build.0 = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -11,7 +11,8 @@
 #include <string>
 
 #include <wrl/client.h>
-#include <dxgi1_5.h>
+#include <wrl/wrappers/corewrappers.h>
+#include <dxgi1_6.h>
 
 template<typename T>
 using com_ptr = Microsoft::WRL::ComPtr<T>;

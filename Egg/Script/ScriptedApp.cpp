@@ -319,7 +319,7 @@ Egg::Cam::FirstPerson::P Script::ScriptedApp::CreateFirstPersonCam(luabind::obje
 
 void Script::ScriptedApp::RunScript(const std::string& luaFilename)
 {
-	std::string filepath = "Script/" + luaFilename;
+	std::string filepath = "Lua/" + luaFilename;
 	int s = luaL_dofile(luaState, filepath.c_str());
 
 	if (s != 0)

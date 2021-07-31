@@ -41,8 +41,8 @@ namespace Egg {
 			PopulateCommandList();
 
 			// Execute
-			ID3D12CommandList * cLists[] = { commandList.Get() };
-			commandQueue->ExecuteCommandLists(_countof(cLists), cLists);
+	//		ID3D12CommandList * cLists[] = { commandList.Get() };
+	//		commandQueue->ExecuteCommandLists(_countof(cLists), cLists);
 
 			DX_API("Failed to present swap chain")
 				swapChain->Present(1, 0);
