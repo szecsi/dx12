@@ -6,7 +6,7 @@
 
 namespace Egg {
 
-	class App {
+	GG_CLASS(App)
 	protected:
 		com_ptr<ID3D12Device> device;
 		com_ptr<IDXGISwapChain3> swapChain;
@@ -168,6 +168,6 @@ namespace Egg {
 		void SetSwapChain(com_ptr<IDXGISwapChain3> sChain) {
 			swapChain = sChain;
 		}
-	};
+	GG_ENDCLASS
 
 }

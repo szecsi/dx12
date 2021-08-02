@@ -17,16 +17,22 @@ namespace Egg {
 			Geometry::P geometry;
 
 		public:
-			Shaded(PsoManager * psoMan, Material::P mat, Geometry::P geom) : pipelineState{ nullptr }, gpsoDesc{}, material{ mat }, geometry{ geom } {
+			Shaded(PsoManager::A psoMan, Material::P mat, Geometry::P geom,
+				const std::vector<DXGI_FORMAT>& renderTargetFormats
+				= {DXGI_FORMAT_R8G8B8A8_UNORM}
+			) : pipelineState{ nullptr }, gpsoDesc{}, material{ mat }, geometry{ geom } {
 				ZeroMemory(&gpsoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
-				gpsoDesc.NumRenderTargets = 1;
 				gpsoDesc.PrimitiveTopologyType = geom->GetTopologyType();
-				gpsoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+				gpsoDesc.NumRenderTargets = renderTargetFormats.size();
+				for(int i=0; i<renderTargetFormats.size(); i++)
+					gpsoDesc.RTVFormats[i] = renderTargetFormats[i];
 				gpsoDesc.InputLayout = geom->GetInputLayout();
 				mat->ApplyToDescriptor(gpsoDesc);
 			
 				pipelineState = psoMan->Get(gpsoDesc);
 			}
+
+			Material::P GetMaterial() { return material; }
 
 			Egg::Mesh::Geometry::P GetGeometry() {
 				return geometry;
@@ -34,19 +40,6 @@ namespace Egg {
 
 			void SetTopology(D3D_PRIMITIVE_TOPOLOGY topo) {
 				geometry->SetTopology(topo);
-			}
-
-			// Deprecated. Constant buffers should be set to Materials, and automatically bound when Shaded meshes are drawn.
-			template<typename T>
-			void BindConstantBuffer(ID3D12GraphicsCommandList * commandList, const T & resource, const std::string & nameOverride = "") {
-				material->SetConstantBuffer(resource, sizeof(T), nameOverride);
-				material->ApplyToCommandList(commandList);
-			}
-
-			// Deprecated. This (and the material binding constant buffers and descriptor heaps) happens on a Draw call.
-			void SetPipelineState(ID3D12GraphicsCommandList * commandList) {
-				commandList->SetPipelineState(pipelineState.Get());
-				commandList->SetGraphicsRootSignature(gpsoDesc.pRootSignature);
 			}
 
 			void Draw(ID3D12GraphicsCommandList * commandList, unsigned int objectIndex = 0) {

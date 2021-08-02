@@ -33,7 +33,8 @@ private:
 
 #define GG_DECL(T) class T;\
 using T##P = std::shared_ptr<T>;\
-using T##W = std::weak_ptr<T>;
+using T##W = std::weak_ptr<T>; \
+using T##A = Egg::Shared<T>::A;
 
 namespace Egg {
 
@@ -54,10 +55,29 @@ namespace Egg {
 
 		using P = std::shared_ptr<T>;
 		using W = std::weak_ptr<T>;
+
+		class access_ptr {
+			T* ptr_;
+		public:
+			access_ptr(P const& other) :ptr_(other.get()) {}
+			/// Dereference the pointer for ptr->m usage
+			constexpr T* operator->() const noexcept { return ptr_; }
+			/// Allow if(ptr) to test for null
+			constexpr explicit operator bool() const noexcept {
+				return ptr_ != nullptr;
+			}
+			/// Convert to a raw pointer where necessary
+			constexpr explicit operator T* () const noexcept {
+				return ptr_;
+			}
+			/// !ptr is true iff ptr is null
+			constexpr bool operator!() const noexcept {
+				return !ptr_;
+			}
+		};
+
+		using A = access_ptr;
 	};
-
-
-
 
 	namespace Internal {
 

@@ -1,26 +1,17 @@
 #include "RootSignatures.hlsli"
-
-struct IAOutput {
-	float3 position : POSITION;
-	float3 normal : NORMAL;
-	float2 texCoord : TEXCOORD;
-};
-
-struct VSOutput {
-    float4 position : SV_Position;
-	float3 normal : NORMAL;
-    float2 texCoord : TEXCOORD;
-};
+#include "cbBasic.hlsli"
 
 cbuffer PerObjectCb : register(b0) {
 	float4x4 modelMat;
 }
 
-[RootSignature(RootSig2)]
+[RootSignature(RootSig1)]
 VSOutput main(IAOutput iao) {
 	VSOutput vso;
 	vso.position = mul(modelMat, float4(iao.position, 1.0f));
-	vso.normal = mul(modelMat, float4(iao.normal, 0.0f));
+//	vso.position = float4(iao.position + float3(0, 0, 0.6), 1.0f);
+//	vso.position.x += iao.vertexId;
+	vso.normal = float4(iao.normal, 0.0f);
     vso.texCoord = iao.texCoord;
 	return vso;
 }

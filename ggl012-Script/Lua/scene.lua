@@ -97,6 +97,7 @@ end )
 entities.tessPod = O:StaticEntity(_, {multiMesh=multiMeshes.tessPod, position = { x=-20, y=-10, z=0} } )
 
 ---------------
+--[[
 materials.tessQuad = O:Material(_, {
 	wireframe=true,
 	vs=shaders.tessVs,

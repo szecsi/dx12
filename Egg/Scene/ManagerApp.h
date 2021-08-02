@@ -6,7 +6,6 @@
 #include "Egg/Mesh/Multi.h"
 #include "Egg/Mesh/Material.h"
 #include "Egg/Cam/FirstPerson.h"
-#include "Egg/Cam/Fixed.h"
 #include "Egg/Importer.h"
 #include "Egg/SimpleApp.h"
 #include "Egg/ConstantBuffer.hpp"
@@ -57,7 +56,7 @@ namespace Egg {
 				material->SetConstantBuffer(perFrameCb);
 				srvCount+=2;
 
-				auto shadedMesh = Egg::Mesh::Shaded::Create(psoManager.get(), material, indexedGeometry);
+				auto shadedMesh = Egg::Mesh::Shaded::Create(psoManager, material, indexedGeometry);
 				flipMesh->Add(0, shadedMesh);
 			}
 
@@ -137,17 +136,18 @@ namespace Egg {
 					camera->GetProjMatrix();
 				perFrameCb->rayDirTransform = camera->GetRayDirMatrix();
 				perFrameCb->cameraPos = Float4(camera->GetEyePosition(), 1);
-				perFrameCb->lightPos = Float4(0, 1, 0, 0);
-				perFrameCb->lightPowerDensity = Float4(1, 1, 1, 0);
-				perFrameCb->billboardSize = Float4(50.1, 50.1, 0, 0) * camera->GetProjMatrix();
+				perFrameCb->lightPos = Float4(0, 20, 0, 1);
+				perFrameCb->lightPowerDensity = Float4(0, 0, 1000, 0);
+				perFrameCb->lightPos2 = Float4(0, 20, 0.5, 1);
+				perFrameCb->lightPowerDensity2 = Float4(1000, 1000, 0, 0);
 				perFrameCb.Upload();
 			}
 			virtual void LoadAssets() override {
 				perObjectCb.CreateResources(device.Get());
 				perFrameCb.CreateResources(device.Get());
 
-				defaultVertexShader = Egg::Shader::LoadCso("Shaders/trafoVS.cso");
-				defaultPixelShader = Egg::Shader::LoadCso("Shaders/MaxBlinnPS.cso");
+				defaultVertexShader = Egg::Shader::LoadCso("Shaders/texturedVS.cso");
+				defaultPixelShader = Egg::Shader::LoadCso("Shaders/texturedPS.cso");
 				defaultRootSig = Egg::Shader::LoadRootSignature(device.Get(), defaultVertexShader.Get());
 
 				cameras.push_back( Egg::Cam::FirstPerson::Create() );

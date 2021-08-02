@@ -6,6 +6,7 @@
 namespace Egg {
 	template<typename T>
 	class ConstantBuffer {
+	public:
 		UINT8 * mappedPtr;
 		com_ptr<ID3D12Resource> constantBuffer;
 		T data;
@@ -63,7 +64,7 @@ namespace Egg {
 			return data;
 		}
 
-		T * operator->() {
+		T* operator->() {
 			return &data;
 		}
 	};

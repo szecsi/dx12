@@ -1,10 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
     <Filter Include="Header Files">
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
@@ -22,20 +18,23 @@
     <Filter Include="Mesh">
       <UniqueIdentifier>{3975ca39-e5c6-4edb-ad6d-5072b939714f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{3df7c362-51c2-4b63-811a-11b2c177b11f}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Cam">
-      <UniqueIdentifier>{25f7c716-138c-4d34-8662-3e50a5732b55}</UniqueIdentifier>
+      <UniqueIdentifier>{05b29fdf-d853-404e-ac79-906643457b7a}</UniqueIdentifier>
     </Filter>
     <Filter Include="Scene">
-      <UniqueIdentifier>{93cd60b3-2fde-42ab-b221-206618429d68}</UniqueIdentifier>
+      <UniqueIdentifier>{3b036388-a45d-413e-8b1b-77b4161060c1}</UniqueIdentifier>
     </Filter>
     <Filter Include="Script">
-      <UniqueIdentifier>{fee87dfb-fe34-47c0-95c3-51e43097cbff}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Control">
-      <UniqueIdentifier>{15a16d64-7453-4961-a781-6d034c469760}</UniqueIdentifier>
+      <UniqueIdentifier>{8d080526-a66a-4497-bd7c-c44339c63164}</UniqueIdentifier>
     </Filter>
     <Filter Include="Physics">
-      <UniqueIdentifier>{33479411-7950-4c03-b779-590e8f891a9c}</UniqueIdentifier>
+      <UniqueIdentifier>{18154dd7-d2a9-4f2f-b42c-0148977c7db6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Control">
+      <UniqueIdentifier>{98413d43-ae3f-4fd8-b68d-94a21f3e0cc4}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -183,17 +182,29 @@
     <ClInclude Include="TextureCube.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Scene\ControlParameters.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\ControlState.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\Entity.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\FixedRigidBody.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\PerObjectData.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene\RigidBody.h">
+      <Filter>Scene</Filter>
+    </ClInclude>
     <ClInclude Include="Mesh\Flip.h">
       <Filter>Mesh</Filter>
     </ClInclude>
     <ClInclude Include="Mesh\Multi.h">
       <Filter>Mesh</Filter>
-    </ClInclude>
-    <ClInclude Include="Scene\Entity.h">
-      <Filter>Scene</Filter>
-    </ClInclude>
-    <ClInclude Include="Scene\PerObjectData.h">
-      <Filter>Scene</Filter>
     </ClInclude>
     <ClInclude Include="Scene\ManagerApp.h">
       <Filter>Scene</Filter>
@@ -207,17 +218,23 @@
     <ClInclude Include="Script\EnumReflectionMap.h">
       <Filter>Script</Filter>
     </ClInclude>
+    <ClInclude Include="Script\luabindGetPointer.h">
+      <Filter>Script</Filter>
+    </ClInclude>
     <ClInclude Include="Script\LuaTable.h">
       <Filter>Script</Filter>
     </ClInclude>
     <ClInclude Include="Script\ScriptedApp.h">
       <Filter>Script</Filter>
     </ClInclude>
-    <ClInclude Include="Script\luabindGetPointer.h">
-      <Filter>Script</Filter>
-    </ClInclude>
     <ClInclude Include="Script\Shader.h">
       <Filter>Script</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\Material.h">
+      <Filter>Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\Model.h">
+      <Filter>Physics</Filter>
     </ClInclude>
     <ClInclude Include="Physics\PhysicsApp.h">
       <Filter>Physics</Filter>
@@ -225,28 +242,10 @@
     <ClInclude Include="Physics\PhysicsMathConversions.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="Physics\PxEnumReflections.h">
-      <Filter>Physics</Filter>
-    </ClInclude>
-    <ClInclude Include="Scene\ControlState.h">
-      <Filter>Scene</Filter>
-    </ClInclude>
-    <ClInclude Include="Scene\FixedRigidBody.h">
-      <Filter>Scene</Filter>
-    </ClInclude>
-    <ClInclude Include="Scene\RigidBody.h">
-      <Filter>Scene</Filter>
-    </ClInclude>
-    <ClInclude Include="Scene\ControlParameters.h">
-      <Filter>Scene</Filter>
-    </ClInclude>
     <ClInclude Include="Physics\PhysicsRigidBody.h">
       <Filter>Physics</Filter>
     </ClInclude>
-    <ClInclude Include="Physics\Model.h">
-      <Filter>Physics</Filter>
-    </ClInclude>
-    <ClInclude Include="Physics\Material.h">
+    <ClInclude Include="Physics\PxEnumReflections.h">
       <Filter>Physics</Filter>
     </ClInclude>
     <ClInclude Include="Control\ControlApp.h">
@@ -260,12 +259,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Utility.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Internal.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Math\Bool1.cpp">
       <Filter>Math</Filter>
     </ClCompile>
@@ -317,23 +310,32 @@
     <ClCompile Include="Math\UInt4.cpp">
       <Filter>Math</Filter>
     </ClCompile>
+    <ClCompile Include="Internal.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
     <ClCompile Include="PsoManager.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="Shader.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Utility.cpp">
+      <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="Importer.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="Texture2D.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="Cam\FirstPerson.cpp">
       <Filter>Cam</Filter>
     </ClCompile>
     <ClCompile Include="TextureCube.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene\Entity.cpp">
+      <Filter>Scene</Filter>
     </ClCompile>
     <ClCompile Include="Scene\ManagerApp.cpp">
       <Filter>Scene</Filter>
@@ -347,13 +349,10 @@
     <ClCompile Include="Physics\PhysicsApp.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
-    <ClCompile Include="Physics\PxEnumReflections.cpp">
+    <ClCompile Include="Physics\PhysicsRigidBody.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
-    <ClCompile Include="Scene\Entity.cpp">
-      <Filter>Scene</Filter>
-    </ClCompile>
-    <ClCompile Include="Physics\PhysicsRigidBody.cpp">
+    <ClCompile Include="Physics\PxEnumReflections.cpp">
       <Filter>Physics</Filter>
     </ClCompile>
     <ClCompile Include="Control\ControlApp.cpp">
@@ -364,55 +363,86 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Shaders\DefaultPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\DefaultVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\cbBasicVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\trafoVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\bgPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\quadVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\DiffusePS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\EnvMapPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\MaxBlinnPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\TessVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\TessHS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\TessDS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="cbBasicPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-  </ItemGroup>
-  <ItemGroup>
     <Text Include="Shaders\RootSignatures.hlsli">
       <Filter>Shaders</Filter>
     </Text>
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
-    <None Include="Shaders\Tess.hlsli">
+    <None Include="Shaders\cbBasic.hlsli">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="Shaders\quad.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\ShadowMap.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Billboard.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\NormalMap.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="Shaders\cbBasicPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\cbBasicVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\texturedPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\texturedVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\quadVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\backgroundPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\deferredPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\deferringPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ShadowMapVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ShadowMapPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ShadowedPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ShadowedVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ShadowMapGS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\BillboardVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\BillboardGS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\FirePS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\NormalMapVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\NormalMapPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ParallaxPS.hlsl" />
+    <FxCompile Include="Shaders\OLParallaxPS.hlsl" />
+    <FxCompile Include="Shaders\BinaryReliefPS.hlsl" />
+    <FxCompile Include="Shaders\BinaryReliefInsetPS.hlsl" />
   </ItemGroup>
 </Project>

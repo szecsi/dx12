@@ -6,13 +6,9 @@
 namespace Egg {
 	
 	class Shader {
-		com_ptr<ID3DBlob> byteCode;
-
+		Shader() = delete;
+		~Shader() = delete;
 	public:
-
-		Shader(com_ptr<ID3DBlob> && blobRvalue);
-		
-		D3D12_SHADER_BYTECODE GetByteCode() const;
 
 		static com_ptr<ID3D12RootSignature> LoadRootSignature(ID3D12Device * device, const std::string & filename);
 

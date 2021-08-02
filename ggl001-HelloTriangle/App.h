@@ -12,11 +12,14 @@ struct IAOS {
 //Vertex Shader Output Structure
 struct VSOS {
 	float4 position : SV_Position;
+	float4 h : HOLVAGYOK;
 };
 
 VSOS vs_main(IAOS iaos) {
 	VSOS vsos;
-	vsos.position = float4(iaos.position.xy, 0.0f, 1.0f);
+
+	vsos.position = float4(iaos.position, 1.0f);
+	vsos.h = vsos.position;
 	return vsos;
 }
 )";
@@ -25,10 +28,11 @@ const char * pixelShaderCode = R"(
 //Vertex Shader Output Structure
 struct VSOS {
 	float4 position : SV_Position;
+	float4 h : HOLVAGYOK;
 };
 
 float4 ps_main(VSOS vsos) : SV_Target {
-	return float4(0.1f, 0.2f, 0.8f, 1.0f);
+	return float4(abs(xvsos.h.xy), 0.08f, 1.0f);
 }
 )";
 
@@ -131,7 +135,7 @@ public:
 		};
 
 		Vertex triangleVertices[] = {
-			{ {  0.0f   ,  0.85f  , 0.0f } },
+			{ {  1.0f   ,  1.0f  , 2.0f } },
 			{ {  0.7071f, -0.8571f, 0.0f } },
 			{ { -0.7071f, -0.8571f, 0.0f } }
 		};

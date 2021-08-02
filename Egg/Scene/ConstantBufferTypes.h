@@ -13,5 +13,9 @@ __declspec(align(16)) struct PerFrameCb {
 	Egg::Math::Float4 cameraPos;
 	Egg::Math::Float4 lightPos;
 	Egg::Math::Float4 lightPowerDensity;
+	Egg::Math::Float4x4 lightViewProjTransform;
+	Egg::Math::Float4 lightPos2;
+	Egg::Math::Float4 lightPowerDensity2;
+	Egg::Math::Float4x4 lightViewProjTransform2;
 	Egg::Math::Float4 billboardSize;
 };

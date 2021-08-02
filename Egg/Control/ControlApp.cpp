@@ -17,6 +17,7 @@ extern "C"
 #include "luabind/luabind.hpp"
 #include "luabind/adopt_policy.hpp"
 
+
 void Egg::Control::ControlApp::LoadAssets() {
 	__super::LoadAssets();
 	using namespace luabind;
@@ -63,6 +64,7 @@ Egg::Scene::Entity::P Egg::Control::ControlApp::CreateControlledEntity(luabind::
 
 		Scene::Entity::P physicsEntity =
 			Scene::Entity::Create(multiMesh, rigidBody);
+		actor->userData = physicsEntity.get();
 		auto controlState = Egg::Control::LuaControlState::Create(physicsEntity, controlStateObj);
 		physicsEntity->SetControlState(controlState);
 		AddEntity(physicsEntity);
@@ -71,13 +73,70 @@ Egg::Scene::Entity::P Egg::Control::ControlApp::CreateControlledEntity(luabind::
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
 }
 
+Egg::Math::Float4 quatMul(
+	const Egg::Math::Float4& p,
+	const Egg::Math::Float4& o) {
+	return Egg::Math::Float4(
+		p.y * o.z - p.z * o.y + p.w * o.x + p.x * o.w,
+		p.z * o.x - p.x * o.z + p.w * o.y + p.y * o.w,
+		p.x * o.y - p.y * o.x + p.w * o.z + p.z * o.w,
+		p.w * o.w - (p.x * o.x + p.y * o.y + p.z * o.z));
+}
+
+void Egg::Control::ControlApp::SpawnControlledEntity(Egg::Scene::Entity::P parentEntity, luabind::object attributes) {
+	using namespace Egg::Script;
+	using namespace Egg::Physics;
+	LuaTable attributeTable(attributes, "ControlledEntity");
+	try {
+		using namespace Egg::Math;
+		auto multiMesh = attributeTable.get<Egg::Mesh::Multi>("multiMesh");
+		Float3 position = attributeTable.getFloat3("position");
+		Float3 axis = attributeTable.getFloat3("orientationAxis", Float3(0, 1, 0));
+		float angle = attributeTable.getFloat("orientationAngle");
+		auto model = attributeTable.get<Egg::Physics::Model>("model");
+		auto controlStateObj = attributeTable.getLuaBindObject("controlState");
+		// quaternion from axis and angle
+		Float4 orientation = Float4(axis.Normalize() * sinf(angle / 2), cosf(angle / 2));
+
+		auto parentModelMatrix = parentEntity->GetRigidBody()->GetModelMatrix();
+		auto parentOrientation = parentEntity->GetRigidBody()->GetOrientation();
+
+		position = (Float4(position, 1) * parentModelMatrix).xyz;
+		orientation = quatMul(parentOrientation, orientation);
+
+		Physics::PhysicsRigidBody::P rigidBody =
+			Physics::PhysicsRigidBody::Create(
+				scene, model, position, orientation
+			);
+		auto actor = rigidBody->GetActor();
+
+		auto linearVelocity = attributeTable.getFloat3("linearVelocity", ~actor->getLinearVelocity());
+		linearVelocity = (Float4(linearVelocity, 0) * parentModelMatrix).xyz;
+		actor->setLinearVelocity(~linearVelocity);
+
+		actor->setLinearDamping(attributeTable.getFloat("linearDamping", actor->getLinearDamping()));
+		actor->setAngularDamping(attributeTable.getFloat("angularDamping", actor->getAngularDamping()));
+		actor->setMaxAngularVelocity(attributeTable.getFloat("maxAngularVelocity", actor->getMaxAngularVelocity()));
+	//	actor->setLinearVelocity(~attributeTable.getFloat3("linearVelocity", ~actor->getLinearVelocity()));
+		actor->setAngularVelocity(~attributeTable.getFloat3("angularVelocity", ~actor->getAngularVelocity()));
+
+
+		Scene::Entity::P physicsEntity =
+			Scene::Entity::Create(multiMesh, rigidBody);
+		actor->userData = physicsEntity.get();
+		auto controlState = Egg::Control::LuaControlState::Create(physicsEntity, controlStateObj);
+		physicsEntity->SetControlState(controlState);
+		spawnedEntities.push_back(physicsEntity);
+
+	}
+	catch (std::exception exception) { ExitWithErrorMessage(exception); }
+}
+
 void Egg::Control::ControlApp::Update(float dt, float T) {
 	using namespace luabind;
 	try
 	{
-		entities.insert(entities.end(), spawnedEntities.begin(), spawnedEntities.end());
-		spawnedEntities.clear();
-
+		globals(luaState)["dt"] = dt;
 		object keysPressed = globals(luaState)["keysPressed"];
 		if (type(keysPressed) == LUA_TTABLE)
 		{
@@ -98,7 +157,7 @@ void Egg::Control::ControlApp::Update(float dt, float T) {
 				if (kks == "VK_NUMPAD8") keycode = VK_NUMPAD8;
 				if (kks == "VK_NUMPAD9") keycode = VK_NUMPAD9;
 
-				*i = keyPressed[keycode] ? true : false;
+				*i = this->keysPressed[keycode] ? true : false;
 			}
 		}
 	}
@@ -110,9 +169,10 @@ void Egg::Control::ControlApp::Update(float dt, float T) {
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
 
 	__super::Update(dt, T);
+	entities.insert(entities.end(), spawnedEntities.begin(), spawnedEntities.end());
+	spawnedEntities.clear();
+
 }
-
-
 
 void Egg::Control::ControlApp::AddForceAndTorque(Egg::Scene::Entity::P entity, luabind::object attributes){
 	using namespace Egg::Script;
@@ -120,8 +180,8 @@ void Egg::Control::ControlApp::AddForceAndTorque(Egg::Scene::Entity::P entity, l
 	LuaTable attributeTable(attributes, "AddForceAndTorque");
 	try {
 		auto rigid = entity->GetRigidBody();
-		rigid->AddForce((attributeTable.getFloat4("force") * rigid->GetRotationMatrix()).xyz);
-		rigid->AddTorque((attributeTable.getFloat4("torque") * rigid->GetRotationMatrix()).xyz);
+		rigid->AddForce((attributeTable.getFloat4("force")  * rigid->GetRotationMatrix() ).xyz  );
+		rigid->AddTorque((attributeTable.getFloat4("torque")  * rigid->GetRotationMatrix() ).xyz );
 	}
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
 }
@@ -147,70 +207,14 @@ bool Egg::Control::ControlApp::AddForceAndTorqueForTarget(Egg::Scene::Entity::P 
 		float markDist = markDiff.Length();
 		Float3 markDir = markDiff / markDist;
 		Float3 ahead = (Float4(1, 0, 0, 0) * rigid->GetRotationMatrix()).xyz;
-		rigid->AddForce(ahead * markDir.Dot(ahead) * maxForce);
+		rigid->AddForce(ahead * std::max(markDir.Dot(ahead), 0.0f) * maxForce);
 		rigid->AddTorque(ahead.Cross(markDir) * maxTorque);
 
 		if (markDist < proximityRadius)	return true;
+		return false;
 	}
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
 }
-
-Egg::Math::Float4 quatMul(
-	const Egg::Math::Float4& p,
-	const Egg::Math::Float4& o) {
-	return Egg::Math::Float4(
-		p.y * o.z -  p.z * o.y + p.w * o.x + p.x * o.w,
-		p.z * o.x -  p.x * o.z + p.w * o.y + p.y * o.w,
-		p.x * o.y -  p.y * o.x + p.w * o.z + p.z * o.w,
-		p.w * o.w - (p.x * o.x + p.y * o.y + p.z * o.z));
-}
-
-Egg::Scene::Entity::P Egg::Control::ControlApp::SpawnControlledEntity(Egg::Scene::Entity::P parentEntity, luabind::object attributes) {
-	using namespace Egg;
-	using namespace Egg::Script;
-	using namespace Egg::Physics;
-	LuaTable attributeTable(attributes, "spawn");
-	try
-	{
-		using namespace Egg::Math;
-		auto multiMesh = attributeTable.get<Egg::Mesh::Multi>("multiMesh");
-		Float3 position = attributeTable.getFloat3("position");
-		Float3 axis = attributeTable.getFloat3("orientationAxis", Float3(0, 1, 0));
-		float angle = attributeTable.getFloat("orientationAngle");
-		auto model = attributeTable.get<Egg::Physics::Model>("model");
-		auto controlStateObj = attributeTable.getLuaBindObject("controlState");
-		auto parentModelMatrix = parentEntity->GetRigidBody()->GetModelMatrix();
-		auto parentOrientation = parentEntity->GetRigidBody()->GetOrientation();
-		position = (Float4(position, 1) * parentModelMatrix).xyz;
-		// quaternion from axis and angle
-		Float4 orientation = Float4(axis.Normalize() * sinf(angle / 2), cosf(angle / 2));
-		orientation = quatMul(parentOrientation, orientation);
-		Physics::PhysicsRigidBody::P rigidBody =
-			Physics::PhysicsRigidBody::Create(
-				scene, model, position, orientation
-			);
-		auto actor = rigidBody->GetActor();
-
-		auto linearVelocity = attributeTable.getFloat3("linearVelocity", ~actor->getLinearVelocity());
-		linearVelocity = (Float4(linearVelocity, 0) * parentModelMatrix).xyz;
-
-		actor->setLinearDamping(attributeTable.getFloat("linearDamping", actor->getLinearDamping()));
-		actor->setAngularDamping(attributeTable.getFloat("angularDamping", actor->getAngularDamping()));
-		actor->setMaxAngularVelocity(attributeTable.getFloat("maxAngularVelocity", actor->getMaxAngularVelocity()));
-		actor->setLinearVelocity(~linearVelocity);
-		actor->setAngularVelocity(~attributeTable.getFloat3("angularVelocity", ~actor->getAngularVelocity()));
-
-		Scene::Entity::P physicsEntity =
-			Scene::Entity::Create(multiMesh, rigidBody);
-		actor->userData = physicsEntity.get();
-		auto controlState = Egg::Control::LuaControlState::Create(physicsEntity, controlStateObj);
-		physicsEntity->SetControlState(controlState);
-		spawnedEntities.push_back(physicsEntity);
-		return physicsEntity;
-	}
-	catch (std::exception exception) { ExitWithErrorMessage(exception); }
-}
-
 
 void  Egg::Control::ControlApp::SimulationEventCallback::onContact(
 	const physx::PxContactPairHeader& pairHeader,

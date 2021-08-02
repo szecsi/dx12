@@ -48,6 +48,7 @@ void Script::ScriptedApp::LoadAssets() {
 
 		class_<Script::ScriptedApp>("ScriptedApp")
 		.def("IndexedGeometry", &Script::ScriptedApp::CreateIndexedGeometry)
+		.def("IndexedGeometryWithTangentSpace", &Script::ScriptedApp::CreateIndexedGeometryWithTangentSpace)
 		.def("Shader", &Script::ScriptedApp::CreateShader)
 		.def("Material", &Script::ScriptedApp::CreateMaterial)
 		.def("setTexture2D", &Script::ScriptedApp::AddTexture2DToMaterial)
@@ -114,11 +115,25 @@ Egg::Mesh::Geometry::P Script::ScriptedApp::CreateIndexedGeometry(luabind::objec
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
 }
 
+Egg::Mesh::Geometry::P Script::ScriptedApp::CreateIndexedGeometryWithTangentSpace(luabind::object nil, luabind::object attributes)
+{
+	LuaTable attributeTable(attributes, "IndexedGeometryWithTangentSpace");
+	try
+	{
+		std::string fileName = attributeTable.getString("file");
+		Egg::Mesh::IndexedGeometry::P indexedGeometry = std::dynamic_pointer_cast<Egg::Mesh::IndexedGeometry>(
+			Egg::Importer::ImportWithTangentSpace(device.Get(), fileName));
+		return indexedGeometry;
+	}
+	catch (std::exception exception) { ExitWithErrorMessage(exception); }
+}
+
 Egg::Mesh::Material::P Script::ScriptedApp::CreateMaterial(luabind::object nil, luabind::object attributes, luabind::object initializer)
 {
 	LuaTable attributeTable(attributes, "MeshMaterial");
 	try
 	{
+		bool useDepthTest = attributeTable.getBool("useDepthTest", true);
 		bool usePerObjectData = attributeTable.getBool("usePerObjectData", true);
 		bool wireframe = attributeTable.getBool("wireframe", false);
 		Egg::Mesh::Material::P material = Egg::Mesh::Material::Create();
@@ -158,7 +173,14 @@ Egg::Mesh::Material::P Script::ScriptedApp::CreateMaterial(luabind::object nil, 
 			material->SetDomainShader(ds->byteCode);
 		material->SetPixelShader(ps->byteCode);
 
-		material->SetDepthStencilState(CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT));
+		if(useDepthTest)
+			material->SetDepthStencilState(CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT));
+		else {
+			auto nwdss = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+			nwdss.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+			material->SetDepthStencilState(nwdss);
+		}
+
 		material->SetDSVFormat(DXGI_FORMAT_D32_FLOAT);
 		if(usePerObjectData)
 			material->SetConstantBuffer(perObjectCb, sizeof(Egg::Scene::PerObjectData));
@@ -228,7 +250,7 @@ void Script::ScriptedApp::AddShadedMeshToFlipMesh(Egg::Mesh::Flip::P flipMesh, l
 		auto geometry = attributeTable.
 			get<Mesh::Geometry>("geometry");
 		auto material= attributeTable.get<Mesh::Material>("material");
-		Egg::Mesh::Shaded::P shadedMesh = Mesh::Shaded::Create(psoManager.get(), material, geometry);
+		Egg::Mesh::Shaded::P shadedMesh = Mesh::Shaded::Create(psoManager, material, geometry);
 		flipMesh->Add(mien, shadedMesh);
 	}
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
@@ -294,28 +316,28 @@ Egg::Cam::FirstPerson::P Script::ScriptedApp::CreateFirstPersonCam(luabind::obje
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
 }
 
-	Egg::Cam::Fixed::P Script::ScriptedApp::CreateFixedCam(luabind::object nil, luabind::object attributes)
+Egg::Cam::Fixed::P Script::ScriptedApp::CreateFixedCam(luabind::object nil, luabind::object attributes)
+{
+	LuaTable attributeTable(attributes, "FixedCam");
+	try
 	{
-		LuaTable attributeTable(attributes, "FixedCam");
-		try
-		{
-			using namespace Egg::Math;
-			Egg::Cam::Fixed::P fixedCam = Egg::Cam::Fixed::Create(
-				attributeTable.get<Egg::Scene::Entity>("owner"),
-				attributeTable.getFloat3("position", Float3::Zero),
-				attributeTable.getFloat3("ahead", Float3::UnitX),
-				attributeTable.getFloat3("up", Float3::UnitY),
-				attributeTable.getFloat("fov", 1.2),
-				attributeTable.getFloat("aspect", 1),
-				attributeTable.getFloat("front", 0.1),
-				attributeTable.getFloat("back", 1000.0)
-			);
+		using namespace Egg::Math;
+		Egg::Cam::Fixed::P fixedCam = Egg::Cam::Fixed::Create(
+			attributeTable.get<Egg::Scene::Entity>("owner"),
+			attributeTable.getFloat3("position", Float3::Zero),
+			attributeTable.getFloat3("ahead", Float3::UnitX),
+			attributeTable.getFloat3("up", Float3::UnitY),
+			attributeTable.getFloat("fov", 1.2),
+			attributeTable.getFloat("aspect", 1),
+			attributeTable.getFloat("front", 0.1),
+			attributeTable.getFloat("back", 1000.0)
+		);
 
-			cameras.push_back(fixedCam);
-			return fixedCam;
-		}
-		catch (std::exception exception) { ExitWithErrorMessage(exception); }
+		cameras.push_back(fixedCam);
+		return fixedCam;
 	}
+	catch (std::exception exception) { ExitWithErrorMessage(exception); }
+}
 
 void Script::ScriptedApp::RunScript(const std::string& luaFilename)
 {
