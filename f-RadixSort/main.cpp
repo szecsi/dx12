@@ -157,8 +157,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	app->SetCommandQueue(commandQueue);
 	app->SetSwapChain(swapChain);
 	
-	app->CreateSwapChainResources();
 	app->CreateResources();
+	app->CreateSwapChainResources();
 	app->LoadAssets();
 
 	ShowWindow(windowHandle, nShowCmd);

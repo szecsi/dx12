@@ -5,6 +5,7 @@
 #include <Egg/Math/Math.h>
 #include <Egg/ConstantBuffer.hpp>
 #include <thread>
+#include <d3d11on12.h>
 
 #include "ConstantBufferTypes.h"
 
@@ -12,6 +13,11 @@ using namespace Egg::Math;
 
 class ggl004App : public Egg::SimpleApp {
 protected:
+	com_ptr<ID3D11On12Device> device11on12;
+	com_ptr<ID3D11Device> device11;
+	com_ptr<ID3D11DeviceContext> context11;
+	std::vector<com_ptr<ID3D11Resource>> renderTargets11;
+
 	com_ptr<ID3D12DescriptorHeap> uavHeap;
 
 	com_ptr<ID3D12PipelineState> m_computePSO;
@@ -116,13 +122,19 @@ public:
 //		commandList->SetGraphicsRootDescriptorTable(0, uavHeap->GetGPUDescriptorHandleForHeapStart());
 //		commandList->Dispatch(1, 0, 0);
 
-		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+//		this will be done by d3d11 now
+//11		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
 		DX_API("Failed to close command list")
 			commandList->Close();
 
 		ID3D12CommandList* cLists[] = { commandList.Get() };
 		commandQueue->ExecuteCommandLists(_countof(cLists), cLists);
+
+//		device11on12->AcquireWrappedResources(renderTargets11[frameIndex].GetAddressOf(), 1);
+//		device11on12->ReleaseWrappedResources(renderTargets11[frameIndex].GetAddressOf(), 1);
+
+//11		context11->Flush();
 
 		WaitForPreviousFrame();
 
@@ -165,8 +177,55 @@ public:
 		pCmdList->ResourceBarrier(1, &barrierDesc);
 	}
 
+	virtual void CreateSwapChainResources() override {
+		__super::CreateSwapChainResources();
+		renderTargets11.resize(2);
+		D3D11_RESOURCE_FLAGS d3d11Flags = { D3D11_BIND_RENDER_TARGET };
+		DX_API("Failed to wrap 12 back buffer for d3d11")
+			device11on12->CreateWrappedResource(
+				renderTargets[0].Get(),
+				&d3d11Flags,
+				D3D12_RESOURCE_STATE_RENDER_TARGET,
+				D3D12_RESOURCE_STATE_PRESENT,
+				IID_PPV_ARGS(renderTargets11[0].GetAddressOf())
+			);
+		DX_API("Failed to wrap 12 back buffer for d3d11")
+			device11on12->CreateWrappedResource(
+				renderTargets[1].Get(),
+				&d3d11Flags,
+				D3D12_RESOURCE_STATE_RENDER_TARGET,
+				D3D12_RESOURCE_STATE_PRESENT,
+				IID_PPV_ARGS(renderTargets11[1].GetAddressOf())
+			);
+
+//		device11on12->ReleaseWrappedResources(renderTargets11[0].GetAddressOf(), 1);
+//		device11on12->ReleaseWrappedResources(renderTargets11[1].GetAddressOf(), 1);
+
+	}
+
+
 	virtual void CreateResources() override {
 		Egg::SimpleApp::CreateResources();
+
+		UINT d3d11DeviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+		d3d11DeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+
+		auto featl = D3D_FEATURE_LEVEL_11_0;
+		DX_API("Failed to create d3d11 device")
+			D3D11On12CreateDevice(
+				device.Get(),
+				d3d11DeviceFlags,
+				nullptr,
+				0,
+				reinterpret_cast<IUnknown**>(commandQueue.GetAddressOf()),
+				1,
+				0,
+				device11.GetAddressOf(),
+				context11.GetAddressOf(),
+				nullptr
+				);
+
+		device11->QueryInterface<ID3D11On12Device>(device11on12.GetAddressOf());
 
 		m_resourceState[0] = m_resourceState[1] = ResourceState_ReadyCompute;
 
@@ -378,7 +437,22 @@ public:
 
 	}
 
+	virtual void ReleaseSwapChainResources() {
+		device11on12->ReleaseWrappedResources(renderTargets11[0].GetAddressOf(), 1);
+		device11on12->ReleaseWrappedResources(renderTargets11[1].GetAddressOf(), 1);
+		for (com_ptr<ID3D11Resource>& i : renderTargets11) {
+			i.Reset();
+		}
+		renderTargets11.clear();
+		context11->Flush();
+
+		__super::ReleaseSwapChainResources();
+	}
+
 	virtual void ReleaseResources() override {
+		device11.Reset();
+		context11.Reset();
+
 		uavHeap.Reset();
 
 		Egg::SimpleApp::ReleaseResources();

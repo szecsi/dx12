@@ -85,6 +85,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl007-Bump", "ggl007-Bump\
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "f-RadixSort", "f-RadixSort\f-RadixSort.vcxproj", "{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl013-PhysX", "ggl020-All2020\ggl013-PhysX.vcxproj", "{180C04B8-3A30-45B8-9086-E4C78B86EAA7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -219,6 +221,13 @@ Global
 		{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}.Release|x64.Build.0 = Debug|x64
 		{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}.Release|x86.ActiveCfg = Debug|x64
 		{A755E2F2-AC8E-4D93-A771-C61E35BAA7B6}.Release|x86.Build.0 = Debug|x64
+		{180C04B8-3A30-45B8-9086-E4C78B86EAA7}.Debug|x64.ActiveCfg = Debug|x64
+		{180C04B8-3A30-45B8-9086-E4C78B86EAA7}.Debug|x64.Build.0 = Debug|x64
+		{180C04B8-3A30-45B8-9086-E4C78B86EAA7}.Debug|x86.ActiveCfg = Debug|x64
+		{180C04B8-3A30-45B8-9086-E4C78B86EAA7}.Release|x64.ActiveCfg = Debug|x64
+		{180C04B8-3A30-45B8-9086-E4C78B86EAA7}.Release|x64.Build.0 = Debug|x64
+		{180C04B8-3A30-45B8-9086-E4C78B86EAA7}.Release|x86.ActiveCfg = Debug|x64
+		{180C04B8-3A30-45B8-9086-E4C78B86EAA7}.Release|x86.Build.0 = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
