@@ -14,6 +14,8 @@
 #include <wrl/wrappers/corewrappers.h>
 #include <dxgi1_6.h>
 
+using uint = unsigned int;
+
 template<typename T>
 using com_ptr = Microsoft::WRL::ComPtr<T>;
 
@@ -26,6 +28,8 @@ class T : public BASE, public Egg::Shared<T> {\
 public:\
 	using Egg::Shared<T>::Create;\
 	using Egg::Shared<T>::GetShared;\
+	using Egg::Shared<T>::create;\
+	using Egg::Shared<T>::getShared;\
 	using Egg::Shared<T>::P;\
 private:
 
@@ -53,6 +57,19 @@ namespace Egg {
 			return std::dynamic_pointer_cast<T>(((T*)this)->shared_from_this());
 		}
 
+		//TODO: make usage consistent (remove from GG_CLASSPATH macro, too)
+		template<typename... Args>
+		inline static std::shared_ptr<T> create(Args&&... args)
+		{
+			struct EnableMakeShared : public T {
+				EnableMakeShared(Args&&...args) :T(std::forward<Args>(args)...) {}
+			};
+			return std::make_shared<EnableMakeShared>(std::forward<Args>(args)...);
+		}
+		std::shared_ptr<T> getShared() {
+			return std::dynamic_pointer_cast<T>(((T*)this)->shared_from_this());
+		}
+
 		using P = std::shared_ptr<T>;
 		using W = std::weak_ptr<T>;
 
@@ -77,6 +94,7 @@ namespace Egg {
 		};
 
 		using A = access_ptr;
+
 	};
 
 	namespace Internal {
