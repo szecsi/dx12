@@ -1,17 +1,16 @@
 #pragma once
 
 #include "SystemEnvironment.h"
+#include <d3d11_2.h>
 
 namespace Egg11 {
 	GG_CLASS(App)
 	protected:
 		Microsoft::WRL::ComPtr<ID3D11Device> device;
-		Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain;
+//		Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain;
 		DXGI_SWAP_CHAIN_DESC1 swapChainDesc;
 
-		Microsoft::WRL::ComPtr<ID3D11Texture2D> backBuffer;
 		Microsoft::WRL::ComPtr<ID3D11RenderTargetView> defaultRenderTargetView;
-		Microsoft::WRL::ComPtr<ID3D11Texture2D> depthStencil;
 		Microsoft::WRL::ComPtr<ID3D11DepthStencilView> defaultDepthStencilView;
 
 		SystemEnvironment systemEnvironment;
@@ -20,10 +19,19 @@ namespace Egg11 {
 			device(device) 
 			{}
 	public:
-		void setSwapChain(Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain) {
-			this->swapChain = swapChain;
-			swapChain->GetDesc1(&swapChainDesc);
+		void setDefaultViews(
+			Microsoft::WRL::ComPtr<ID3D11RenderTargetView> defaultRenderTargetView,
+			Microsoft::WRL::ComPtr<ID3D11DepthStencilView> defaultDepthStencilView
+		) {
+			this->defaultRenderTargetView = defaultRenderTargetView;
+			this->defaultDepthStencilView = defaultDepthStencilView;
 		}
+
+		void releaseDefaultViews() {
+			defaultRenderTargetView.Reset();
+			defaultDepthStencilView.Reset();
+		}
+
 		virtual ~App(){}
 
 		SystemEnvironment& getSystemEnvironment(){return systemEnvironment;}

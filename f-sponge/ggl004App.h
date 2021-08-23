@@ -1,5 +1,5 @@
 #pragma once
-
+#include "Egg/Common.h"
 #include <Egg/SimpleApp.h>
 #include <Egg/Importer.h>
 #include <Egg/Math/Math.h>
@@ -7,11 +7,13 @@
 #include <thread>
 #include <d3d11on12.h>
 
-#include "ConstantBufferTypes.h"
+//#include "ConstantBufferTypes.h"
+#include "Game.h"
 
 using namespace Egg::Math;
 
 class ggl004App : public Egg::SimpleApp {
+	Egg11::App::P app11;
 protected:
 	com_ptr<ID3D11On12Device> device11on12;
 	com_ptr<ID3D11Device> device11;
@@ -133,8 +135,10 @@ public:
 		commandQueue->ExecuteCommandLists(_countof(cLists), cLists);
 
 		device11on12->AcquireWrappedResources(renderTargets11[frameIndex].GetAddressOf(), 1);
-		float bg[] = { 1.0f, 0.0f, 0.0f, 0.0f };
-		context11->ClearRenderTargetView(defaultRtv11[frameIndex].Get(), bg);
+//		float bg[] = { 1.0f, 0.0f, 0.0f, 0.0f };
+//		context11->ClearRenderTargetView(defaultRtv11[frameIndex].Get(), bg);
+		app11->setDefaultViews(defaultRtv11[frameIndex], nullptr/*defaultDsv11*/);
+		app11->render(context11);
 		device11on12->ReleaseWrappedResources(renderTargets11[frameIndex].GetAddressOf(), 1);
 
 		context11->Flush();
@@ -213,6 +217,9 @@ public:
 		desc.Texture2D.MipSlice = 0;
 		device11->CreateRenderTargetView(renderTargets11[0].Get(), &desc, defaultRtv11[0].GetAddressOf());
 		device11->CreateRenderTargetView(renderTargets11[1].Get(), &desc, defaultRtv11[1].GetAddressOf());
+
+		//TODO pass swap chain desc
+		app11->createSwapChainResources();
 	}
 
 	virtual void CreateResources() override {
@@ -237,6 +244,9 @@ public:
 				);
 
 		device11->QueryInterface<ID3D11On12Device>(device11on12.GetAddressOf());
+
+		app11 = Game::Create(device11);
+		app11->createResources();
 
 		m_resourceState[0] = m_resourceState[1] = ResourceState_ReadyCompute;
 
@@ -449,6 +459,7 @@ public:
 	}
 
 	virtual void ReleaseSwapChainResources() {
+		app11->releaseSwapChainResources();
 		for (com_ptr<ID3D11Resource>& i : renderTargets11) {
 			i.Reset();
 		}
@@ -463,6 +474,8 @@ public:
 	}
 
 	virtual void ReleaseResources() override {
+		app11->releaseResources();
+		app11.reset();
 		device11.Reset();
 		context11.Reset();
 

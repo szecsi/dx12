@@ -1,8 +1,8 @@
 #pragma once
 
-#include <Egg11/Math/Float4x4.h>
+#include <Egg/Math/Float4x4.h>
 
-using namespace Egg11::Math;
+using namespace Egg::Math;
 
 __declspec(align(16)) struct PerObjectCb {
 	Float4x4 modelTransform;
