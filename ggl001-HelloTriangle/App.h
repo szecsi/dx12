@@ -32,7 +32,7 @@ struct VSOS {
 };
 
 float4 ps_main(VSOS vsos) : SV_Target {
-	return float4(abs(xvsos.h.xy), 0.08f, 1.0f);
+	return float4(abs(vsos.h.xy), 0.08f, 1.0f);
 }
 )";
 

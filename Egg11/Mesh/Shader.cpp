@@ -9,7 +9,7 @@ Mesh::Shader::Shader(
 	Microsoft::WRL::ComPtr<ID3DBlob> byteCode)
 	: filename(filename), byteCode(byteCode)
 {
-	D3DReflect(byteCode->GetBufferPointer(), byteCode->GetBufferSize(),
+	HRESULT hr = D3DReflect(byteCode->GetBufferPointer(), byteCode->GetBufferSize(),
 		IID_ID3D11ShaderReflection, (void**)reflection.GetAddressOf());
 	
 	D3D11_SHADER_DESC shaderDesc;

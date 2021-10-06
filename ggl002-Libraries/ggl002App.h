@@ -56,7 +56,7 @@ public:
 
 		Egg::Mesh::Geometry::P geometry = Egg::Mesh::Prefabs::UnitBox(device.Get());
 
-		Egg::Mesh::Shaded::P shadedBox = Egg::Mesh::Shaded::Create(psoManager.get(), material, geometry);
+		Egg::Mesh::Shaded::P shadedBox = Egg::Mesh::Shaded::Create(psoManager, material, geometry);
 
 		for(int i = 0; i < 7; ++i) {
 			boxes.push_back(Box::Create(shadedBox));

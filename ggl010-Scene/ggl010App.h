@@ -108,14 +108,15 @@ public:
 //		for (int i = 0; i < 100; i++) {
 //			multiMesh->Draw(commandList.Get(), 0, i);
 //		}
-		for (int i = 0; i < entities.size(); i++) {
-			entities[i]->Draw(commandList.Get(), 0, i);
-		}
+
+//s		for (int i = 0; i < entities.size(); i++) {
+//s			entities[i]->Draw(commandList.Get(), 0, i);
+//s		}
 
 //		backgroundMesh->SetPipelineState(commandList.Get());
 //		backgroundMesh->BindConstantBuffer(commandList.Get(), perFrameCb);
 //		commandList->SetGraphicsRootDescriptorTable(2, srvHeap->GetGPUDescriptorHandleForHeapStart());
-		backgroundMesh->Draw(commandList.Get());
+//s		backgroundMesh->Draw(commandList.Get());
 
 		////// START
 //		ID3D12DescriptorHeap* descriptorHeaps2[] = { particleSrvHeap.Get() };
@@ -125,7 +126,7 @@ public:
 //		fireBillboardSet->BindConstantBuffer(commandList.Get(), cb);
 //		fireBillboardSet->BindConstantBuffer(commandList.Get(), perFrameCb);
 //		commandList->SetGraphicsRootDescriptorTable(2, particleSrvHeap->GetGPUDescriptorHandleForHeapStart());
-		fireBillboardSet->Draw(commandList.Get());
+//s		fireBillboardSet->Draw(commandList.Get());
 		///// END
 	
 		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
@@ -208,7 +209,7 @@ public:
 
 		Egg::Mesh::Geometry::P geometry = Egg::Importer::ImportSimpleObj(device.Get(), "giraffe.obj");
 
-		shadedMesh = Egg::Mesh::Shaded::Create(psoManager.get(), material, geometry);
+		shadedMesh = Egg::Mesh::Shaded::Create(psoManager, material, geometry);
 		
 		multiMesh = Egg::Mesh::Multi::Create();
 		auto flip = Egg::Mesh::Flip::Create();
@@ -227,7 +228,7 @@ public:
 		bgMaterial->SetSrvHeap(2, srvHeap);
 		bgMaterial->SetConstantBuffer(perFrameCb);
 		
-		backgroundMesh = Egg::Mesh::Shaded::Create(psoManager.get(), 
+		backgroundMesh = Egg::Mesh::Shaded::Create(psoManager, 
 			bgMaterial,
 			Egg::Mesh::Prefabs::FullScreenQuad(device.Get()));
 
@@ -316,7 +317,7 @@ public:
 		fireMaterial->SetDepthStencilState(dd);
 
 		fireBillboardSet = Egg::Mesh::Shaded::Create(
-			psoManager.get(), fireMaterial, particlesGeometry);
+			psoManager, fireMaterial, particlesGeometry);
 
 		///////// END
 

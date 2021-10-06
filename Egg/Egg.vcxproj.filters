@@ -369,80 +369,28 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
-    <None Include="Shaders\cbBasic.hlsli">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="Shaders\quad.hlsli">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="Shaders\ShadowMap.hlsli">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="Shaders\Billboard.hlsli">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="Shaders\NormalMap.hlsli">
-      <Filter>Shaders</Filter>
-    </None>
+    <None Include="Shaders\Tess.hlsli" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Shaders\cbBasicPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\cbBasicVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\texturedPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\texturedVS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\quadVS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\backgroundPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\deferredPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\deferringPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\ShadowMapVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\ShadowMapPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\ShadowedPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\ShadowedVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\ShadowMapGS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\BillboardVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\BillboardGS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\FirePS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\NormalMapVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\NormalMapPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\ParallaxPS.hlsl" />
-    <FxCompile Include="Shaders\OLParallaxPS.hlsl" />
-    <FxCompile Include="Shaders\BinaryReliefPS.hlsl" />
-    <FxCompile Include="Shaders\BinaryReliefInsetPS.hlsl" />
+    <FxCompile Include="cbBasicPS.hlsl" />
+    <FxCompile Include="Shaders\bgPS.hlsl" />
+    <FxCompile Include="Shaders\DefaultPS.hlsl" />
+    <FxCompile Include="Shaders\DiffusePS.hlsl" />
+    <FxCompile Include="Shaders\EnvMapPS.hlsl" />
+    <FxCompile Include="Shaders\MaxBlinnPS.hlsl" />
+    <FxCompile Include="Shaders\TessDS.hlsl" />
+    <FxCompile Include="Shaders\TessHS.hlsl" />
+    <FxCompile Include="Shaders\TessVS.hlsl" />
+    <FxCompile Include="Shaders\trafoVS.hlsl" />
+    <FxCompile Include="Shaders\DefaultVS.hlsl" />
+    <FxCompile Include="Shaders\cbBasicPS.hlsl" />
+    <FxCompile Include="Shaders\texturedPS.hlsl" />
+    <FxCompile Include="Shaders\texturedVS.hlsl" />
   </ItemGroup>
 </Project>

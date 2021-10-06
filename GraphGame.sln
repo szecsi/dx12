@@ -90,6 +90,10 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Egg11", "Egg11\Egg11.vcxproj", "{5EDE2354-D8D2-43A8-955E-C2746B29F3BA}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "f-sponge", "f-sponge\f-sponge.vcxproj", "{24A595C1-B801-483B-94F1-BC01DDCF6962}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5EDE2354-D8D2-43A8-955E-C2746B29F3BA} = {5EDE2354-D8D2-43A8-955E-C2746B29F3BA}
+		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

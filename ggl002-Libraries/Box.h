@@ -44,8 +44,7 @@ public:
 	}
 
 	void Draw(ID3D12GraphicsCommandList * commandList) {
-		shadedMesh->SetPipelineState(commandList);
-		shadedMesh->BindConstantBuffer(commandList, constantBuffer);
+		shadedMesh->GetMaterial()->SetConstantBuffer(constantBuffer);
 		shadedMesh->Draw(commandList);
 	}
 
