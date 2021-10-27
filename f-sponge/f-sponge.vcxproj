@@ -40,13 +40,19 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)/Egg11;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <ShowIncludes>true</ShowIncludes>
+      <ShowIncludes>false</ShowIncludes>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>d3d11.lib;Egg.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Egg11.lib;d3d11.lib;Egg.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <BuildLog />
+    <FxCompile>
+      <EntryPointName>%(Filename)</EntryPointName>
+    </FxCompile>
+    <FxCompile>
+      <ShaderType>Compute</ShaderType>
+    </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="DDSTextureLoader.cpp" />
@@ -63,6 +69,20 @@
     <ClInclude Include="Particle.h" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Shaders\csAdaptiveControlPressure.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\csAnimateControlParticles.hlsl" />
+    <FxCompile Include="Shaders\csCListCompact.hlsl" />
+    <FxCompile Include="Shaders\csCListInit.hlsl" />
+    <FxCompile Include="Shaders\csCListLength.hlsl" />
+    <FxCompile Include="Shaders\csCListSortEven.hlsl" />
+    <FxCompile Include="Shaders\csCListSortOdd.hlsl" />
+    <FxCompile Include="Shaders\csControlledFluidSimulation.hlsl" />
+    <FxCompile Include="Shaders\csFluidSimulation.hlsl" />
+    <FxCompile Include="Shaders\csHListBegin.hlsl" />
+    <FxCompile Include="Shaders\csHListInit.hlsl" />
+    <FxCompile Include="Shaders\csHListLength.hlsl" />
     <FxCompile Include="Shaders\csLocalSort.hlsl">
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.4</ShaderModel>
       <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename)</EntryPointName>
@@ -73,6 +93,125 @@
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.4</ShaderModel>
       <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename)</EntryPointName>
     </FxCompile>
+    <FxCompile Include="Shaders\csMortonHash.hlsl" />
+    <FxCompile Include="Shaders\csPBDBending.hlsl" />
+    <FxCompile Include="Shaders\csPBDCollision.hlsl" />
+    <FxCompile Include="Shaders\csPBDDistance.hlsl" />
+    <FxCompile Include="Shaders\csPBDFinalUpdate.hlsl" />
+    <FxCompile Include="Shaders\csPBDGravity.hlsl" />
+    <FxCompile Include="Shaders\csPrefixSum.hlsl" />
+    <FxCompile Include="Shaders\csPrefixSumV2.hlsl" />
+    <FxCompile Include="Shaders\csRigControlParticles.hlsl" />
+    <FxCompile Include="Shaders\csScanAddBucketResult.hlsl" />
+    <FxCompile Include="Shaders\csScanBucketResult.hlsl" />
+    <FxCompile Include="Shaders\csSetBufferForIndirectDispatch.hlsl" />
+    <FxCompile Include="Shaders\csSimpleSortEven.hlsl" />
+    <FxCompile Include="Shaders\csSimpleSortOdd.hlsl" />
+    <FxCompile Include="Shaders\gsBillboard.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Geometry</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psBillboard.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psBillboardA.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psBillboardS1.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psBillboardS2.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psBillboardSV21.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psBillboardSV22.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psControlMeshA.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psControlMeshFill.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psControlParticleBall.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psFlat.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psIdle.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psMetaballABufferGradient.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psMetaballABufferRealistic.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psMetaballHashSimpleGradient.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psMetaballHashSimpleRealistic.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psMetaballNormalGradient.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psMetaballNormalRealistic.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psMetaballS2BufferGradient.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psMetaballS2BufferRealistic.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psMetaballSBufferGradient.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psMetaballSBufferRealistic.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\psParticleBall.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\vsBillboard.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\vsBillboardControl.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\vsControlMeshFill.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\vsMetaball.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\vsSkinning.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\vsSkinningNorm.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\vsTrafo.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\vsTrafoNorm.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\billboard.hlsli" />
+    <None Include="Shaders\hash.hlsli" />
+    <None Include="Shaders\metaball.hlsli" />
+    <None Include="Shaders\metaballABuffer.hlsli" />
+    <None Include="Shaders\metaballHashSimple.hlsli" />
+    <None Include="Shaders\metaballSBuffer.hlsli" />
+    <None Include="Shaders\mortonHash.hlsli" />
+    <None Include="Shaders\particle.hlsli" />
+    <None Include="Shaders\PBD.hlsli" />
+    <None Include="Shaders\window.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
