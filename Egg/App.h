@@ -146,8 +146,6 @@ namespace Egg {
 
 		virtual void Resize(int width, int height) {
 			ReleaseSwapChainResources();
-			int refc = swapChain->AddRef();
-			swapChain->Release();
 			DX_API("Failed to resize swap chain")
 				swapChain->ResizeBuffers(backBufferDepth, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
 			CreateSwapChainResources();

@@ -162,13 +162,8 @@ namespace Egg {
 			}
 
 			template<typename T>
-			void SetConstantBuffer(T& resource, unsigned int perObjectByteStride = 0) {
-				SetConstantBuffer(resource, perObjectByteStride, typeid(T::Type).name());
-			}
-
-			template<typename T>
-			void SetConstantBuffer(T& resource, unsigned int perObjectByteStride, const std::string& nameOverride) {
-				std::string name = nameOverride;
+			void SetConstantBuffer(const T& resource, unsigned int perObjectByteStride = 0, const std::string& nameOverride = "") {
+				std::string name = (nameOverride != "") ? nameOverride.c_str() : typeid(T::Type).name();
 
 				size_t indexOf;
 				if ((indexOf = name.find(' ')) != std::string::npos) {

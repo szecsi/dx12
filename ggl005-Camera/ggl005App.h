@@ -127,8 +127,7 @@ public:
 	}
 
 	virtual void LoadAssets() override {
-		cb.CreateResources(device.Get());
-		perFrameCb.CreateResources(device.Get());
+
 
 		com_ptr<ID3DBlob> vertexShader = Egg::Shader::LoadCso("Shaders/trafoVS.cso");
 		com_ptr<ID3DBlob> pixelShader = Egg::Shader::LoadCso("Shaders/DefaultPS.cso");

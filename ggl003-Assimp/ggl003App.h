@@ -40,8 +40,6 @@ public:
 		commandList->ClearRenderTargetView(rHandle, clearColor, 0, nullptr);
 		commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-		shadedMesh->SetPipelineState(commandList.Get());
-		shadedMesh->BindConstantBuffer(commandList.Get(), cb);
 		shadedMesh->Draw(commandList.Get());
 
 		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
@@ -106,10 +104,13 @@ public:
 		material->SetPixelShader(pixelShader);
 		material->SetDepthStencilState(CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT));
 		material->SetDSVFormat(DXGI_FORMAT_D32_FLOAT);
+		material->SetConstantBuffer(cb);
 
-		Egg::Mesh::Geometry::P geometry = Egg::Importer::ImportSimpleObj(device.Get(), "giraffe.obj");
+		Egg::Mesh::Geometry::P geometry = 
+			Egg::Importer::ImportSimpleObj(
+				device.Get(), "giraffe.obj");
 
-		shadedMesh = Egg::Mesh::Shaded::Create(psoManager.get(), material, geometry);
+		shadedMesh = Egg::Mesh::Shaded::Create(psoManager, material, geometry);
 	}
 
 };

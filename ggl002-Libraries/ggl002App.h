@@ -3,11 +3,6 @@
 #include "Box.h"
 #include <Egg/SimpleApp.h>
 
-struct V {
-	Egg::Math::Float3 f;
-	Egg::Math::Float3 k;
-};
-
 class ggl002App : public Egg::SimpleApp {
 protected:
 	std::vector<Box::P> boxes;
@@ -31,7 +26,7 @@ public:
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rHandle(rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), frameIndex, rtvDescriptorHandleIncrementSize);
 		commandList->OMSetRenderTargets(1, &rHandle, FALSE, nullptr);
 
-		const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
+		const float clearColor[] = { 1.0f, 0.2f, 0.4f, 1.0f };
 		commandList->ClearRenderTargetView(rHandle, clearColor, 0, nullptr);
 
 		for(auto & i : boxes) {
@@ -53,10 +48,11 @@ public:
 		material->SetRootSignature(rootSig);
 		material->SetVertexShader(vertexShader);
 		material->SetPixelShader(pixelShader);
+		//material->SetConstantBuffer()
 
 		Egg::Mesh::Geometry::P geometry = Egg::Mesh::Prefabs::UnitBox(device.Get());
 
-		Egg::Mesh::Shaded::P shadedBox = Egg::Mesh::Shaded::Create(psoManager.get(), material, geometry);
+		Egg::Mesh::Shaded::P shadedBox = Egg::Mesh::Shaded::Create(psoManager, material, geometry);
 
 		for(int i = 0; i < 7; ++i) {
 			boxes.push_back(Box::Create(shadedBox));

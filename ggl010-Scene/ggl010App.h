@@ -208,7 +208,7 @@ public:
 
 		Egg::Mesh::Geometry::P geometry = Egg::Importer::ImportSimpleObj(device.Get(), "giraffe.obj");
 
-		shadedMesh = Egg::Mesh::Shaded::Create(psoManager.get(), material, geometry);
+		shadedMesh = Egg::Mesh::Shaded::Create(psoManager, material, geometry);
 		
 		multiMesh = Egg::Mesh::Multi::Create();
 		auto flip = Egg::Mesh::Flip::Create();
@@ -227,7 +227,7 @@ public:
 		bgMaterial->SetSrvHeap(2, srvHeap);
 		bgMaterial->SetConstantBuffer(perFrameCb);
 		
-		backgroundMesh = Egg::Mesh::Shaded::Create(psoManager.get(), 
+		backgroundMesh = Egg::Mesh::Shaded::Create(psoManager, 
 			bgMaterial,
 			Egg::Mesh::Prefabs::FullScreenQuad(device.Get()));
 
@@ -316,7 +316,7 @@ public:
 		fireMaterial->SetDepthStencilState(dd);
 
 		fireBillboardSet = Egg::Mesh::Shaded::Create(
-			psoManager.get(), fireMaterial, particlesGeometry);
+			psoManager, fireMaterial, particlesGeometry);
 
 		///////// END
 
