@@ -371,6 +371,10 @@
     <None Include="cpp.hint" />
     <None Include="Shaders\Tess.hlsli" />
     <None Include="Shaders\cbBasic.hlsli" />
+    <None Include="Shaders\Billboard.hlsli" />
+    <None Include="Shaders\ShadowMap.hlsli" />
+    <None Include="Shaders\NormalMap.hlsli" />
+    <None Include="Shaders\quad.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\cbBasicVS.hlsl">
@@ -391,5 +395,21 @@
     <FxCompile Include="Shaders\trafoVS.hlsl" />
     <FxCompile Include="Shaders\DefaultVS.hlsl" />
     <FxCompile Include="Shaders\cbBasicPS.hlsl" />
+    <FxCompile Include="Shaders\texturedPS.hlsl" />
+    <FxCompile Include="Shaders\texturedVS.hlsl" />
+    <FxCompile Include="Shaders\backgroundPS.hlsl" />
+    <FxCompile Include="Shaders\BillboardGS.hlsl" />
+    <FxCompile Include="Shaders\BillboardVS.hlsl" />
+    <FxCompile Include="Shaders\BinaryReliefInsetPS.hlsl" />
+    <FxCompile Include="Shaders\BinaryReliefPS.hlsl" />
+    <FxCompile Include="Shaders\ShadowedPS.hlsl" />
+    <FxCompile Include="Shaders\ShadowedVS.hlsl" />
+    <FxCompile Include="Shaders\ShadowMapGS.hlsl" />
+    <FxCompile Include="Shaders\ShadowMapPS.hlsl" />
+    <FxCompile Include="Shaders\ShadowMapVS.hlsl" />
+    <FxCompile Include="Shaders\NormalMapPS.hlsl" />
+    <FxCompile Include="Shaders\NormalMapVS.hlsl" />
+    <FxCompile Include="Shaders\OLParallaxPS.hlsl" />
+    <FxCompile Include="Shaders\ParallaxPS.hlsl" />
   </ItemGroup>
 </Project>

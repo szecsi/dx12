@@ -340,7 +340,7 @@ public:
 		shadowedPixelShader = Egg::Shader::LoadCso("Shaders/shadowedPS.cso");
 		shadowedRootSig = Egg::Shader::LoadRootSignature(device.Get(), shadowedVertexShader.Get());
 
-		RunScript("Lua/scene.lua");
+		RunScript("scene.lua");
 
 		UploadResources();
 	}
