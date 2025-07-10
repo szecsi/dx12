@@ -31,7 +31,8 @@ namespace Egg {
 				WaitForSingleObject(fenceEvent, INFINITE);
 			}
 
-			frameIndex = swapChain->GetCurrentBackBufferIndex();
+			previousSwapChainBackBufferIndex = swapChainBackBufferIndex;
+			swapChainBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
 		}
 
 

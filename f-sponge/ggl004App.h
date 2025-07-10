@@ -109,9 +109,9 @@ public:
 		commandList->RSSetViewports(1, &viewPort);
 		commandList->RSSetScissorRects(1, &scissorRect);
 
-		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
-		CD3DX12_CPU_DESCRIPTOR_HANDLE rHandle(rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), frameIndex, rtvDescriptorHandleIncrementSize);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE rHandle(rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), swapChainBackBufferIndex, rtvDescriptorHandleIncrementSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(dsvHeap->GetCPUDescriptorHandleForHeapStart());
 		commandList->OMSetRenderTargets(1, &rHandle, FALSE, &dsvHandle);
 
@@ -126,7 +126,7 @@ public:
 //		commandList->Dispatch(1, 0, 0);
 
 //		this will be done by d3d11 now
-//11	commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+//11	commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
 		DX_API("Failed to close command list")
 			commandList->Close();
@@ -134,12 +134,12 @@ public:
 		ID3D12CommandList* cLists[] = { commandList.Get() };
 		commandQueue->ExecuteCommandLists(_countof(cLists), cLists);
 
-		device11on12->AcquireWrappedResources(renderTargets11[frameIndex].GetAddressOf(), 1);
+		device11on12->AcquireWrappedResources(renderTargets11[swapChainBackBufferIndex].GetAddressOf(), 1);
 //		float bg[] = { 1.0f, 0.0f, 0.0f, 0.0f };
-//		context11->ClearRenderTargetView(defaultRtv11[frameIndex].Get(), bg);
-		app11->setDefaultViews(defaultRtv11[frameIndex], nullptr/*defaultDsv11*/);
+//		context11->ClearRenderTargetView(defaultRtv11[swapChainBackBufferIndex].Get(), bg);
+		app11->setDefaultViews(defaultRtv11[swapChainBackBufferIndex], nullptr/*defaultDsv11*/);
 		app11->render(context11);
-		device11on12->ReleaseWrappedResources(renderTargets11[frameIndex].GetAddressOf(), 1);
+		device11on12->ReleaseWrappedResources(renderTargets11[swapChainBackBufferIndex].GetAddressOf(), 1);
 
 		context11->Flush();
 

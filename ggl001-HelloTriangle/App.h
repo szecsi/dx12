@@ -62,7 +62,7 @@ protected:
 	// Sync objects
 	com_ptr<ID3D12Fence> fence;
 	HANDLE fenceEvent;
-	unsigned int frameIndex;
+	unsigned int swapChainBackBufferIndex;
 	unsigned long long fenceValue;
 
 	// Asset Data
@@ -79,9 +79,9 @@ protected:
 		commandList->RSSetViewports(1, &viewPort);
 		commandList->RSSetScissorRects(1, &scissorRect);
 
-		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
-		CD3DX12_CPU_DESCRIPTOR_HANDLE rHandle(rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), frameIndex, rtvDescriptorHandleIncrementSize);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE rHandle(rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), swapChainBackBufferIndex, rtvDescriptorHandleIncrementSize);
 		commandList->OMSetRenderTargets(1, &rHandle, FALSE, nullptr);
 
 		const float clearColor[] = { 0.0f, 0.1f, 0.2f, 1.0f };
@@ -91,7 +91,7 @@ protected:
 		commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 		commandList->DrawInstanced(3, 1, 0, 0);
 
-		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
 		DX_API("Failed to close command list")
 			commandList->Close();
@@ -110,7 +110,7 @@ protected:
 			WaitForSingleObject(fenceEvent, INFINITE);
 		}
 
-		frameIndex = swapChain->GetCurrentBackBufferIndex();
+		swapChainBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
 	}
 
 
@@ -310,7 +310,7 @@ public:
 			device->CreateRenderTargetView(renderTargets[i].Get(), nullptr, cpuHandle);
 		}
 
-		frameIndex = swapChain->GetCurrentBackBufferIndex();
+		swapChainBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
 	}
 
 	void Resize(int w, int h) {

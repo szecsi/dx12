@@ -33,8 +33,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="Lua\scene.lua">
-      <Filter>Lua</Filter>
-    </CustomBuild>
+    <CopyFileToFolders Include="Lua\scene.lua" />
   </ItemGroup>
 </Project>

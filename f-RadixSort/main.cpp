@@ -1,7 +1,9 @@
+#include "Egg/Common.h"
 #include <Egg/App.h>
 #include <Egg/Utility.h>
 #include <chrono>
-#include "ggl004App.h"
+#include "AsyncComputeApp.h"
+#include "Game.h"
 
 std::unique_ptr<Egg::App> app{ nullptr };
 
@@ -22,7 +24,7 @@ LRESULT CALLBACK WindowProcess(HWND windowHandle, UINT message, WPARAM wParam, L
 		if(app != nullptr) {
 			int height = HIWORD(lParam);
 			int width = LOWORD(lParam);
-			app->Resize(width, height);
+			app->Resize(Game::windowWidth, Game::windowHeight);
 		}
 		break;
 		/*
@@ -60,10 +62,10 @@ HWND InitWindow(HINSTANCE hInstance) {
 							   windowClassName,
 							   L"Textures",
 							   WS_OVERLAPPEDWINDOW,
-							   CW_USEDEFAULT,
-							   CW_USEDEFAULT,
-							   CW_USEDEFAULT,
-							   CW_USEDEFAULT,
+							   0,
+							   0,
+							   Game::windowWidth + 16, // Fast&dirty header bar compensation
+							   Game::windowHeight + 39,
 							   NULL,
 							   NULL,
 							   hInstance,
@@ -77,6 +79,8 @@ HWND InitWindow(HINSTANCE hInstance) {
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR command, _In_ INT nShowCmd) {
 
+	_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_WNDW);
+
 	HWND windowHandle = InitWindow(hInstance);
 	// DirectX stuff
 	com_ptr<ID3D12Debug> debugController{ nullptr };
@@ -89,7 +93,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	DX_API("Failed to create debug layer")
 		D3D12GetDebugInterface(IID_PPV_ARGS(debugController.GetAddressOf()));
 
-	debugController->EnableDebugLayer();
+	//nodebug debugController->EnableDebugLayer();
 
 	// needed to load WIC files (Windows Imaging Component) such as Jpg-s.
 	DX_API("Failed to initialize COM library (ImportTexture)")
@@ -118,6 +122,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 
 	DX_API("Failed to create command queue")
 		device->CreateCommandQueue(&commandQueueDesc, IID_PPV_ARGS(commandQueue.GetAddressOf()));
+
+	RECT r;
+	GetWindowRect(windowHandle, &r);
 
 	// swap chain creation
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = { 0 };
@@ -152,7 +159,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	DX_API("Failed to make window association") // disable ALT+Enter shortcut to full screen mode
 		dxgiFactory->MakeWindowAssociation(windowHandle, DXGI_MWA_NO_ALT_ENTER);
 
-	app = std::make_unique<ggl004App>();
+	app = std::make_unique<AsyncComputeApp>();
 	app->SetDevice(device);
 	app->SetCommandQueue(commandQueue);
 	app->SetSwapChain(swapChain);
@@ -164,12 +171,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	ShowWindow(windowHandle, nShowCmd);
 	MSG winMessage = { 0 };
 
+	auto startTime = std::chrono::system_clock::now();
+	auto time = startTime;
 
 	while(winMessage.message != WM_QUIT) {
 		if(PeekMessage(&winMessage, NULL, 0, 0, PM_REMOVE)) {
+			app->ProcessMessage(windowHandle, winMessage.message, winMessage.wParam, winMessage.lParam);
 			TranslateMessage(&winMessage);
 			DispatchMessage(&winMessage);
+
 		} else {
+			// idle: update, render
 			app->Run();
 		}
 	}
