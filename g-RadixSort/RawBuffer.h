@@ -107,6 +107,19 @@ public:
 		);
 	}
 
+	void fillLinear() {
+		void* pData;
+		CD3DX12_RANGE range(0, bufferUintSize);
+		uploadBuffer->Map(0, &range, &pData);
+		unsigned int* m_arrayDataBegin = reinterpret_cast<unsigned int*>(pData);
+		unsigned int* m_arrayDataEnd = m_arrayDataBegin + bufferUintSize;
+
+		for (auto ip = m_arrayDataBegin; ip < m_arrayDataEnd; ip++) {
+			*ip = ip - m_arrayDataBegin;
+		}
+		uploadBuffer->Unmap(0, &range);
+	}
+
 	void fillFFFFFFFF() {
 		void* pData;
 		CD3DX12_RANGE range(0, bufferUintSize);

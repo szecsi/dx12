@@ -95,7 +95,7 @@ protected:
 	com_ptr<ID3D12DescriptorHeap> uavHeap;
 	std::vector<RawBuffer> buffers;
 
-#define BUFFERNAMES 		input, inputIndices, perPageBucketCounts, output, outputIndices, perPageSats, globalSat
+#define BUFFERNAMES 		output, outputIndices, perPageBucketCounts, inputIndices, input, perPageSats, globalSat
 
 	enum BufferRole {
 		BUFFERNAMES
@@ -143,8 +143,9 @@ public:
 			buffers[name].createResources(device, handle);
 		}
 
-		buffers[input].fillRandom();
-		//buffers[input].fillRandomMask(0x7);
+		//buffers[input].fillRandom();
+		buffers[inputIndices].fillLinear();
+		buffers[input].fillRandomMask(0x0fff);
 		//buffers[input].fillFFFFFFFF();
 
 		uint zeros[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -177,6 +178,7 @@ public:
 				IID_PPV_ARGS(uploadCommandList.ReleaseAndGetAddressOf()));
 
 		buffers[input].upload(uploadCommandList);
+		buffers[inputIndices].upload(uploadCommandList);
 
 		DX_API("close command list.")
 			uploadCommandList->Close();
@@ -307,37 +309,44 @@ public:
 		//for (auto name : { BUFFERNAMES }) {
 		//	buffers[name].mapReadback();
 		//}
-		if (frameCount > 1)
+//		if (frameCount > 0)
+//		{
+//			uint* pMortons = buffers[output].mapReadback();
+//			bool ok = true;
+//			for (uint i = 0; i < 32; i++) {
+//				ok = ok && std::is_sorted(pMortons + i * 32 * 32, pMortons + i * 32 * 32 + 32 * 32
+//					//, MaskedComp(0x01160b00)
+//					, MortonComp()
+//					//TODO mortoncomp
+//				);
+//			}
+//			buffers[output].unmapReadback();
+//		}
+		if(frameCount > 0)
 		{
-			uint* pMortons = buffers[output].mapReadback();
-			bool ok = true;
-			for (uint i = 0; i < 32; i++) {
-				ok = ok && std::is_sorted(pMortons + i * 32 * 32, pMortons + i * 32 * 32 + 32 * 32
-					//, MaskedComp(0x01160b00)
-					, MortonComp()
-					//TODO mortoncomp
-				);
-			}
-			buffers[output].unmapReadback();
-		}
-		if(frameCount > 1)
-		{
-			uint* pMortonPerPageBucketCounts = buffers[perPageBucketCounts].mapReadback();
+			uint* pMortonPerPageBucketCounts	= buffers[perPageBucketCounts].mapReadback();
+			uint* pSortedPins					= buffers[outputIndices].mapReadback();
+			uint* pSortedMortons				= buffers[output].mapReadback();
+			uint* pPins							= buffers[inputIndices].mapReadback();
+			uint* pMortons						= buffers[input].mapReadback();
 
-			uint* pSortedPins = buffers[input].mapReadback();
-			uint* pSortedMortons = buffers[inputIndices].mapReadback();
 			bool ok = std::is_sorted(pSortedMortons, pSortedMortons + 32 * 32 * 32
-				, MaskedComp(0xffffffff)
+				, MaskedComp(0x0f)
+				//, MaskedComp(0xffffffff)
 				//, MaskedComp(0x01160b00)
 				//, MortonComp()
 				//TODO mortoncomp
 			);
 
+			buffers[perPageBucketCounts].unmapReadback();
+			buffers[outputIndices].unmapReadback();
+			buffers[output].unmapReadback();
+			buffers[inputIndices].unmapReadback();
+			buffers[input].unmapReadback();
+
 			uint* pMortonStarterCount = buffers[perPageSats].mapReadback();
 			//TODO verify startercount
 			bool scok = verifyStarterCount(pSortedMortons, pMortonStarterCount);
-
-
 			buffers[perPageSats].unmapReadback();
 		}
 

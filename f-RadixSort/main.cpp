@@ -106,11 +106,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	Egg::Utility::GetAdapters(dxgiFactory.Get(), adapters);
 
 	// select your adapter here, NULL = system default
-	IUnknown * selectedAdapter = (adapters.size() > 0) ? adapters[0].Get() : NULL;
+	IUnknown * selectedAdapter = (adapters.size() > 0) ? adapters[1].Get() : NULL;
 
 	DX_API("Failed to create D3D Device")
-		D3D12CreateDevice(selectedAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(device.GetAddressOf()));
-
+		D3D12CreateDevice(selectedAdapter, D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(device.GetAddressOf()));
 
 	// Create Command Queue
 
