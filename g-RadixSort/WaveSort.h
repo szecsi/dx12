@@ -3,9 +3,13 @@
 #include "RawBuffer.h"
 
 class WaveSort {
-	ComputeShader localSortInPlace;
-	ComputeShader localSort;
-	ComputeShader merge;
+	ComputeShader csLocalSortAlpha;
+	ComputeShader csLocalSortBeta;
+	ComputeShader csLocalSortGamma;
+	ComputeShader csScan;
+	ComputeShader csPackAlpha;
+	ComputeShader csPackBeta;
+	ComputeShader csPackGamma;
 	D3D12_GPU_DESCRIPTOR_HANDLE uavHandle; //uavHeap->GetGPUDescriptorHandleForHeapStart()
 	uint uavOffset;
 	bool interleaveBits;
@@ -13,12 +17,25 @@ class WaveSort {
 	D3D12_RESOURCE_BARRIER uavBarriers[5];
 
 public:
-	void creaseResources(ComputeShader localSortInPlace, ComputeShader localSort, ComputeShader merge, CD3DX12_GPU_DESCRIPTOR_HANDLE uavHandle, uint uavOffset, uint dhIncrSize,
+	void creaseResources(
+		ComputeShader csLocalSortAlpha,
+		ComputeShader csLocalSortBeta,
+		ComputeShader csLocalSortGamma,
+		ComputeShader csScan,
+		ComputeShader csPackAlpha,
+		ComputeShader csPackBeta,
+		ComputeShader csPackGamma,
+		CD3DX12_GPU_DESCRIPTOR_HANDLE uavHandle, uint uavOffset, uint dhIncrSize,
 		const std::vector<RawBuffer>& buffers, bool interleaveBits = false)
 	{
-		this->localSort = localSort;
-		this->localSortInPlace = localSortInPlace;
-		this->merge = merge;
+		this->csLocalSortAlpha = csLocalSortAlpha;
+		this->csLocalSortBeta = csLocalSortBeta;
+		this->csLocalSortGamma = csLocalSortGamma;
+		this->csScan = csScan;
+		this->csPackAlpha = csPackAlpha;
+		this->csPackBeta  = csPackBeta;
+		this->csPackGamma = csPackGamma;
+
 		this->uavHandle = uavHandle.Offset(uavOffset, dhIncrSize);
 		this->uavOffset = uavOffset;
 		this->interleaveBits = interleaveBits;
@@ -29,10 +46,10 @@ public:
 	}
 
 	void populate(com_ptr<ID3D12GraphicsCommandList> computeCommandList) {
-		localSort.setup(computeCommandList, uavHandle);
+		csLocalSortAlpha.setup(computeCommandList, uavHandle);
 		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits? 0x01160b00: 0x03020100, 0);
 		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(3, uavBarriers);
+		computeCommandList->ResourceBarrier(1, &uavBarriers[1]);
 		
 /*		merge.setup(computeCommandList, uavHandle);
 		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x01160b00 : 0x03020100, 0);

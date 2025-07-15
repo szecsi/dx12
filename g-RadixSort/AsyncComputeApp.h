@@ -95,20 +95,18 @@ protected:
 	com_ptr<ID3D12DescriptorHeap> uavHeap;
 	std::vector<RawBuffer> buffers;
 
-#define BUFFERNAMES 		output, outputIndices, perPageBucketCounts, inputIndices, input, perPageSats, globalSat
+#define BUFFERNAMES 		keys, perPageBucketOffsets, indicesWithKeyBits0, indicesWithKeyBits1, globalBucketOffsets
 
 	enum BufferRole {
 		BUFFERNAMES
 	};
 	static std::wstring bufferToString(BufferRole r) {
 		switch (r) {
-		case input: return L"input";
-		case inputIndices: return L"inputIndices";
-		case perPageBucketCounts: return L"perPageBucketCounts";
-		case output: return L"output";
-		case outputIndices: return L"outputIndices";
-		case perPageSats: return L"perPageSats";
-		case globalSat: return L"globalSat";
+		case keys: return L"keys";
+		case perPageBucketOffsets: return L"perPageBucketOffsets";
+		case indicesWithKeyBits0: return L"indicesWithKeyBits0";
+		case indicesWithKeyBits1: return L"indicesWithKeyBits1";
+		case globalBucketOffsets: return L"globalBucketOffsets";
 		}
 	}
 
@@ -144,22 +142,37 @@ public:
 		}
 
 		//buffers[input].fillRandom();
-		buffers[inputIndices].fillLinear();
-		buffers[input].fillRandomMask(0x0fff);
+		buffers[keys].fillRandomMask(0xffffffff);
 		//buffers[input].fillFFFFFFFF();
 
 		uint zeros[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 		uint ffffs[] = { 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff };
 
 		auto dhStart = CD3DX12_GPU_DESCRIPTOR_HANDLE(uavHeap->GetGPUDescriptorHandleForHeapStart());
-		ComputeShader csLocalSortInPlace;
-		ComputeShader csLocalSort;
-		ComputeShader csMerge;
-		csLocalSortInPlace.createResources(device, "Shaders/csLocalSortInPlace.cso");
-		csLocalSort.createResources(device, "Shaders/csLocalSort.cso");
-		csMerge.createResources(device, "Shaders/csPack.cso");
+		ComputeShader csLocalSortAlpha;
+		ComputeShader csLocalSortBeta;
+		ComputeShader csLocalSortGamma;
+		ComputeShader csScan;
+		ComputeShader csPackAlpha;
+		ComputeShader csPackBeta;
+		ComputeShader csPackGamma;
+		csLocalSortAlpha.createResources(device, "Shaders/csLocalSortAlpha.cso");
+		csLocalSortBeta.createResources(device, "Shaders/csLocalSortAlpha.cso");
+		csLocalSortGamma.createResources(device, "Shaders/csLocalSortGamma.cso");
+		csScan.createResources(device, "Shaders/csScan.cso");
+		csPackAlpha.createResources(device, "Shaders/csPackAlpha.cso");
+		csPackBeta.createResources(device, "Shaders/csPackBeta.cso");
+		csPackGamma.createResources(device, "Shaders/csPackGamma.cso");
 
-		waveSort.creaseResources(csLocalSortInPlace, csLocalSort, csMerge, dhStart, 0, dhIncrSize, buffers, false);
+		waveSort.creaseResources(
+			csLocalSortAlpha,
+			csLocalSortBeta,
+			csLocalSortGamma,
+			csScan,
+			csPackAlpha,
+			csPackBeta,
+			csPackGamma,
+			dhStart, 0, dhIncrSize, buffers, false);
 
 		D3D12_COMMAND_QUEUE_DESC descCommandQueue = { D3D12_COMMAND_LIST_TYPE_COMPUTE, 0, D3D12_COMMAND_QUEUE_FLAG_NONE };
 		DX_API("create compute command queue.")
@@ -177,8 +190,7 @@ public:
 				nullptr,
 				IID_PPV_ARGS(uploadCommandList.ReleaseAndGetAddressOf()));
 
-		buffers[input].upload(uploadCommandList);
-		buffers[inputIndices].upload(uploadCommandList);
+		buffers[keys].upload(uploadCommandList);
 
 		DX_API("close command list.")
 			uploadCommandList->Close();
@@ -324,30 +336,28 @@ public:
 //		}
 		if(frameCount > 0)
 		{
-			uint* pMortonPerPageBucketCounts	= buffers[perPageBucketCounts].mapReadback();
-			uint* pSortedPins					= buffers[outputIndices].mapReadback();
-			uint* pSortedMortons				= buffers[output].mapReadback();
-			uint* pPins							= buffers[inputIndices].mapReadback();
-			uint* pMortons						= buffers[input].mapReadback();
+			uint* pSat							= buffers[perPageBucketOffsets].mapReadback();
+			uint* pik0							= buffers[indicesWithKeyBits0].mapReadback();
+			uint* pik1							= buffers[indicesWithKeyBits1].mapReadback();
+			uint* pGlobalSat					= buffers[globalBucketOffsets].mapReadback();
 
-			bool ok = std::is_sorted(pSortedMortons, pSortedMortons + 32 * 32 * 32
-				, MaskedComp(0x0f)
-				//, MaskedComp(0xffffffff)
-				//, MaskedComp(0x01160b00)
-				//, MortonComp()
-				//TODO mortoncomp
-			);
+			//bool ok = std::is_sorted(pSortedMortons, pSortedMortons + 32 * 32 * 32
+			//	, MaskedComp(0x0f)
+			//	//, MaskedComp(0xffffffff)
+			//	//, MaskedComp(0x01160b00)
+			//	//, MortonComp()
+			//	//TODO mortoncomp
+			//);
 
-			buffers[perPageBucketCounts].unmapReadback();
-			buffers[outputIndices].unmapReadback();
-			buffers[output].unmapReadback();
-			buffers[inputIndices].unmapReadback();
-			buffers[input].unmapReadback();
+			buffers[perPageBucketOffsets].unmapReadback();
+			buffers[indicesWithKeyBits0].unmapReadback();
+			buffers[indicesWithKeyBits1].unmapReadback();
+			buffers[globalBucketOffsets].unmapReadback();
 
-			uint* pMortonStarterCount = buffers[perPageSats].mapReadback();
-			//TODO verify startercount
-			bool scok = verifyStarterCount(pSortedMortons, pMortonStarterCount);
-			buffers[perPageSats].unmapReadback();
+			//uint* pMortonStarterCount = buffers[perPageSats].mapReadback();
+			////TODO verify startercount
+			//bool scok = verifyStarterCount(pSortedMortons, pMortonStarterCount);
+			//buffers[perPageSats].unmapReadback();
 		}
 
 		DX_API("close command list")

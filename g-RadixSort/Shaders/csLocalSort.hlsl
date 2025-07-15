@@ -13,7 +13,7 @@ uint maskOffsets : register(b0);
 #define rowSize 32
 #define nRowsPerPage 32
 #define nPagesPerChunk 32
-#define nChunks 1
+#define nChunks 32
 #define groupDivisor 4
 #define nBuckets 16
 

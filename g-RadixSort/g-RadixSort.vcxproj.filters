@@ -67,10 +67,25 @@
     <FxCompile Include="Shaders\csMerge.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\csLocalSortInPlace.hlsl">
+    <FxCompile Include="Shaders\csScan.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\csPack.hlsl">
+    <FxCompile Include="Shaders\csLocalSortAlpha.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\csLocalSortBeta.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\csLocalSortGamma.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\csPackAlpha.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\csPackBeta.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\csPackGamma.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
   </ItemGroup>

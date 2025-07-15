@@ -46,6 +46,15 @@
       <AdditionalDependencies>d3d11.lib;Egg.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <BuildLog />
+    <FxCompile>
+      <EntryPointName>%(Filename)</EntryPointName>
+    </FxCompile>
+    <FxCompile>
+      <ShaderType>Compute</ShaderType>
+    </FxCompile>
+    <FxCompile>
+      <ShaderModel>6.4</ShaderModel>
+    </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AsyncComputeApp.cpp" />
@@ -70,20 +79,21 @@
       <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename)</EntryPointName>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
     </FxCompile>
-    <FxCompile Include="Shaders\csLocalSortInPlace.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.6</ShaderModel>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
-      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename)</EntryPointName>
-    </FxCompile>
+    <FxCompile Include="Shaders\csLocalSortAlpha.hlsl" />
+    <FxCompile Include="Shaders\csLocalSortBeta.hlsl" />
+    <FxCompile Include="Shaders\csLocalSortGamma.hlsl" />
     <FxCompile Include="Shaders\csMerge.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.6</ShaderModel>
       <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename)</EntryPointName>
     </FxCompile>
-    <FxCompile Include="Shaders\csPack.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.6</ShaderModel>
-      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename)</EntryPointName>
+    <FxCompile Include="Shaders\csPackAlpha.hlsl" />
+    <FxCompile Include="Shaders\csPackBeta.hlsl" />
+    <FxCompile Include="Shaders\csPackGamma.hlsl" />
+    <FxCompile Include="Shaders\csScan.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.4</ShaderModel>
+      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(Filename)</EntryPointName>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
