@@ -5,8 +5,8 @@
 //SRV(t0, numDescriptors=1), 
 RWByteAddressBuffer keys : register(u0);
 RWByteAddressBuffer perPageBucketOffsets : register(u1);
-RWByteAddressBuffer indices20KeyBits12 : register(u2);
-RWByteAddressBuffer indices10KeyBits16 : register(u3);
+RWByteAddressBuffer indices20KeyBits12out : register(u2);
+RWByteAddressBuffer indices20KeyBits12in : register(u3);
 RWByteAddressBuffer globalBucketOffsets : register(u4);
 uint maskOffset : register(b0);
 
@@ -27,18 +27,21 @@ void csPackBeta(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     uint onpageindex = tid.x | (tid.y << 5);
     uint globalid = onpageindex | (gid.x << 10);
 
-    uint value = indices10KeyBits16.Load(globalid << 2);
+    uint value = indices20KeyBits12in.Load(globalid << 2);
     uint bucketId = value & 0xf;
-    value = (gid.x << 22) | (value >> 4);
+    value = (value & 0xfffff000) | ((value >> 4) & 0xff) 
+    | ((value << 8) & 0xf00) // for debugging
+    ;
 
     GroupMemoryBarrierWithGroupSync();
 
     uint pageIndex = gid.x;
     uint nPages = nPagesPerChunk * nChunks;
 
-    uint globalBucketStart = bucketId ? globalBucketOffsets.Load(((bucketId - 1) + (nPages - 1) * nBuckets) << 2) : 0;
-    uint bucketInPageStart = bucketId ? globalBucketOffsets.Load((bucketId - 1 + pageIndex * nBuckets) << 2) : 0;
-    uint pageInBucketStart = pageIndex ? globalBucketOffsets.Load((bucketId + (pageIndex - 1) * nBuckets) << 2) : 0;
+    uint globalBucketStart = bucketId ? globalBucketOffsets.Load(((bucketId - 1) * nPagesPerChunk * nChunks + (nPages - 1)) << 2) : 0;
+    uint bucketInPageStart = bucketId ? globalBucketOffsets.Load(((bucketId - 1) * nPagesPerChunk * nChunks + pageIndex) << 2) :
+    0;
+    uint pageInBucketStart = pageIndex ? globalBucketOffsets.Load((bucketId * nPagesPerChunk * nChunks + (pageIndex - 1)) << 2) : 0;
 	
     uint target =
 			onpageindex
@@ -46,5 +49,5 @@ void csPackBeta(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 			+ pageInBucketStart
 			- bucketInPageStart;
 
-    indices10KeyBits16.Store(target, value);
+    indices20KeyBits12out.Store(target << 2, value);
 }

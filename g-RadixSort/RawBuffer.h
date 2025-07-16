@@ -12,7 +12,7 @@ class RawBuffer {
 public:
 	RawBuffer(
 		std::wstring debugName,
-		uint bufferUintSize = 32 * 32 * 32) :debugName(debugName), bufferUintSize(bufferUintSize) {
+		uint bufferUintSize = 32 * 32 * 32 * 32) :debugName(debugName), bufferUintSize(bufferUintSize) {
 
 	}
 

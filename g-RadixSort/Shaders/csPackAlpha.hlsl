@@ -36,9 +36,10 @@ void csPackAlpha(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     uint pageIndex = gid.x;
     uint nPages = nPagesPerChunk * nChunks;
 
-    uint globalBucketStart = bucketId ? globalBucketOffsets.Load(((bucketId - 1) + (nPages - 1) * nBuckets) << 2) : 0;
-    uint bucketInPageStart = bucketId ? globalBucketOffsets.Load((bucketId - 1 + pageIndex * nBuckets) << 2) : 0;
-    uint pageInBucketStart = pageIndex ? globalBucketOffsets.Load((bucketId + (pageIndex - 1) * nBuckets) << 2) : 0;
+    uint globalBucketStart = bucketId ? globalBucketOffsets.Load(((bucketId - 1) * nPagesPerChunk * nChunks + (nPages - 1)) << 2) : 0;
+    uint bucketInPageStart = bucketId ? globalBucketOffsets.Load(((bucketId - 1) * nPagesPerChunk * nChunks + pageIndex) << 2) :
+    0;
+    uint pageInBucketStart = pageIndex ? globalBucketOffsets.Load((bucketId * nPagesPerChunk * nChunks + (pageIndex - 1)) << 2) : 0;
 	
     uint target =
 			onpageindex
@@ -46,5 +47,5 @@ void csPackAlpha(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 			+ pageInBucketStart
 			- bucketInPageStart;
 
-    indices10KeyBits16.Store(target, value);
+    indices20KeyBits12.Store(target << 2, value);
 }

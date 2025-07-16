@@ -46,5 +46,5 @@ void csPackGamma(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 			+ pageInBucketStart
 			- bucketInPageStart;
 
-    indices10KeyBits16.Store(target, value);
+    indices10KeyBits16.Store(target << 2, value);
 }

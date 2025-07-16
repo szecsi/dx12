@@ -157,7 +157,7 @@ public:
 		ComputeShader csPackBeta;
 		ComputeShader csPackGamma;
 		csLocalSortAlpha.createResources(device, "Shaders/csLocalSortAlpha.cso");
-		csLocalSortBeta.createResources(device, "Shaders/csLocalSortAlpha.cso");
+		csLocalSortBeta.createResources(device, "Shaders/csLocalSortBeta.cso");
 		csLocalSortGamma.createResources(device, "Shaders/csLocalSortGamma.cso");
 		csScan.createResources(device, "Shaders/csScan.cso");
 		csPackAlpha.createResources(device, "Shaders/csPackAlpha.cso");
