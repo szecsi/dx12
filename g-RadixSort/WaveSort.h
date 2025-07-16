@@ -51,7 +51,7 @@ public:
 		computeCommandList->ResourceBarrier(1, &uavBarriers[1]); // perPageBucketOffsets
 		
 		csScan.setup(computeCommandList, uavHandle);
-		computeCommandList->Dispatch(1024, 1, 1);
+		computeCommandList->Dispatch(16, 1, 1);
 		computeCommandList->ResourceBarrier(2, &uavBarriers[3]); // globalBucketOffsets, ik1 (not written in this last pass, but written previously, and used in next pass)
 
 		csPackAlpha.setup(computeCommandList, uavHandle);
@@ -66,7 +66,7 @@ public:
 
 			csScan.setup(computeCommandList, uavHandle);
 			computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x01160b00 : 0x03020100, 0);
-			computeCommandList->Dispatch(1024, 1, 1);
+			computeCommandList->Dispatch(16, 1, 1);
 			computeCommandList->ResourceBarrier(2, &uavBarriers[3]); // globalBucketOffsets, ik1 (not written in this last pass, but written previously, and used in next pass)
 
 			csPackBeta.setup(computeCommandList, uavHandle);
@@ -76,75 +76,35 @@ public:
 			
 		}
 
-/*		localSort.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x0d02170c : 0x07060504, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(3, uavBarriers);
+		csLocalSortGamma.setup(computeCommandList, uavHandle);
+		computeCommandList->Dispatch(1024, 1, 1);
+		computeCommandList->ResourceBarrier(1, &uavBarriers[1]); // perPageBucketOffsets
+		
+		csScan.setup(computeCommandList, uavHandle);
+		computeCommandList->Dispatch(16, 1, 1);
+		computeCommandList->ResourceBarrier(2, &uavBarriers[3]); // globalBucketOffsets, ik1 (not written in this last pass, but written previously, and used in next pass)
 
-		merge.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x0d02170c : 0x07060504, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(2, &uavBarriers[3]);
+		csPackGamma.setup(computeCommandList, uavHandle);
+		computeCommandList->Dispatch(1024, 1, 1);
+		computeCommandList->ResourceBarrier(1, &uavBarriers[2]); //ik0
+		
+		for (int i = 0; i < 3; i++) {
+			csLocalSortBeta.setup(computeCommandList, uavHandle);
+			computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x01160b00 : 0x03020100, 0);
+			computeCommandList->Dispatch(1024, 1, 1);
+			computeCommandList->ResourceBarrier(1, &uavBarriers[1]); // perPageBucketOffsets
 
-		localSort.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x190e0318 : 0x0b0a0908, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(3, uavBarriers);
+			csScan.setup(computeCommandList, uavHandle);
+			computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x01160b00 : 0x03020100, 0);
+			computeCommandList->Dispatch(16, 1, 1);
+			computeCommandList->ResourceBarrier(2, &uavBarriers[3]); // globalBucketOffsets, ik1 (not written in this last pass, but written previously, and used in next pass)
 
-		merge.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x190e0318 : 0x0b0a0908, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(2, &uavBarriers[3]);
+			csPackBeta.setup(computeCommandList, uavHandle);
+			computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x01160b00 : 0x03020100, 0);
+			computeCommandList->Dispatch(1024, 1, 1);
+			computeCommandList->ResourceBarrier(1, &uavBarriers[2]); //ik0
 
-		localSort.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x051a0f04 : 0x0f0e0d0c, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(3, uavBarriers);
+		}
 
-		merge.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x051a0f04 : 0x0f0e0d0c, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(2, &uavBarriers[3]);
-
-		localSort.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x11061b10 : 0x13121110, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(3, uavBarriers);
-
-		merge.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x11061b10 : 0x13121110, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(2, &uavBarriers[3]);
-
-		localSort.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x1d12071c : 0x17161514, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(3, uavBarriers);
-
-		merge.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x1d12071c : 0x17161514, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(2, &uavBarriers[3]);
-
-		localSort.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x091e1308 : 0x1b1a1918, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(3, uavBarriers);
-
-		merge.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x091e1308 : 0x1b1a1918, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(2, &uavBarriers[3]);
-
-		localSort.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x150a1f14 : 0x1f1e1d1c, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(3, uavBarriers);
-
-		merge.setup(computeCommandList, uavHandle);
-		computeCommandList->SetComputeRoot32BitConstant(0, interleaveBits ? 0x150a1f14 : 0x1f1e1d1c, 0);
-		computeCommandList->Dispatch(32, 1, 1);
-		computeCommandList->ResourceBarrier(2, &uavBarriers[3]);
-		*/
 	}
 };

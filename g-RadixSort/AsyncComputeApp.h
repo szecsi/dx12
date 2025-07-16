@@ -72,6 +72,15 @@ struct MortonComp {
 	}
 };
 
+struct KeyComp {
+	uint* pKeys;
+	uint mask;
+	KeyComp(uint* pKeys, uint mask = 0xffffffff) :pKeys(pKeys),mask(mask) {}
+	bool operator()(const uint& a, const uint& b)const {
+		return (pKeys[a>>12] & mask) < (pKeys[b>>12] & mask);
+	}
+};
+
 class AsyncComputeApp : public Egg::SimpleApp {
 
 	uint frameCount;
@@ -336,19 +345,22 @@ public:
 //		}
 		if(frameCount > 0)
 		{
+			uint* pKeys							= buffers[keys].mapReadback();
 			uint* pSat							= buffers[perPageBucketOffsets].mapReadback();
 			uint* pik0							= buffers[indicesWithKeyBits0].mapReadback();
 			uint* pik1							= buffers[indicesWithKeyBits1].mapReadback();
 			uint* pGlobalSat					= buffers[globalBucketOffsets].mapReadback();
 
-			//bool ok = std::is_sorted(pSortedMortons, pSortedMortons + 32 * 32 * 32
-			//	, MaskedComp(0x0f)
-			//	//, MaskedComp(0xffffffff)
-			//	//, MaskedComp(0x01160b00)
-			//	//, MortonComp()
-			//	//TODO mortoncomp
-			//);
+			uint pSorted[1024];
+			for (int i = 0; i < 1024; i++) {
+				pSorted[i] = pKeys[(pik0[i] >> 12)];
+			}
 
+			bool ok = std::is_sorted(pik0, pik0 + 1024 * 1024,
+				KeyComp(pKeys, 0xffffffff)
+			);
+
+			buffers[keys].unmapReadback();
 			buffers[perPageBucketOffsets].unmapReadback();
 			buffers[indicesWithKeyBits0].unmapReadback();
 			buffers[indicesWithKeyBits1].unmapReadback();

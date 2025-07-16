@@ -5,8 +5,8 @@
 //SRV(t0, numDescriptors=1), 
 RWByteAddressBuffer keys : register(u0);
 RWByteAddressBuffer perPageBucketOffsets : register(u1);
-RWByteAddressBuffer dontcare_indicesWithKeyBits0 : register(u2);
-RWByteAddressBuffer indices10KeyBits16 : register(u3);
+RWByteAddressBuffer indices20KeyBits12in : register(u2);
+RWByteAddressBuffer indices20KeyBits12out : register(u3);
 RWByteAddressBuffer dontcare_globalBucketOffsets : register(u4);
 uint maskOffset : register(b0);
 
@@ -32,8 +32,9 @@ void csLocalSortGamma(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         uint flatid = rowst | tid.x;
 
         uint initialElementIndex = flatid + gid.x * rowSize * nRowsPerPage;
-        uint key = keys.Load(initialElementIndex << 2);
-        localasses[did] = (flatid << 16) | (key & 0xffff);
+        uint ik = indices20KeyBits12in.Load(initialElementIndex << 2);
+        uint key = keys.Load(((ik & 0xfffff000) >> 12) << 2);
+        localasses[did] = (ik & 0xfffff000) | ((key >> 16) & 0xf);
     }
 	//scan on bit i
     for (uint i = 0; i < 4; i++)
@@ -107,6 +108,6 @@ void csLocalSortGamma(uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 			+ (rid ? sat[bucketId + (rid - 1) * nBuckets] : 0)
 			- (bucketId ? sat[(bucketId - 1) + rid * nBuckets] : 0);
 
-        indices10KeyBits16.Store((target + rowSize * nRowsPerPage * gid.x) << 2, localasses[did]);
+        indices20KeyBits12out.Store((target + rowSize * nRowsPerPage * gid.x) << 2, localasses[did]);
     }
 }
