@@ -322,27 +322,27 @@ public:
 		commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		//READBACK HERE?
-		for (auto name : { BUFFERNAMES }) {
-			buffers[name].copyBack(commandList/*s[swapChainBackBufferIndex]*/);
-		}
-
-		//TEST HERE
-		//for (auto name : { BUFFERNAMES }) {
-		//	buffers[name].mapReadback();
-		//}
-//		if (frameCount > 0)
-//		{
-//			uint* pMortons = buffers[output].mapReadback();
-//			bool ok = true;
-//			for (uint i = 0; i < 32; i++) {
-//				ok = ok && std::is_sorted(pMortons + i * 32 * 32, pMortons + i * 32 * 32 + 32 * 32
-//					//, MaskedComp(0x01160b00)
-//					, MortonComp()
-//					//TODO mortoncomp
-//				);
-//			}
-//			buffers[output].unmapReadback();
+//		for (auto name : { BUFFERNAMES }) {
+//			buffers[name].copyBack(commandList/*s[swapChainBackBufferIndex]*/);
 //		}
+//
+//		//TEST HERE
+//		//for (auto name : { BUFFERNAMES }) {
+//		//	buffers[name].mapReadback();
+//		//}
+////		if (frameCount > 0)
+////		{
+////			uint* pMortons = buffers[output].mapReadback();
+////			bool ok = true;
+////			for (uint i = 0; i < 32; i++) {
+////				ok = ok && std::is_sorted(pMortons + i * 32 * 32, pMortons + i * 32 * 32 + 32 * 32
+////					//, MaskedComp(0x01160b00)
+////					, MortonComp()
+////					//TODO mortoncomp
+////				);
+////			}
+////			buffers[output].unmapReadback();
+////		}
 		if(frameCount > 0)
 		{
 			uint* pKeys							= buffers[keys].mapReadback();
@@ -351,10 +351,10 @@ public:
 			uint* pik1							= buffers[indicesWithKeyBits1].mapReadback();
 			uint* pGlobalSat					= buffers[globalBucketOffsets].mapReadback();
 
-			uint pSorted[1024];
-			for (int i = 0; i < 1024; i++) {
-				pSorted[i] = pKeys[(pik0[i] >> 12)];
-			}
+			//uint pSorted[1024];
+			//for (int i = 0; i < 1024; i++) {
+			//	pSorted[i] = pKeys[(pik0[i] >> 12)];
+			//}
 
 			bool ok = std::is_sorted(pik0, pik0 + 1024 * 1024,
 				KeyComp(pKeys, 0xffffffff)

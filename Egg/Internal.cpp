@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstdarg>
+#include <comdef.h>
 
 void Egg::Internal::Assert(bool trueMeansOk, const char * msgOnFail, ...) {
 	va_list argList;
@@ -39,7 +40,8 @@ Egg::Internal::HResultTester::HResultTester(const char * msg, const char * file,
 void Egg::Internal::HResultTester::operator<<(HRESULT hr) {
 	if(FAILED(hr)) {
 		std::ostringstream oss;
-		oss << file << "(" << line << "): " << message;
+		_com_error err(hr);
+		oss << file << "(" << line << "): " << message << " HR: " << hr << " " << err.ErrorMessage();
 		std::string buffer;
 		buffer.resize(1024);
 

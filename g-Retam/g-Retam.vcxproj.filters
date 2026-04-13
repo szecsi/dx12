@@ -1,0 +1,76 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <FxCompile Include="Shaders\RadixSort\csLocalSortAlpha.hlsl">
+      <Filter>Shaders\RadixSort</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RadixSort\csLocalSortBeta.hlsl">
+      <Filter>Shaders\RadixSort</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RadixSort\csLocalSortGamma.hlsl">
+      <Filter>Shaders\RadixSort</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RadixSort\csPackAlpha.hlsl">
+      <Filter>Shaders\RadixSort</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RadixSort\csPackBeta.hlsl">
+      <Filter>Shaders\RadixSort</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RadixSort\csPackGamma.hlsl">
+      <Filter>Shaders\RadixSort</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RadixSort\csScan.hlsl">
+      <Filter>Shaders\RadixSort</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Billboard\gsBillboard.hlsl">
+      <Filter>Shaders\Billboard</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Billboard\vsBillboard.hlsl">
+      <Filter>Shaders\Billboard</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Billboard\psFire.hlsl">
+      <Filter>Shaders\Billboard</Filter>
+    </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="DDSTextureLoader.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RetamApp.h" />
+    <ClInclude Include="ComputePass.h" />
+    <ClInclude Include="ComputeShader.h" />
+    <ClInclude Include="ConstantBufferTypes.h" />
+    <ClInclude Include="DDSTextureLoader.h" />
+    <ClInclude Include="Fence.h" />
+    <ClInclude Include="FenceChain.h" />
+    <ClInclude Include="Float4Buffer.h" />
+    <ClInclude Include="Particle.h" />
+    <ClInclude Include="RawBuffer.h" />
+    <ClInclude Include="WaveSort.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\Billboard\billboard.hlsli">
+      <Filter>Shaders\Billboard</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{767eeaa0-ed69-4ebc-ba1d-2eb4237a0f3e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\RadixSort">
+      <UniqueIdentifier>{5294e7fa-8644-4003-97b3-ae2178513a60}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Billboard">
+      <UniqueIdentifier>{4a43b445-6cca-4a78-9764-6353b0c60920}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Lua">
+      <UniqueIdentifier>{7735a2c3-61b3-48b5-aac4-0a23792ca05d}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="Lua\scene.lua">
+      <Filter>Lua</Filter>
+    </CustomBuild>
+  </ItemGroup>
+</Project>

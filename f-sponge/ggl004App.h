@@ -137,7 +137,7 @@ public:
 		device11on12->AcquireWrappedResources(renderTargets11[swapChainBackBufferIndex].GetAddressOf(), 1);
 //		float bg[] = { 1.0f, 0.0f, 0.0f, 0.0f };
 //		context11->ClearRenderTargetView(defaultRtv11[swapChainBackBufferIndex].Get(), bg);
-		app11->setDefaultViews(defaultRtv11[swapChainBackBufferIndex], nullptr/*defaultDsv11*/);
+		app11->setDefaultViews(defaultRtv11[swapChainBackBufferIndex], defaultDsv11);
 		app11->render(context11);
 		device11on12->ReleaseWrappedResources(renderTargets11[swapChainBackBufferIndex].GetAddressOf(), 1);
 
@@ -217,6 +217,13 @@ public:
 		desc.Texture2D.MipSlice = 0;
 		device11->CreateRenderTargetView(renderTargets11[0].Get(), &desc, defaultRtv11[0].GetAddressOf());
 		device11->CreateRenderTargetView(renderTargets11[1].Get(), &desc, defaultRtv11[1].GetAddressOf());
+
+		CD3D11_DEPTH_STENCIL_VIEW_DESC depthStencilViewDesc(D3D11_DSV_DIMENSION_TEXTURE2D);
+		device11->CreateDepthStencilView(
+			depthStencil11.Get(),
+			&depthStencilViewDesc,
+			defaultDsv11.GetAddressOf()
+		);
 
 		//TODO pass swap chain desc
 		app11->createSwapChainResources();

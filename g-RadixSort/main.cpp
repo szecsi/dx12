@@ -105,7 +105,19 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	Egg::Utility::GetAdapters(dxgiFactory.Get(), adapters);
 
 	// select your adapter here, NULL = system default
-	IUnknown * selectedAdapter = (adapters.size() > 0) ? adapters[1].Get() : NULL;
+	IUnknown* selectedAdapter = NULL;
+
+	for (auto adapter : adapters) {
+		DXGI_ADAPTER_DESC1 desc;
+		adapter->GetDesc1(&desc);
+		if (desc.VendorId == 0x10de) {
+			selectedAdapter = adapter.Get();
+			//MessageBoxW(NULL, desc.Description, L"adapter", 0);
+		}
+	}
+	if (selectedAdapter == NULL) {
+		MessageBox(NULL, "null adapter", "0", 0);
+	}
 
 	DX_API("Failed to create D3D Device")
 		D3D12CreateDevice(selectedAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(device.GetAddressOf()));
@@ -114,6 +126,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	D3D12_FEATURE_DATA_D3D12_OPTIONS1 fedup;
 	device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &fedup, sizeof(fedup));
 	if (fedup.WaveLaneCountMax != 0x20) {
+		MessageBox(NULL, "WaveLaneCountMax != 0x20", std::to_string(fedup.WaveLaneCountMax).c_str(), 0);
 		return -1;
 	}
 

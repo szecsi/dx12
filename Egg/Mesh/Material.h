@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Common.h"
+#include <dxcapi.h>
 #include <map>
 
 namespace Egg {
@@ -19,7 +20,7 @@ namespace Egg {
 			D3D12_DEPTH_STENCIL_DESC depthStencilState;
 			DXGI_FORMAT dsvFormat;
 
-			com_ptr<ID3D12RootSignatureDeserializer> rsDeserializer;
+			com_ptr<ID3D12VersionedRootSignatureDeserializer> rsDeserializer;
 			com_ptr<ID3D12ShaderReflection> vsReflection;
 			com_ptr<ID3D12ShaderReflection> hsReflection;
 			com_ptr<ID3D12ShaderReflection> dsReflection;
@@ -35,6 +36,45 @@ namespace Egg {
 			com_ptr<ID3D12DescriptorHeap> srvHeap;
 			unsigned int srvHeapByteOffset;
 			unsigned int srvDescriptorTableRootParameterIndex;
+
+		private:
+
+			static void ReflectDxil(
+				ID3DBlob* blob,
+				com_ptr<ID3D12ShaderReflection>& reflection,
+				com_ptr<ID3D12VersionedRootSignatureDeserializer>* deserializer = nullptr)
+			{
+				com_ptr<IDxcLibrary> library;
+				DX_API("Failed to create DXC library instance")
+					DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.GetAddressOf()));
+
+				com_ptr<IDxcBlobEncoding> dxcBlob;
+				DX_API("Failed to create DXC blob from shader bytecode")
+					library->CreateBlobWithEncodingFromPinned(
+						blob->GetBufferPointer(), (UINT32)blob->GetBufferSize(), 0,
+						dxcBlob.GetAddressOf());
+
+				com_ptr<IDxcContainerReflection> container;
+				DX_API("Failed to create DXC container reflection instance")
+					DxcCreateInstance(CLSID_DxcContainerReflection, IID_PPV_ARGS(container.GetAddressOf()));
+
+				DX_API("Failed to load shader into DXC container")
+					container->Load(dxcBlob.Get());
+
+				UINT32 dxilIdx;
+				DX_API("Failed to find DXIL part in shader container")
+					container->FindFirstPartKind(DXC_PART_DXIL, &dxilIdx);
+
+				DX_API("Failed to get ID3D12ShaderReflection from DXIL part")
+					container->GetPartReflection(dxilIdx, IID_PPV_ARGS(reflection.GetAddressOf()));
+
+				if (deserializer) {
+					DX_API("Failed to create root signature deserializer")
+						D3D12CreateVersionedRootSignatureDeserializer(
+							blob->GetBufferPointer(), blob->GetBufferSize(),
+							IID_PPV_ARGS(deserializer->GetAddressOf()));
+				}
+			}
 
 		public:
 
@@ -70,38 +110,29 @@ namespace Egg {
 
 			void SetVertexShader(com_ptr<ID3DBlob> vs) {
 				vertexShader = vs;
-				DX_API("Failed to reflect vertex shader")
-					D3DReflect(vs->GetBufferPointer(), vs->GetBufferSize(), IID_PPV_ARGS(vsReflection.GetAddressOf()));
-
-				DX_API("Failed to deserialize root signature")
-					D3D12CreateRootSignatureDeserializer(vs->GetBufferPointer(), vs->GetBufferSize(), IID_PPV_ARGS(rsDeserializer.GetAddressOf()));
-
+				ReflectDxil(vs.Get(), vsReflection, &rsDeserializer);
 			}
 
 			void SetPixelShader(com_ptr<ID3DBlob> ps) {
 				pixelShader = ps;
-				DX_API("Failed to reflect pixel shader")
-					D3DReflect(ps->GetBufferPointer(), ps->GetBufferSize(), IID_PPV_ARGS(psReflection.GetAddressOf()));
+				ReflectDxil(ps.Get(), psReflection);
 			}
 
 			void SetGeometryShader(com_ptr<ID3DBlob> gs) {
 				geometryShader = gs;
 				if (gs != nullptr) {
-					DX_API("Failed to reflect geometry shader")
-						D3DReflect(gs->GetBufferPointer(), gs->GetBufferSize(), IID_PPV_ARGS(gsReflection.GetAddressOf()));
+					ReflectDxil(gs.Get(), gsReflection);
 				}
 			}
 
 			void SetHullShader(com_ptr<ID3DBlob> hs) {
 				hullShader = hs;
-				DX_API("Failed to reflect pixel shader")
-					D3DReflect(hs->GetBufferPointer(), hs->GetBufferSize(), IID_PPV_ARGS(hsReflection.GetAddressOf()));
+				ReflectDxil(hs.Get(), hsReflection);
 			}
 
 			void SetDomainShader(com_ptr<ID3DBlob> ds) {
 				domainShader = ds;
-				DX_API("Failed to reflect pixel shader")
-					D3DReflect(ds->GetBufferPointer(), ds->GetBufferSize(), IID_PPV_ARGS(dsReflection.GetAddressOf()));
+				ReflectDxil(ds.Get(), dsReflection);
 			}
 
 
@@ -192,9 +223,12 @@ namespace Egg {
 
 				ASSERT(SUCCEEDED(hr), "Failed to find constant buffer '%s'\r\nPossible errors:\r\n-Optimized away\r\n-Name mismatch\r\n-Wrong shader used", name.c_str());
 
-				const D3D12_ROOT_SIGNATURE_DESC& rootSignatureDesc = *(rsDeserializer->GetRootSignatureDesc());
-				for (unsigned int i = 0; i < rootSignatureDesc.NumParameters; ++i) {
-					const D3D12_ROOT_PARAMETER& param = rootSignatureDesc.pParameters[i];
+				const D3D12_VERSIONED_ROOT_SIGNATURE_DESC* pRootSignatureDesc;
+				DX_API("Failed to convert root signature to v1.0")
+					rsDeserializer->GetRootSignatureDescAtVersion(D3D_ROOT_SIGNATURE_VERSION_1, &pRootSignatureDesc);
+				const D3D12_VERSIONED_ROOT_SIGNATURE_DESC& rootSignatureDesc = *pRootSignatureDesc;
+				for (unsigned int i = 0; i < rootSignatureDesc.Desc_1_0.NumParameters; ++i) {
+					const D3D12_ROOT_PARAMETER& param = rootSignatureDesc.Desc_1_0.pParameters[i];
 					if (param.ParameterType == D3D12_ROOT_PARAMETER_TYPE_CBV &&
 						param.Descriptor.ShaderRegister == bindDesc.BindPoint &&
 						param.Descriptor.RegisterSpace == bindDesc.Space) {
