@@ -60,6 +60,7 @@ void Script::ScriptedApp::LoadAssets() {
 		.def("StaticEntity", &Script::ScriptedApp::CreateStaticEntity)
 		.def("FirstPersonCam", &Script::ScriptedApp::CreateFirstPersonCam)
 		.def("FixedCam", &Script::ScriptedApp::CreateFixedCam)
+		.def("addGuiMaterial", &Script::ScriptedApp::addGuiMaterial)
 		];
 
 	AiEnumReflections::initialize();
@@ -264,7 +265,7 @@ Egg::Mesh::Multi::P Script::ScriptedApp::CreateMultiMeshFromFile(luabind::object
 		std::string filename = attributeTable.getString("file");
 		std::string topo = attributeTable.getString("topology", "triangle_list");
 		unsigned int flags = attributeTable.getEnumCombination<aiPostProcessSteps, unsigned int>("flags", 
-			aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_GenUVCoords);
+			aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_GenUVCoords | aiProcess_CalcTangentSpace);
 		Egg::Mesh::Multi::P multi = LoadMultiMesh(filename, flags);
 		if (topo == "patch") {
 			multi->SetTopology(D3D_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
@@ -284,8 +285,8 @@ Egg::Scene::Entity::P Script::ScriptedApp::CreateStaticEntity(luabind::object ni
 	{
 		auto multiMesh = attributeTable.get<Egg::Mesh::Multi>("multiMesh");
 		using namespace Egg::Math;
-		Float3 position = attributeTable.getFloat3("position");
-		Float3 axis = attributeTable.getFloat3("orientationAxis", Float3(0, 1, 0));
+		float3 position = attributeTable.getfloat3("position");
+		float3 axis = attributeTable.getfloat3("orientationAxis", float3(0, 1, 0));
 		float angle = attributeTable.getFloat("orientationAngle");
 		Egg::Scene::FixedRigidBody::P fixedRigidBody =
 			Egg::Scene::FixedRigidBody::Create();
@@ -306,7 +307,7 @@ Egg::Cam::FirstPerson::P Script::ScriptedApp::CreateFirstPersonCam(luabind::obje
 	{
 		using namespace Egg::Math;
 		Egg::Cam::FirstPerson::P firstPersonCam = Egg::Cam::FirstPerson::Create()
-			->SetView(attributeTable.getFloat3("position", Float3::Zero), attributeTable.getFloat3("position", -Float3::UnitZ))
+			->SetView(attributeTable.getfloat3("position", float3::Zero), attributeTable.getfloat3("position", -float3::UnitZ))
 			->SetProj(attributeTable.getFloat("fov", 1.2), attributeTable.getFloat("aspect", 1), attributeTable.getFloat("front", 0.1), attributeTable.getFloat("back", 1000.0))
 			->SetSpeed(attributeTable.getFloat("speed", 5));
 
@@ -324,9 +325,9 @@ Egg::Cam::Fixed::P Script::ScriptedApp::CreateFixedCam(luabind::object nil, luab
 		using namespace Egg::Math;
 		Egg::Cam::Fixed::P fixedCam = Egg::Cam::Fixed::Create(
 			attributeTable.get<Egg::Scene::Entity>("owner"),
-			attributeTable.getFloat3("position", Float3::Zero),
-			attributeTable.getFloat3("ahead", Float3::UnitX),
-			attributeTable.getFloat3("up", Float3::UnitY),
+			attributeTable.getfloat3("position", float3::Zero),
+			attributeTable.getfloat3("ahead", float3::UnitX),
+			attributeTable.getfloat3("up", float3::UnitY),
 			attributeTable.getFloat("fov", 1.2),
 			attributeTable.getFloat("aspect", 1),
 			attributeTable.getFloat("front", 0.1),

@@ -1993,7 +1993,7 @@ void Game::CreateSpongeMesh() {
 	unsigned int neighbourTex1Offset = 0;
 	unsigned int neighbourTex2Offset = 0;
 	unsigned int normalOffset = 0;
-	unsigned int binormalOffset = 0;
+	unsigned int bitangentOffset = 0;
 	unsigned int tangentOffset = 0;
 
 	elements[cElements].Format = DXGI_FORMAT_R32G32B32_FLOAT;
@@ -5245,23 +5245,23 @@ float3 Game::calculateNormal(float3 p0, float3 p1, float3 p2) {
 	return normal;
 }
 
-float3 Game::calculateBinormal(float3 p0, float3 p1, float3 p2, float2 t0, float2 t1, float2 t2) {
+float3 Game::calculateBitangent(float3 p0, float3 p1, float3 p2, float2 t0, float2 t1, float2 t2) {
 	float3 edge1 = p1 - p0;
 	float3 edge2 = p2 - p0;
 	float2 edge1uv = t1 - t0;
 	float2 edge2uv = t2 - t0;
 
-	float3 binormal;
+	float3 bitangent;
 
 	float cp = edge1uv.y * edge2uv.x - edge1uv.x * edge2uv.y;
 
 	if (cp != 0.0f) {
 		float mul = 1.0f / cp;
-		binormal = (edge1 * -edge2uv.x + edge2 * edge1uv.x) * mul;
+		bitangent = (edge1 * -edge2uv.x + edge2 * edge1uv.x) * mul;
 
-		binormal = binormal.normalize();
+		bitangent = bitangent.normalize();
 	}
-	return binormal;
+	return bitangent;
 }
 
 float3 Game::calculateTangent(float3 p0, float3 p1, float3 p2, float2 t0, float2 t1, float2 t2) {

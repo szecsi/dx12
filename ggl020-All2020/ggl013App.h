@@ -394,19 +394,19 @@ public:
 	virtual void Update(float dt, float T) override {
 		using namespace Egg::Math;
 		perFrameCb->lightViewProjTransform = 
-			Float4x4::View(Float3(0, 20, 0), Float3(0, -1, 0), Float3(1, 0, 0)) *
-			Float4x4::Proj(1.0, 1.0, 0.1, 100.0);
+			float4x4::View(float3(0, 20, 0), float3(0, -1, 0), float3(1, 0, 0)) *
+			float4x4::Proj(1.0, 1.0, 0.1, 100.0);
 		perFrameCb->lightViewProjTransform2 =
-			Float4x4::View(Float3(0, 20, 0.5), Float3(0, -1, 0), Float3(1, 0, 0)) *
-			Float4x4::Proj(1.0, 1.0, 0.1, 100.0);
-		perFrameCb->billboardSize = Float4(50.1, 50.1, 0, 0) 
+			float4x4::View(float3(0, 20, 0.5), float3(0, -1, 0), float3(1, 0, 0)) *
+			float4x4::Proj(1.0, 1.0, 0.1, 100.0);
+		perFrameCb->billboardSize = float4(50.1, 50.1, 0, 0) 
 			* cameras[currentCameraIndex]->GetProjMatrix();
 		for (int i = 0; i < particles.size(); i++)
 			particles.at(i).move(dt);
 
 		using namespace Egg::Math;
 		struct CameraDepthComparator {
-			Float3 ahead;
+			float3 ahead;
 			bool operator()(const Particle& a,
 				const Particle& b) {
 				return

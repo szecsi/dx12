@@ -35,7 +35,7 @@ struct VsosTrafo
 	float4 pos : SV_POSITION;
 	float3 normal : NORMAL;
 	float3 tangent : TANGENT;
-	float3 binormal : BINORMAL;
+	float3 bitangent : bitangent;
 	float2 texCoord : TEXCOORDS;
 	float3 lightDirTS: LIGHTDIRTS;
 	float3 viewDirTS: VIEWDIRTS;
@@ -53,23 +53,23 @@ float3 calculateNormal(float3 p0, float3 p1, float3 p2) {
 	return normalize(normal);
 }
 
-float3 calculateBinormal(float3 p0, float3 p1, float3 p2, float2 t0, float2 t1, float2 t2) {
+float3 calculateBitangent(float3 p0, float3 p1, float3 p2, float2 t0, float2 t1, float2 t2) {
 	float3 edge1 = p1 - p0;
 	float3 edge2 = p2 - p0;
 	float2 edge1uv = t1 - t0;
 	float2 edge2uv = t2 - t0;
 
-	float3 binormal;
+	float3 bitangent;
 
 	float cp = edge1uv.y * edge2uv.x - edge1uv.x * edge2uv.y;
 
 	if (cp != 0.0f) {
 		float mul = 1.0f / cp;
-		binormal = (edge1 * -edge2uv.x + edge2 * edge1uv.x) * mul;
+		bitangent = (edge1 * -edge2uv.x + edge2 * edge1uv.x) * mul;
 
-		binormal = normalize(binormal);
+		bitangent = normalize(bitangent);
 	}
-	return binormal;
+	return bitangent;
 }
 
 float3 calculateTangent(float3 p0, float3 p1, float3 p2, float2 t0, float2 t1, float2 t2) {
@@ -106,17 +106,17 @@ VsosTrafo vsSponge(IaosTrafo input, uint vid : SV_VertexID)
 	float3 lightDir = viewDir;//float3(-1.0, 1.0, -1.0);// normalize(lightPos.xyz - descartesPos * lightPos.w);
 
 	float3 normal = calculateNormal(controlPositions[input.neighbourIds.x].xyz, controlPositions[input.neighbourIds.y].xyz, controlPositions[input.neighbourIds.z].xyz);
-	float3 binormal = calculateBinormal(controlPositions[input.neighbourIds.x].xyz, controlPositions[input.neighbourIds.y].xyz, controlPositions[input.neighbourIds.z].xyz,
+	float3 bitangent = calculateBitangent(controlPositions[input.neighbourIds.x].xyz, controlPositions[input.neighbourIds.y].xyz, controlPositions[input.neighbourIds.z].xyz,
 		input.neighbourTex0, input.neighbourTex1, input.neighbourTex2);
 	float3 tangent = calculateTangent(controlPositions[input.neighbourIds.x].xyz, controlPositions[input.neighbourIds.y].xyz, controlPositions[input.neighbourIds.z].xyz,
 		input.neighbourTex0, input.neighbourTex1, input.neighbourTex2);
 
 	//normal = normal.xyz / 2.0 + float3(0.5, 0.5, 0.5);
-	//binormal = binormal.xyz / 2.0 + float3(0.5, 0.5, 0.5);
+	//bitangent = bitangent.xyz / 2.0 + float3(0.5, 0.5, 0.5);
 	//tangent = tangent.xyz / 2.0 + float3(0.5, 0.5, 0.5);
 
 	float3 t = normalize(mul(float4(tangent, 0.0f), modelMatrixInverse).xyz);
-	float3 b = normalize(mul(float4(binormal, 0.0f), modelMatrixInverse).xyz);
+	float3 b = normalize(mul(float4(bitangent, 0.0f), modelMatrixInverse).xyz);
 	float3 n = normalize(mul(float4(normal, 0.0f), modelMatrixInverse).xyz);
 	float3x3 tbn = { t, -b, n };
 
@@ -125,7 +125,7 @@ VsosTrafo vsSponge(IaosTrafo input, uint vid : SV_VertexID)
 	output.pos = mul(worldPos, modelViewProjMatrix);
 	output.normal = n;
 	output.tangent = t;
-	output.binormal = b;
+	output.bitangent = b;
 	output.texCoord = input.texCoord;
 	output.lightDirTS = mul(tbn, lightDir);
 	output.viewDirTS = mul(tbn, viewDir);

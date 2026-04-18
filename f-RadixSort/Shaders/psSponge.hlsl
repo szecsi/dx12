@@ -12,7 +12,7 @@ struct VsosTrafo
 	float4 pos : SV_POSITION;
 	float3 normal : NORMAL;
 	float3 tangent : TANGENT;
-	float3 binormal : BINORMAL;
+	float3 bitangent : BITANGENT;
 	float2 texCoord : TEXCOORDS;
 	float3 lightDirTS: LIGHTDIRTS;
 	float3 viewDirTS: VIEWDIRTS;
@@ -56,7 +56,7 @@ float4 psSponge(VsosTrafo input) : SV_Target
 
 	float3 kd = diffuseTex.Sample(ss, ptex).xyz;
 
-	float3x3 tbn = { input.tangent, input.binormal, input.normal };
+	float3x3 tbn = { input.tangent, input.bitangent, input.normal };
 	float3 worldNormal = normalize(mul(n, tbn));
 
 	float3 reliefPos = input.worldPos.xyz + worldNormal * bumpHeight;

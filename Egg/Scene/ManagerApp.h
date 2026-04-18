@@ -135,11 +135,12 @@ namespace Egg {
 					camera->GetViewMatrix() *
 					camera->GetProjMatrix();
 				perFrameCb->rayDirTransform = camera->GetRayDirMatrix();
-				perFrameCb->cameraPos = Float4(camera->GetEyePosition(), 1);
-				perFrameCb->lightPos = Float4(0, 20, 0, 1);
-				perFrameCb->lightPowerDensity = Float4(0, 0, 1000, 0);
-				perFrameCb->lightPos2 = Float4(0, 20, 0.5, 1);
-				perFrameCb->lightPowerDensity2 = Float4(1000, 1000, 0, 0);
+				perFrameCb->cameraPos = float4(camera->GetEyePosition(), 1);
+				perFrameCb->ahead = float4(camera->GetAhead(), 0);
+				perFrameCb->lightPos = float4(0, 20, 0, 1);
+				perFrameCb->lightPowerDensity = float4(0, 0, 1000, 0);
+				perFrameCb->lightPos2 = float4(0, 20, 0.5, 1);
+				perFrameCb->lightPowerDensity2 = float4(1000, 1000, 0, 0);
 				perFrameCb.Upload();
 			}
 			virtual void LoadAssets() override {

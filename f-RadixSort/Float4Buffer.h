@@ -4,21 +4,21 @@
 #include <string>
 #include "Egg/Math/Math.h"
 
-class Float4Buffer {
+class float4Buffer {
 	com_ptr<ID3D12Resource>		buffer;
 	com_ptr<ID3D12Resource>     uploadBuffer;
 	com_ptr<ID3D12Resource>		readbackBuffer;
 	com_ptr<ID3D11Resource>		wrappedBuffer;
-	uint bufferFloat4Size;
+	uint bufferfloat4Size;
 	std::wstring debugName;
 	bool sharedWithD3D11;
 public:
 	com_ptr<ID3D11Resource>		getWrappedBuffer() { return wrappedBuffer; }
 
-	Float4Buffer(
+	float4Buffer(
 		std::wstring debugName,
 		bool sharedWithD3D11 = false,
-		uint bufferFloat4Size = 32 * 32 * 32) :debugName(debugName), sharedWithD3D11(sharedWithD3D11), bufferFloat4Size(bufferFloat4Size) {
+		uint bufferfloat4Size = 32 * 32 * 32) :debugName(debugName), sharedWithD3D11(sharedWithD3D11), bufferfloat4Size(bufferfloat4Size) {
 	}
 
 	void createResources(com_ptr<ID3D12Device> device,
@@ -26,7 +26,7 @@ public:
 		const D3D12_CPU_DESCRIPTOR_HANDLE& handle
 	) {
 		const D3D12_HEAP_PROPERTIES defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-		const D3D12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(4 * 4 * bufferFloat4Size,
+		const D3D12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(4 * 4 * bufferfloat4Size,
 			D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, 0);
 		DX_API("commited resource")
 			device->CreateCommittedResource(
@@ -42,7 +42,7 @@ public:
 		CD3DX12_HEAP_PROPERTIES rbheapProps(D3D12_HEAP_TYPE_READBACK);
 
 		D3D12_RESOURCE_ALLOCATION_INFO info = {};
-		info.SizeInBytes = 4 * 4 * bufferFloat4Size;
+		info.SizeInBytes = 4 * 4 * bufferfloat4Size;
 		info.Alignment = 0;
 		const D3D12_RESOURCE_DESC tempBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(info);
 		DX_API("readback resource")
@@ -90,7 +90,7 @@ public:
 		uavDesc.Buffer.CounterOffsetInBytes = 0;
 		uavDesc.Buffer.FirstElement = 0;
 		uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-		uavDesc.Buffer.NumElements = bufferFloat4Size;
+		uavDesc.Buffer.NumElements = bufferfloat4Size;
 		uavDesc.Buffer.StructureByteStride = 0;
 		// create uav
 		device->CreateUnorderedAccessView(buffer.Get(), nullptr, &uavDesc, handle);
@@ -132,10 +132,10 @@ public:
 
 	void fillRandom() {
 		void* pData;
-		CD3DX12_RANGE range(0, bufferFloat4Size);
+		CD3DX12_RANGE range(0, bufferfloat4Size);
 		uploadBuffer->Map(0, &range, &pData);
-		Egg::Math::Float4* m_arrayDataBegin = reinterpret_cast<Egg::Math::Float4*>(pData);
-		Egg::Math::Float4* m_arrayDataEnd = m_arrayDataBegin + bufferFloat4Size;
+		Egg::Math::float4* m_arrayDataBegin = reinterpret_cast<Egg::Math::float4*>(pData);
+		Egg::Math::float4* m_arrayDataEnd = m_arrayDataBegin + bufferfloat4Size;
 
 		for (auto ip = m_arrayDataBegin; ip < m_arrayDataEnd; ip++) {
 			ip->Random();

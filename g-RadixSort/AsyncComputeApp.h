@@ -4,7 +4,7 @@
 #include <d3d11on12.h>
 #include <algorithm>
 
-#include "Float4Buffer.h"
+#include "float4Buffer.h"
 #include "RawBuffer.h"
 #include "ComputePass.h"
 #include "WaveSort.h"

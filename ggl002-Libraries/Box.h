@@ -15,17 +15,17 @@ public:
 
 	Egg::ConstantBuffer<PerObjectCb> constantBuffer;
 
-	Float4x4 scale;
-	Float4x4 rotation;
-	Float4x4 translation;
-	Float4x4 meshTransform;
+	float4x4 scale;
+	float4x4 rotation;
+	float4x4 translation;
+	float4x4 meshTransform;
 
-	Float3 position;
-	Float3 speed;
-	Float3 gravity;
+	float3 position;
+	float3 speed;
+	float3 gravity;
 
 	Box(Egg::Mesh::Shaded::P shadedm) : shadedMesh{ shadedm }, constantBuffer{}, scale{}, rotation{}, translation{}, meshTransform{} {
-		gravity = Float3{ 0.0f, -0.931f, 0.0f };
+		gravity = float3{ 0.0f, -0.931f, 0.0f };
 	}
 
 	void Update(float dt, float T) {
@@ -37,7 +37,7 @@ public:
 			position.y = -1.0f;
 		}
 
-		translation = Float4x4::Translation(position);
+		translation = float4x4::Translation(position);
 
 		constantBuffer->modelTransform = meshTransform * scale * rotation * translation;
 		constantBuffer.Upload();

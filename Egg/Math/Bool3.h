@@ -1,15 +1,15 @@
 #pragma once
 
-#include "Bool2.h"
-#include "Bool4.h"
+#include "bool2.h"
+#include "bool4.h"
 
 namespace Egg {
     namespace Math {
 
-        class Bool2;
-        class Bool4;
+        class bool2;
+        class bool4;
 
-        class Bool3 {
+        class bool3 {
         public:
             union {
                 struct {
@@ -18,165 +18,165 @@ namespace Egg {
                     bool z;
                 };
 
-                Bool2Swizzle<Bool2, 3, 0, 0> xx;
-                Bool2Swizzle<Bool2, 3, 0, 1> xy;
-                Bool2Swizzle<Bool2, 3, 0, 2> xz;
-                Bool2Swizzle<Bool2, 3, 1, 0> yx;
-                Bool2Swizzle<Bool2, 3, 1, 1> yy;
-                Bool2Swizzle<Bool2, 3, 1, 2> yz;
-                Bool2Swizzle<Bool2, 3, 2, 0> zx;
-                Bool2Swizzle<Bool2, 3, 2, 1> zy;
-                Bool2Swizzle<Bool2, 3, 2, 2> zz;
+                bool2Swizzle<bool2, 3, 0, 0> xx;
+                bool2Swizzle<bool2, 3, 0, 1> xy;
+                bool2Swizzle<bool2, 3, 0, 2> xz;
+                bool2Swizzle<bool2, 3, 1, 0> yx;
+                bool2Swizzle<bool2, 3, 1, 1> yy;
+                bool2Swizzle<bool2, 3, 1, 2> yz;
+                bool2Swizzle<bool2, 3, 2, 0> zx;
+                bool2Swizzle<bool2, 3, 2, 1> zy;
+                bool2Swizzle<bool2, 3, 2, 2> zz;
 
-                Bool3Swizzle<Bool3, 3, 0, 0, 0> xxx;
-                Bool3Swizzle<Bool3, 3, 0, 0, 1> xxy;
-                Bool3Swizzle<Bool3, 3, 0, 0, 2> xxz;
-                Bool3Swizzle<Bool3, 3, 0, 1, 0> xyx;
-                Bool3Swizzle<Bool3, 3, 0, 1, 1> xyy;
-                Bool3Swizzle<Bool3, 3, 0, 1, 2> xyz;
-                Bool3Swizzle<Bool3, 3, 0, 2, 0> xzx;
-                Bool3Swizzle<Bool3, 3, 0, 2, 1> xzy;
-                Bool3Swizzle<Bool3, 3, 0, 2, 2> xzz;
-                Bool3Swizzle<Bool3, 3, 1, 0, 0> yxx;
-                Bool3Swizzle<Bool3, 3, 1, 0, 1> yxy;
-                Bool3Swizzle<Bool3, 3, 1, 0, 2> yxz;
-                Bool3Swizzle<Bool3, 3, 1, 1, 0> yyx;
-                Bool3Swizzle<Bool3, 3, 1, 1, 1> yyy;
-                Bool3Swizzle<Bool3, 3, 1, 1, 2> yyz;
-                Bool3Swizzle<Bool3, 3, 1, 2, 0> yzx;
-                Bool3Swizzle<Bool3, 3, 1, 2, 1> yzy;
-                Bool3Swizzle<Bool3, 3, 1, 2, 2> yzz;
-                Bool3Swizzle<Bool3, 3, 2, 0, 0> zxx;
-                Bool3Swizzle<Bool3, 3, 2, 0, 1> zxy;
-                Bool3Swizzle<Bool3, 3, 2, 0, 2> zxz;
-                Bool3Swizzle<Bool3, 3, 2, 1, 0> zyx;
-                Bool3Swizzle<Bool3, 3, 2, 1, 1> zyy;
-                Bool3Swizzle<Bool3, 3, 2, 1, 2> zyz;
-                Bool3Swizzle<Bool3, 3, 2, 2, 0> zzx;
-                Bool3Swizzle<Bool3, 3, 2, 2, 1> zzy;
-                Bool3Swizzle<Bool3, 3, 2, 2, 2> zzz;
+                bool3Swizzle<bool3, 3, 0, 0, 0> xxx;
+                bool3Swizzle<bool3, 3, 0, 0, 1> xxy;
+                bool3Swizzle<bool3, 3, 0, 0, 2> xxz;
+                bool3Swizzle<bool3, 3, 0, 1, 0> xyx;
+                bool3Swizzle<bool3, 3, 0, 1, 1> xyy;
+                bool3Swizzle<bool3, 3, 0, 1, 2> xyz;
+                bool3Swizzle<bool3, 3, 0, 2, 0> xzx;
+                bool3Swizzle<bool3, 3, 0, 2, 1> xzy;
+                bool3Swizzle<bool3, 3, 0, 2, 2> xzz;
+                bool3Swizzle<bool3, 3, 1, 0, 0> yxx;
+                bool3Swizzle<bool3, 3, 1, 0, 1> yxy;
+                bool3Swizzle<bool3, 3, 1, 0, 2> yxz;
+                bool3Swizzle<bool3, 3, 1, 1, 0> yyx;
+                bool3Swizzle<bool3, 3, 1, 1, 1> yyy;
+                bool3Swizzle<bool3, 3, 1, 1, 2> yyz;
+                bool3Swizzle<bool3, 3, 1, 2, 0> yzx;
+                bool3Swizzle<bool3, 3, 1, 2, 1> yzy;
+                bool3Swizzle<bool3, 3, 1, 2, 2> yzz;
+                bool3Swizzle<bool3, 3, 2, 0, 0> zxx;
+                bool3Swizzle<bool3, 3, 2, 0, 1> zxy;
+                bool3Swizzle<bool3, 3, 2, 0, 2> zxz;
+                bool3Swizzle<bool3, 3, 2, 1, 0> zyx;
+                bool3Swizzle<bool3, 3, 2, 1, 1> zyy;
+                bool3Swizzle<bool3, 3, 2, 1, 2> zyz;
+                bool3Swizzle<bool3, 3, 2, 2, 0> zzx;
+                bool3Swizzle<bool3, 3, 2, 2, 1> zzy;
+                bool3Swizzle<bool3, 3, 2, 2, 2> zzz;
 
-                Bool4Swizzle<Bool4, 3, 0, 0, 0, 0> xxxx;
-                Bool4Swizzle<Bool4, 3, 0, 0, 1, 0> xxxy;
-                Bool4Swizzle<Bool4, 3, 0, 0, 2, 0> xxxz;
-                Bool4Swizzle<Bool4, 3, 0, 0, 0, 1> xxyx;
-                Bool4Swizzle<Bool4, 3, 0, 0, 1, 1> xxyy;
-                Bool4Swizzle<Bool4, 3, 0, 0, 2, 1> xxyz;
-                Bool4Swizzle<Bool4, 3, 0, 0, 0, 2> xxzx;
-                Bool4Swizzle<Bool4, 3, 0, 0, 1, 2> xxzy;
-                Bool4Swizzle<Bool4, 3, 0, 0, 2, 2> xxzz;
-                Bool4Swizzle<Bool4, 3, 0, 1, 0, 0> xyxx;
-                Bool4Swizzle<Bool4, 3, 0, 1, 1, 0> xyxy;
-                Bool4Swizzle<Bool4, 3, 0, 1, 2, 0> xyxz;
-                Bool4Swizzle<Bool4, 3, 0, 1, 0, 1> xyyx;
-                Bool4Swizzle<Bool4, 3, 0, 1, 1, 1> xyyy;
-                Bool4Swizzle<Bool4, 3, 0, 1, 2, 1> xyyz;
-                Bool4Swizzle<Bool4, 3, 0, 1, 0, 2> xyzx;
-                Bool4Swizzle<Bool4, 3, 0, 1, 1, 2> xyzy;
-                Bool4Swizzle<Bool4, 3, 0, 1, 2, 2> xyzz;
-                Bool4Swizzle<Bool4, 3, 0, 2, 0, 0> xzxx;
-                Bool4Swizzle<Bool4, 3, 0, 2, 1, 0> xzxy;
-                Bool4Swizzle<Bool4, 3, 0, 2, 2, 0> xzxz;
-                Bool4Swizzle<Bool4, 3, 0, 2, 0, 1> xzyx;
-                Bool4Swizzle<Bool4, 3, 0, 2, 1, 1> xzyy;
-                Bool4Swizzle<Bool4, 3, 0, 2, 2, 1> xzyz;
-                Bool4Swizzle<Bool4, 3, 0, 2, 0, 2> xzzx;
-                Bool4Swizzle<Bool4, 3, 0, 2, 1, 2> xzzy;
-                Bool4Swizzle<Bool4, 3, 0, 2, 2, 2> xzzz;
-                Bool4Swizzle<Bool4, 3, 1, 0, 0, 0> yxxx;
-                Bool4Swizzle<Bool4, 3, 1, 0, 1, 0> yxxy;
-                Bool4Swizzle<Bool4, 3, 1, 0, 2, 0> yxxz;
-                Bool4Swizzle<Bool4, 3, 1, 0, 0, 1> yxyx;
-                Bool4Swizzle<Bool4, 3, 1, 0, 1, 1> yxyy;
-                Bool4Swizzle<Bool4, 3, 1, 0, 2, 1> yxyz;
-                Bool4Swizzle<Bool4, 3, 1, 0, 0, 2> yxzx;
-                Bool4Swizzle<Bool4, 3, 1, 0, 1, 2> yxzy;
-                Bool4Swizzle<Bool4, 3, 1, 0, 2, 2> yxzz;
-                Bool4Swizzle<Bool4, 3, 1, 1, 0, 0> yyxx;
-                Bool4Swizzle<Bool4, 3, 1, 1, 1, 0> yyxy;
-                Bool4Swizzle<Bool4, 3, 1, 1, 2, 0> yyxz;
-                Bool4Swizzle<Bool4, 3, 1, 1, 0, 1> yyyx;
-                Bool4Swizzle<Bool4, 3, 1, 1, 1, 1> yyyy;
-                Bool4Swizzle<Bool4, 3, 1, 1, 2, 1> yyyz;
-                Bool4Swizzle<Bool4, 3, 1, 1, 0, 2> yyzx;
-                Bool4Swizzle<Bool4, 3, 1, 1, 1, 2> yyzy;
-                Bool4Swizzle<Bool4, 3, 1, 1, 2, 2> yyzz;
-                Bool4Swizzle<Bool4, 3, 1, 2, 0, 0> yzxx;
-                Bool4Swizzle<Bool4, 3, 1, 2, 1, 0> yzxy;
-                Bool4Swizzle<Bool4, 3, 1, 2, 2, 0> yzxz;
-                Bool4Swizzle<Bool4, 3, 1, 2, 0, 1> yzyx;
-                Bool4Swizzle<Bool4, 3, 1, 2, 1, 1> yzyy;
-                Bool4Swizzle<Bool4, 3, 1, 2, 2, 1> yzyz;
-                Bool4Swizzle<Bool4, 3, 1, 2, 0, 2> yzzx;
-                Bool4Swizzle<Bool4, 3, 1, 2, 1, 2> yzzy;
-                Bool4Swizzle<Bool4, 3, 1, 2, 2, 2> yzzz;
-                Bool4Swizzle<Bool4, 3, 2, 0, 0, 0> zxxx;
-                Bool4Swizzle<Bool4, 3, 2, 0, 1, 0> zxxy;
-                Bool4Swizzle<Bool4, 3, 2, 0, 2, 0> zxxz;
-                Bool4Swizzle<Bool4, 3, 2, 0, 0, 1> zxyx;
-                Bool4Swizzle<Bool4, 3, 2, 0, 1, 1> zxyy;
-                Bool4Swizzle<Bool4, 3, 2, 0, 2, 1> zxyz;
-                Bool4Swizzle<Bool4, 3, 2, 0, 0, 2> zxzx;
-                Bool4Swizzle<Bool4, 3, 2, 0, 1, 2> zxzy;
-                Bool4Swizzle<Bool4, 3, 2, 0, 2, 2> zxzz;
-                Bool4Swizzle<Bool4, 3, 2, 1, 0, 0> zyxx;
-                Bool4Swizzle<Bool4, 3, 2, 1, 1, 0> zyxy;
-                Bool4Swizzle<Bool4, 3, 2, 1, 2, 0> zyxz;
-                Bool4Swizzle<Bool4, 3, 2, 1, 0, 1> zyyx;
-                Bool4Swizzle<Bool4, 3, 2, 1, 1, 1> zyyy;
-                Bool4Swizzle<Bool4, 3, 2, 1, 2, 1> zyyz;
-                Bool4Swizzle<Bool4, 3, 2, 1, 0, 2> zyzx;
-                Bool4Swizzle<Bool4, 3, 2, 1, 1, 2> zyzy;
-                Bool4Swizzle<Bool4, 3, 2, 1, 2, 2> zyzz;
-                Bool4Swizzle<Bool4, 3, 2, 2, 0, 0> zzxx;
-                Bool4Swizzle<Bool4, 3, 2, 2, 1, 0> zzxy;
-                Bool4Swizzle<Bool4, 3, 2, 2, 2, 0> zzxz;
-                Bool4Swizzle<Bool4, 3, 2, 2, 0, 1> zzyx;
-                Bool4Swizzle<Bool4, 3, 2, 2, 1, 1> zzyy;
-                Bool4Swizzle<Bool4, 3, 2, 2, 2, 1> zzyz;
-                Bool4Swizzle<Bool4, 3, 2, 2, 0, 2> zzzx;
-                Bool4Swizzle<Bool4, 3, 2, 2, 1, 2> zzzy;
-                Bool4Swizzle<Bool4, 3, 2, 2, 2, 2> zzzz;
+                bool4Swizzle<bool4, 3, 0, 0, 0, 0> xxxx;
+                bool4Swizzle<bool4, 3, 0, 0, 1, 0> xxxy;
+                bool4Swizzle<bool4, 3, 0, 0, 2, 0> xxxz;
+                bool4Swizzle<bool4, 3, 0, 0, 0, 1> xxyx;
+                bool4Swizzle<bool4, 3, 0, 0, 1, 1> xxyy;
+                bool4Swizzle<bool4, 3, 0, 0, 2, 1> xxyz;
+                bool4Swizzle<bool4, 3, 0, 0, 0, 2> xxzx;
+                bool4Swizzle<bool4, 3, 0, 0, 1, 2> xxzy;
+                bool4Swizzle<bool4, 3, 0, 0, 2, 2> xxzz;
+                bool4Swizzle<bool4, 3, 0, 1, 0, 0> xyxx;
+                bool4Swizzle<bool4, 3, 0, 1, 1, 0> xyxy;
+                bool4Swizzle<bool4, 3, 0, 1, 2, 0> xyxz;
+                bool4Swizzle<bool4, 3, 0, 1, 0, 1> xyyx;
+                bool4Swizzle<bool4, 3, 0, 1, 1, 1> xyyy;
+                bool4Swizzle<bool4, 3, 0, 1, 2, 1> xyyz;
+                bool4Swizzle<bool4, 3, 0, 1, 0, 2> xyzx;
+                bool4Swizzle<bool4, 3, 0, 1, 1, 2> xyzy;
+                bool4Swizzle<bool4, 3, 0, 1, 2, 2> xyzz;
+                bool4Swizzle<bool4, 3, 0, 2, 0, 0> xzxx;
+                bool4Swizzle<bool4, 3, 0, 2, 1, 0> xzxy;
+                bool4Swizzle<bool4, 3, 0, 2, 2, 0> xzxz;
+                bool4Swizzle<bool4, 3, 0, 2, 0, 1> xzyx;
+                bool4Swizzle<bool4, 3, 0, 2, 1, 1> xzyy;
+                bool4Swizzle<bool4, 3, 0, 2, 2, 1> xzyz;
+                bool4Swizzle<bool4, 3, 0, 2, 0, 2> xzzx;
+                bool4Swizzle<bool4, 3, 0, 2, 1, 2> xzzy;
+                bool4Swizzle<bool4, 3, 0, 2, 2, 2> xzzz;
+                bool4Swizzle<bool4, 3, 1, 0, 0, 0> yxxx;
+                bool4Swizzle<bool4, 3, 1, 0, 1, 0> yxxy;
+                bool4Swizzle<bool4, 3, 1, 0, 2, 0> yxxz;
+                bool4Swizzle<bool4, 3, 1, 0, 0, 1> yxyx;
+                bool4Swizzle<bool4, 3, 1, 0, 1, 1> yxyy;
+                bool4Swizzle<bool4, 3, 1, 0, 2, 1> yxyz;
+                bool4Swizzle<bool4, 3, 1, 0, 0, 2> yxzx;
+                bool4Swizzle<bool4, 3, 1, 0, 1, 2> yxzy;
+                bool4Swizzle<bool4, 3, 1, 0, 2, 2> yxzz;
+                bool4Swizzle<bool4, 3, 1, 1, 0, 0> yyxx;
+                bool4Swizzle<bool4, 3, 1, 1, 1, 0> yyxy;
+                bool4Swizzle<bool4, 3, 1, 1, 2, 0> yyxz;
+                bool4Swizzle<bool4, 3, 1, 1, 0, 1> yyyx;
+                bool4Swizzle<bool4, 3, 1, 1, 1, 1> yyyy;
+                bool4Swizzle<bool4, 3, 1, 1, 2, 1> yyyz;
+                bool4Swizzle<bool4, 3, 1, 1, 0, 2> yyzx;
+                bool4Swizzle<bool4, 3, 1, 1, 1, 2> yyzy;
+                bool4Swizzle<bool4, 3, 1, 1, 2, 2> yyzz;
+                bool4Swizzle<bool4, 3, 1, 2, 0, 0> yzxx;
+                bool4Swizzle<bool4, 3, 1, 2, 1, 0> yzxy;
+                bool4Swizzle<bool4, 3, 1, 2, 2, 0> yzxz;
+                bool4Swizzle<bool4, 3, 1, 2, 0, 1> yzyx;
+                bool4Swizzle<bool4, 3, 1, 2, 1, 1> yzyy;
+                bool4Swizzle<bool4, 3, 1, 2, 2, 1> yzyz;
+                bool4Swizzle<bool4, 3, 1, 2, 0, 2> yzzx;
+                bool4Swizzle<bool4, 3, 1, 2, 1, 2> yzzy;
+                bool4Swizzle<bool4, 3, 1, 2, 2, 2> yzzz;
+                bool4Swizzle<bool4, 3, 2, 0, 0, 0> zxxx;
+                bool4Swizzle<bool4, 3, 2, 0, 1, 0> zxxy;
+                bool4Swizzle<bool4, 3, 2, 0, 2, 0> zxxz;
+                bool4Swizzle<bool4, 3, 2, 0, 0, 1> zxyx;
+                bool4Swizzle<bool4, 3, 2, 0, 1, 1> zxyy;
+                bool4Swizzle<bool4, 3, 2, 0, 2, 1> zxyz;
+                bool4Swizzle<bool4, 3, 2, 0, 0, 2> zxzx;
+                bool4Swizzle<bool4, 3, 2, 0, 1, 2> zxzy;
+                bool4Swizzle<bool4, 3, 2, 0, 2, 2> zxzz;
+                bool4Swizzle<bool4, 3, 2, 1, 0, 0> zyxx;
+                bool4Swizzle<bool4, 3, 2, 1, 1, 0> zyxy;
+                bool4Swizzle<bool4, 3, 2, 1, 2, 0> zyxz;
+                bool4Swizzle<bool4, 3, 2, 1, 0, 1> zyyx;
+                bool4Swizzle<bool4, 3, 2, 1, 1, 1> zyyy;
+                bool4Swizzle<bool4, 3, 2, 1, 2, 1> zyyz;
+                bool4Swizzle<bool4, 3, 2, 1, 0, 2> zyzx;
+                bool4Swizzle<bool4, 3, 2, 1, 1, 2> zyzy;
+                bool4Swizzle<bool4, 3, 2, 1, 2, 2> zyzz;
+                bool4Swizzle<bool4, 3, 2, 2, 0, 0> zzxx;
+                bool4Swizzle<bool4, 3, 2, 2, 1, 0> zzxy;
+                bool4Swizzle<bool4, 3, 2, 2, 2, 0> zzxz;
+                bool4Swizzle<bool4, 3, 2, 2, 0, 1> zzyx;
+                bool4Swizzle<bool4, 3, 2, 2, 1, 1> zzyy;
+                bool4Swizzle<bool4, 3, 2, 2, 2, 1> zzyz;
+                bool4Swizzle<bool4, 3, 2, 2, 0, 2> zzzx;
+                bool4Swizzle<bool4, 3, 2, 2, 1, 2> zzzy;
+                bool4Swizzle<bool4, 3, 2, 2, 2, 2> zzzz;
             };
 
-            Bool3(bool x, bool y, bool z);
+            bool3(bool x, bool y, bool z);
 
-            Bool3(bool x, const Bool2 & yz);
+            bool3(bool x, const bool2 & yz);
 
-            Bool3(const Bool2 & xy, bool z);
+            bool3(const bool2 & xy, bool z);
 
-            Bool3(const Bool3 & xyz);
+            bool3(const bool3 & xyz);
 
-            Bool3();
+            bool3();
 
-            Bool3 & operator=(const Bool3 & rhs) noexcept;
-Bool3 & operator=(bool rhs) noexcept;
+            bool3 & operator=(const bool3 & rhs) noexcept;
+bool3 & operator=(bool rhs) noexcept;
 
-            Bool3 operator||(const Bool3 & rhs) const noexcept;
+            bool3 operator||(const bool3 & rhs) const noexcept;
 
-            Bool3 operator&&(const Bool3 & rhs) const noexcept;
+            bool3 operator&&(const bool3 & rhs) const noexcept;
 
-            Bool3 operator==(const Bool3 & rhs) const noexcept;
+            bool3 operator==(const bool3 & rhs) const noexcept;
 
-            Bool3 operator!=(const Bool3 & rhs) const noexcept;
+            bool3 operator!=(const bool3 & rhs) const noexcept;
 
-            static Bool3 Random() noexcept;
+            static bool3 Random() noexcept;
 
             bool Any() const noexcept;
 
             bool All() const noexcept;
 
-            Bool3 operator!() const noexcept;
+            bool3 operator!() const noexcept;
 
-            Bool3 & operator|=(const Bool3 & rhs) noexcept;
+            bool3 & operator|=(const bool3 & rhs) noexcept;
 
-            Bool3 & operator&=(const Bool3 & rhs) noexcept;
+            bool3 & operator&=(const bool3 & rhs) noexcept;
 
-            static const Bool3 One;
-            static const Bool3 Zero;
-            static const Bool3 UnitX;
-            static const Bool3 UnitY;
-            static const Bool3 UnitZ;
+            static const bool3 One;
+            static const bool3 Zero;
+            static const bool3 UnitX;
+            static const bool3 UnitY;
+            static const bool3 UnitZ;
         };
     }
 }

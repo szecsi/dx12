@@ -406,7 +406,7 @@ public:
 	void renderTestMesh(Microsoft::WRL::ComPtr<ID3D11DeviceContext> context);
 
 	Egg11::Math::float3 calculateNormal(Egg11::Math::float3 p0, Egg11::Math::float3 p1, Egg11::Math::float3 p2);
-	Egg11::Math::float3 calculateBinormal(Egg11::Math::float3 p0, Egg11::Math::float3 p1, Egg11::Math::float3 p2, Egg11::Math::float2 t0, Egg11::Math::float2 t1, Egg11::Math::float2 t2);
+	Egg11::Math::float3 calculateBitangent(Egg11::Math::float3 p0, Egg11::Math::float3 p1, Egg11::Math::float3 p2, Egg11::Math::float2 t0, Egg11::Math::float2 t1, Egg11::Math::float2 t2);
 	Egg11::Math::float3 calculateTangent(Egg11::Math::float3 p0, Egg11::Math::float3 p1, Egg11::Math::float3 p2, Egg11::Math::float2 t0, Egg11::Math::float2 t1, Egg11::Math::float2 t2);
 	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> loadTexture(std::string name);
 

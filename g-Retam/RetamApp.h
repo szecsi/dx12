@@ -4,12 +4,17 @@
 #include <d3d11on12.h>
 #include <algorithm>
 
-#include "Float4Buffer.h"
-#include "RawBuffer.h"
-#include "ComputePass.h"
+#include "Egg/Compute/RawBuffer.h"
+#include "Egg/Compute/ComputePass.h"
+#include "Egg/Compute/FenceChain.h"
 #include "WaveSort.h"
-#include "FenceChain.h"
-#include "Particle.h"
+
+#include "Shaders/Retam/RetamCb.hlsli"
+#include "Egg/Script/StructReflectionMap.h"
+#include "Egg/ConstantBuffer.hpp"
+
+#include <commctrl.h>
+#pragma comment(lib, "comctl32.lib")
 
 bool verifyStarterCount(uint* data, uint* starterCount) {
 	uint prev = 0xffffffff;
@@ -83,6 +88,109 @@ struct KeyComp {
 class RetamApp : public Egg::Script::ScriptedApp {
 
 	uint frameCount;
+
+	Egg::ConstantBuffer<RetamMaterialCb> retamMaterialCb;
+
+	struct FloatControl {
+		HWND slider;
+		HWND valueLabel;
+		float* ptr;
+		float minVal, maxVal;
+	};
+	static constexpr int GUI_STEPS = 1000;
+	HWND guiHwnd = nullptr;
+	std::vector<FloatControl> floatControls;
+
+	static LRESULT CALLBACK GuiWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+		if (msg == WM_CREATE) {
+			SetWindowLongPtr(hwnd, GWLP_USERDATA,
+				reinterpret_cast<LONG_PTR>(reinterpret_cast<CREATESTRUCT*>(lp)->lpCreateParams));
+			return 0;
+		}
+		auto* self = reinterpret_cast<RetamApp*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+		if (msg == WM_HSCROLL && self) {
+			HWND hCtrl = reinterpret_cast<HWND>(lp);
+			for (auto& fc : self->floatControls) {
+				if (fc.slider == hCtrl) {
+					int pos = (int)SendMessage(hCtrl, TBM_GETPOS, 0, 0);
+					*fc.ptr = fc.minVal + (fc.maxVal - fc.minVal) * pos / (float)GUI_STEPS;
+					wchar_t buf[32];
+					swprintf_s(buf, L"%.3f", *fc.ptr);
+					SetWindowTextW(fc.valueLabel, buf);
+					break;
+				}
+			}
+			return 0;
+		}
+		if (msg == WM_CLOSE) { ShowWindow(hwnd, SW_HIDE); return 0; }
+		return DefWindowProcW(hwnd, msg, wp, lp);
+	}
+
+	void createGui() {
+		INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_BAR_CLASSES };
+		InitCommonControlsEx(&icc);
+
+		WNDCLASSEXW wc = {};
+		wc.cbSize = sizeof(wc);
+		wc.lpfnWndProc = GuiWndProc;
+		wc.hInstance = GetModuleHandle(nullptr);
+		wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+		wc.lpszClassName = L"RetamGuiPanel";
+		RegisterClassExW(&wc);
+
+		guiHwnd = CreateWindowExW(WS_EX_TOOLWINDOW, L"RetamGuiPanel", L"RetamMaterialCb",
+			WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+			544, 0, 300, 200, nullptr, nullptr, GetModuleHandle(nullptr), this);
+
+		auto& registry = Egg::Script::StructReflectionMap::getMap();
+		auto it = registry.find("RetamMaterialCb");
+		if (it == registry.end()) return;
+
+		const int RH = 30, LW = 110, SW = 130, VW = 58, M = 8;
+		int y = M;
+
+		for (auto& member : it->second) {
+			float minVal = 0.f, maxVal = 1.f;
+			if (member.name == "lineSize")   { minVal = 0.f; maxVal = 2.f; }
+			if (member.name == "fading")	 { minVal = 0.f; maxVal = 1.f; }
+			if (member.name == "texScale")   { minVal = 0.f; maxVal = 10.f; }
+			if (member.name == "crossAngle") { minVal = 0.f; maxVal = 6.2832f; }
+
+			int wlen = MultiByteToWideChar(CP_ACP, 0, member.name.c_str(), -1, nullptr, 0);
+			std::wstring wname(wlen, 0);
+			MultiByteToWideChar(CP_ACP, 0, member.name.c_str(), -1, &wname[0], wlen);
+
+			int n = (int)(member.size / sizeof(float));
+			for (int i = 0; i < n; i++) {
+				float* ptr = reinterpret_cast<float*>(
+					reinterpret_cast<char*>(&retamMaterialCb.data) + member.offset + i * sizeof(float));
+
+				std::wstring label = wname + L"." + (wchar_t)('x' + i);
+				CreateWindowW(L"STATIC", label.c_str(), WS_CHILD | WS_VISIBLE | SS_RIGHT,
+					M, y + 6, LW, 20, guiHwnd, nullptr, nullptr, nullptr);
+
+				HWND slider = CreateWindowW(TRACKBAR_CLASSW, nullptr,
+					WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS,
+					M + LW + 4, y, SW, RH, guiHwnd, nullptr, nullptr, nullptr);
+				SendMessage(slider, TBM_SETRANGE, TRUE, MAKELONG(0, GUI_STEPS));
+				int initPos = (int)((*ptr - minVal) / (maxVal - minVal) * GUI_STEPS + 0.5f);
+				SendMessage(slider, TBM_SETPOS, TRUE, std::max(0, std::min(GUI_STEPS, initPos)));
+
+				wchar_t valBuf[32];
+				swprintf_s(valBuf, L"%.3f", *ptr);
+				HWND valLabel = CreateWindowW(L"STATIC", valBuf, WS_CHILD | WS_VISIBLE,
+					M + LW + 4 + SW + 4, y + 6, VW, 20, guiHwnd, nullptr, nullptr, nullptr);
+
+				floatControls.push_back({ slider, valLabel, ptr, minVal, maxVal });
+				y += RH + 4;
+			}
+		}
+
+		RECT rc = { 0, 0, M + LW + 4 + SW + 4 + VW + M, y + 32 };
+		AdjustWindowRectEx(&rc, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_TOOLWINDOW);
+		SetWindowPos(guiHwnd, nullptr, 0, 0, rc.right - rc.left, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
+	}
+
 protected:
 
 	com_ptr<ID3D12CommandQueue>  computeCommandQueue;
@@ -92,12 +200,12 @@ protected:
 	com_ptr<ID3D12CommandAllocator> uploadAllocator;
 	com_ptr<ID3D12GraphicsCommandList> uploadCommandList;
 
-	Fence uploadFence;
-	FenceChain computeFenceChain;
-	FenceChain graphicsFenceChain;
+	Egg::Compute::Fence uploadFence;
+	Egg::Compute::FenceChain computeFenceChain;
+	Egg::Compute::FenceChain graphicsFenceChain;
 
 	com_ptr<ID3D12DescriptorHeap> uavHeap;
-	std::vector<RawBuffer> buffers;
+	std::vector<Egg::Compute::RawBuffer> buffers;
 
 #define BUFFERNAMES 		keys, perPageBucketOffsets, indicesWithKeyBits0, indicesWithKeyBits1, globalBucketOffsets
 
@@ -138,7 +246,7 @@ public:
 
 		for (auto name : { BUFFERNAMES }) {
 			std::wstring wname = bufferToString(name);
-			buffers.push_back(RawBuffer(wname));
+			buffers.push_back(Egg::Compute::RawBuffer(wname));
 			CD3DX12_CPU_DESCRIPTOR_HANDLE handle(
 				uavHeap->GetCPUDescriptorHandleForHeapStart(),
 				name,
@@ -149,13 +257,13 @@ public:
 		buffers[keys].fillRandomMask(0xffffffff);
 
 		auto dhStart = CD3DX12_GPU_DESCRIPTOR_HANDLE(uavHeap->GetGPUDescriptorHandleForHeapStart());
-		ComputeShader csLocalSortAlpha;
-		ComputeShader csLocalSortBeta;
-		ComputeShader csLocalSortGamma;
-		ComputeShader csScan;
-		ComputeShader csPackAlpha;
-		ComputeShader csPackBeta;
-		ComputeShader csPackGamma;
+		Egg::Compute::ComputeShader csLocalSortAlpha;
+		Egg::Compute::ComputeShader csLocalSortBeta;
+		Egg::Compute::ComputeShader csLocalSortGamma;
+		Egg::Compute::ComputeShader csScan;
+		Egg::Compute::ComputeShader csPackAlpha;
+		Egg::Compute::ComputeShader csPackBeta;
+		Egg::Compute::ComputeShader csPackGamma;
 		csLocalSortAlpha.createResources(device, "Shaders/RadixSort/csLocalSortAlpha.cso");
 		csLocalSortBeta.createResources(device, "Shaders/RadixSort/csLocalSortBeta.cso");
 		csLocalSortGamma.createResources(device, "Shaders/RadixSort/csLocalSortGamma.cso");
@@ -250,7 +358,20 @@ public:
 
 		__super::LoadAssets();
 
+		retamMaterialCb.CreateResources(device.Get());
+
 		RunScript("scene.lua");
+
+		GG_STRUCT(RetamMaterialCb)
+			GG_MEMBER(lineSize)
+			GG_MEMBER(fading)
+			GG_MEMBER(texScale)
+			GG_MEMBER(crossAngle)
+		GG_ENDSTRUCT;
+
+		auto matIt = guiMaterials.find("RetamMaterialCb");
+		if (matIt != guiMaterials.end())
+			matIt->second->SetConstantBuffer(retamMaterialCb);
 
 		SceneUploadResources();
 	}
@@ -322,9 +443,11 @@ public:
 
 	virtual void Update(float dt, float T) override {
 		__super::Update(dt, T);
+		retamMaterialCb.Upload();
 	}
 
 	virtual void ProcessMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) override {
+		if (!guiHwnd) createGui();
 		__super::ProcessMessage(hWnd, uMsg, wParam, lParam);
 	}
 
@@ -333,6 +456,8 @@ public:
 	}
 
 	virtual void ReleaseResources() override {
+		if (guiHwnd) { DestroyWindow(guiHwnd); guiHwnd = nullptr; }
+		retamMaterialCb.ReleaseResources();
 		uavHeap.Reset();
 		Egg::Script::ScriptedApp::ReleaseResources();
 	}

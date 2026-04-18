@@ -1,24 +1,24 @@
 #pragma once
 
-#include "Float2.h"
-#include "Bool3.h"
-#include "Int3.h"
-#include "Float2.h"
-#include "Float4.h"
+#include "float2.h"
+#include "bool3.h"
+#include "int3.h"
+#include "float2.h"
+#include "float4.h"
 
 namespace Egg {
     namespace Math {
 
-        class Float2;
-        class Float4;
-        class Bool2;
-        class Bool3;
-        class Bool4;
-        class Int2;
-        class Int3;
-        class Int4;
+        class float2;
+        class float4;
+        class bool2;
+        class bool3;
+        class bool4;
+        class int2;
+        class int3;
+        class int4;
 
-        class Float3 {
+        class float3 {
         public:
             union {
                 struct {
@@ -27,286 +27,286 @@ namespace Egg {
                     float z;
                 };
 
-                Float2Swizzle<Float2, Int2, Bool2, 3, 0, 0> xx;
-                Float2Swizzle<Float2, Int2, Bool2, 3, 0, 1> xy;
-                Float2Swizzle<Float2, Int2, Bool2, 3, 0, 2> xz;
-                Float2Swizzle<Float2, Int2, Bool2, 3, 1, 0> yx;
-                Float2Swizzle<Float2, Int2, Bool2, 3, 1, 1> yy;
-                Float2Swizzle<Float2, Int2, Bool2, 3, 1, 2> yz;
-                Float2Swizzle<Float2, Int2, Bool2, 3, 2, 0> zx;
-                Float2Swizzle<Float2, Int2, Bool2, 3, 2, 1> zy;
-                Float2Swizzle<Float2, Int2, Bool2, 3, 2, 2> zz;
+                float2Swizzle<float2, int2, bool2, 3, 0, 0> xx;
+                float2Swizzle<float2, int2, bool2, 3, 0, 1> xy;
+                float2Swizzle<float2, int2, bool2, 3, 0, 2> xz;
+                float2Swizzle<float2, int2, bool2, 3, 1, 0> yx;
+                float2Swizzle<float2, int2, bool2, 3, 1, 1> yy;
+                float2Swizzle<float2, int2, bool2, 3, 1, 2> yz;
+                float2Swizzle<float2, int2, bool2, 3, 2, 0> zx;
+                float2Swizzle<float2, int2, bool2, 3, 2, 1> zy;
+                float2Swizzle<float2, int2, bool2, 3, 2, 2> zz;
 
-                Float3Swizzle<Float3, Int3, Bool3, 3, 0, 0, 0> xxx;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 0, 0, 1> xxy;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 0, 0, 2> xxz;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 0, 1, 0> xyx;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 0, 1, 1> xyy;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 0, 1, 2> xyz;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 0, 2, 0> xzx;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 0, 2, 1> xzy;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 0, 2, 2> xzz;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 1, 0, 0> yxx;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 1, 0, 1> yxy;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 1, 0, 2> yxz;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 1, 1, 0> yyx;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 1, 1, 1> yyy;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 1, 1, 2> yyz;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 1, 2, 0> yzx;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 1, 2, 1> yzy;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 1, 2, 2> yzz;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 2, 0, 0> zxx;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 2, 0, 1> zxy;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 2, 0, 2> zxz;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 2, 1, 0> zyx;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 2, 1, 1> zyy;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 2, 1, 2> zyz;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 2, 2, 0> zzx;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 2, 2, 1> zzy;
-                Float3Swizzle<Float3, Int3, Bool3, 3, 2, 2, 2> zzz;
+                float3Swizzle<float3, int3, bool3, 3, 0, 0, 0> xxx;
+                float3Swizzle<float3, int3, bool3, 3, 0, 0, 1> xxy;
+                float3Swizzle<float3, int3, bool3, 3, 0, 0, 2> xxz;
+                float3Swizzle<float3, int3, bool3, 3, 0, 1, 0> xyx;
+                float3Swizzle<float3, int3, bool3, 3, 0, 1, 1> xyy;
+                float3Swizzle<float3, int3, bool3, 3, 0, 1, 2> xyz;
+                float3Swizzle<float3, int3, bool3, 3, 0, 2, 0> xzx;
+                float3Swizzle<float3, int3, bool3, 3, 0, 2, 1> xzy;
+                float3Swizzle<float3, int3, bool3, 3, 0, 2, 2> xzz;
+                float3Swizzle<float3, int3, bool3, 3, 1, 0, 0> yxx;
+                float3Swizzle<float3, int3, bool3, 3, 1, 0, 1> yxy;
+                float3Swizzle<float3, int3, bool3, 3, 1, 0, 2> yxz;
+                float3Swizzle<float3, int3, bool3, 3, 1, 1, 0> yyx;
+                float3Swizzle<float3, int3, bool3, 3, 1, 1, 1> yyy;
+                float3Swizzle<float3, int3, bool3, 3, 1, 1, 2> yyz;
+                float3Swizzle<float3, int3, bool3, 3, 1, 2, 0> yzx;
+                float3Swizzle<float3, int3, bool3, 3, 1, 2, 1> yzy;
+                float3Swizzle<float3, int3, bool3, 3, 1, 2, 2> yzz;
+                float3Swizzle<float3, int3, bool3, 3, 2, 0, 0> zxx;
+                float3Swizzle<float3, int3, bool3, 3, 2, 0, 1> zxy;
+                float3Swizzle<float3, int3, bool3, 3, 2, 0, 2> zxz;
+                float3Swizzle<float3, int3, bool3, 3, 2, 1, 0> zyx;
+                float3Swizzle<float3, int3, bool3, 3, 2, 1, 1> zyy;
+                float3Swizzle<float3, int3, bool3, 3, 2, 1, 2> zyz;
+                float3Swizzle<float3, int3, bool3, 3, 2, 2, 0> zzx;
+                float3Swizzle<float3, int3, bool3, 3, 2, 2, 1> zzy;
+                float3Swizzle<float3, int3, bool3, 3, 2, 2, 2> zzz;
 
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 0, 0, 0> xxxx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 0, 1, 0> xxxy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 0, 2, 0> xxxz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 0, 0, 1> xxyx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 0, 1, 1> xxyy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 0, 2, 1> xxyz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 0, 0, 2> xxzx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 0, 1, 2> xxzy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 0, 2, 2> xxzz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 1, 0, 0> xyxx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 1, 1, 0> xyxy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 1, 2, 0> xyxz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 1, 0, 1> xyyx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 1, 1, 1> xyyy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 1, 2, 1> xyyz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 1, 0, 2> xyzx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 1, 1, 2> xyzy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 1, 2, 2> xyzz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 2, 0, 0> xzxx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 2, 1, 0> xzxy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 2, 2, 0> xzxz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 2, 0, 1> xzyx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 2, 1, 1> xzyy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 2, 2, 1> xzyz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 2, 0, 2> xzzx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 2, 1, 2> xzzy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 0, 2, 2, 2> xzzz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 0, 0, 0> yxxx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 0, 1, 0> yxxy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 0, 2, 0> yxxz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 0, 0, 1> yxyx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 0, 1, 1> yxyy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 0, 2, 1> yxyz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 0, 0, 2> yxzx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 0, 1, 2> yxzy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 0, 2, 2> yxzz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 1, 0, 0> yyxx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 1, 1, 0> yyxy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 1, 2, 0> yyxz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 1, 0, 1> yyyx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 1, 1, 1> yyyy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 1, 2, 1> yyyz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 1, 0, 2> yyzx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 1, 1, 2> yyzy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 1, 2, 2> yyzz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 2, 0, 0> yzxx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 2, 1, 0> yzxy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 2, 2, 0> yzxz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 2, 0, 1> yzyx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 2, 1, 1> yzyy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 2, 2, 1> yzyz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 2, 0, 2> yzzx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 2, 1, 2> yzzy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 1, 2, 2, 2> yzzz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 0, 0, 0> zxxx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 0, 1, 0> zxxy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 0, 2, 0> zxxz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 0, 0, 1> zxyx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 0, 1, 1> zxyy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 0, 2, 1> zxyz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 0, 0, 2> zxzx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 0, 1, 2> zxzy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 0, 2, 2> zxzz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 1, 0, 0> zyxx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 1, 1, 0> zyxy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 1, 2, 0> zyxz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 1, 0, 1> zyyx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 1, 1, 1> zyyy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 1, 2, 1> zyyz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 1, 0, 2> zyzx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 1, 1, 2> zyzy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 1, 2, 2> zyzz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 2, 0, 0> zzxx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 2, 1, 0> zzxy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 2, 2, 0> zzxz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 2, 0, 1> zzyx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 2, 1, 1> zzyy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 2, 2, 1> zzyz;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 2, 0, 2> zzzx;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 2, 1, 2> zzzy;
-                Float4Swizzle<Float4, Int4, Bool4, 3, 2, 2, 2, 2> zzzz;
+                float4Swizzle<float4, int4, bool4, 3, 0, 0, 0, 0> xxxx;
+                float4Swizzle<float4, int4, bool4, 3, 0, 0, 1, 0> xxxy;
+                float4Swizzle<float4, int4, bool4, 3, 0, 0, 2, 0> xxxz;
+                float4Swizzle<float4, int4, bool4, 3, 0, 0, 0, 1> xxyx;
+                float4Swizzle<float4, int4, bool4, 3, 0, 0, 1, 1> xxyy;
+                float4Swizzle<float4, int4, bool4, 3, 0, 0, 2, 1> xxyz;
+                float4Swizzle<float4, int4, bool4, 3, 0, 0, 0, 2> xxzx;
+                float4Swizzle<float4, int4, bool4, 3, 0, 0, 1, 2> xxzy;
+                float4Swizzle<float4, int4, bool4, 3, 0, 0, 2, 2> xxzz;
+                float4Swizzle<float4, int4, bool4, 3, 0, 1, 0, 0> xyxx;
+                float4Swizzle<float4, int4, bool4, 3, 0, 1, 1, 0> xyxy;
+                float4Swizzle<float4, int4, bool4, 3, 0, 1, 2, 0> xyxz;
+                float4Swizzle<float4, int4, bool4, 3, 0, 1, 0, 1> xyyx;
+                float4Swizzle<float4, int4, bool4, 3, 0, 1, 1, 1> xyyy;
+                float4Swizzle<float4, int4, bool4, 3, 0, 1, 2, 1> xyyz;
+                float4Swizzle<float4, int4, bool4, 3, 0, 1, 0, 2> xyzx;
+                float4Swizzle<float4, int4, bool4, 3, 0, 1, 1, 2> xyzy;
+                float4Swizzle<float4, int4, bool4, 3, 0, 1, 2, 2> xyzz;
+                float4Swizzle<float4, int4, bool4, 3, 0, 2, 0, 0> xzxx;
+                float4Swizzle<float4, int4, bool4, 3, 0, 2, 1, 0> xzxy;
+                float4Swizzle<float4, int4, bool4, 3, 0, 2, 2, 0> xzxz;
+                float4Swizzle<float4, int4, bool4, 3, 0, 2, 0, 1> xzyx;
+                float4Swizzle<float4, int4, bool4, 3, 0, 2, 1, 1> xzyy;
+                float4Swizzle<float4, int4, bool4, 3, 0, 2, 2, 1> xzyz;
+                float4Swizzle<float4, int4, bool4, 3, 0, 2, 0, 2> xzzx;
+                float4Swizzle<float4, int4, bool4, 3, 0, 2, 1, 2> xzzy;
+                float4Swizzle<float4, int4, bool4, 3, 0, 2, 2, 2> xzzz;
+                float4Swizzle<float4, int4, bool4, 3, 1, 0, 0, 0> yxxx;
+                float4Swizzle<float4, int4, bool4, 3, 1, 0, 1, 0> yxxy;
+                float4Swizzle<float4, int4, bool4, 3, 1, 0, 2, 0> yxxz;
+                float4Swizzle<float4, int4, bool4, 3, 1, 0, 0, 1> yxyx;
+                float4Swizzle<float4, int4, bool4, 3, 1, 0, 1, 1> yxyy;
+                float4Swizzle<float4, int4, bool4, 3, 1, 0, 2, 1> yxyz;
+                float4Swizzle<float4, int4, bool4, 3, 1, 0, 0, 2> yxzx;
+                float4Swizzle<float4, int4, bool4, 3, 1, 0, 1, 2> yxzy;
+                float4Swizzle<float4, int4, bool4, 3, 1, 0, 2, 2> yxzz;
+                float4Swizzle<float4, int4, bool4, 3, 1, 1, 0, 0> yyxx;
+                float4Swizzle<float4, int4, bool4, 3, 1, 1, 1, 0> yyxy;
+                float4Swizzle<float4, int4, bool4, 3, 1, 1, 2, 0> yyxz;
+                float4Swizzle<float4, int4, bool4, 3, 1, 1, 0, 1> yyyx;
+                float4Swizzle<float4, int4, bool4, 3, 1, 1, 1, 1> yyyy;
+                float4Swizzle<float4, int4, bool4, 3, 1, 1, 2, 1> yyyz;
+                float4Swizzle<float4, int4, bool4, 3, 1, 1, 0, 2> yyzx;
+                float4Swizzle<float4, int4, bool4, 3, 1, 1, 1, 2> yyzy;
+                float4Swizzle<float4, int4, bool4, 3, 1, 1, 2, 2> yyzz;
+                float4Swizzle<float4, int4, bool4, 3, 1, 2, 0, 0> yzxx;
+                float4Swizzle<float4, int4, bool4, 3, 1, 2, 1, 0> yzxy;
+                float4Swizzle<float4, int4, bool4, 3, 1, 2, 2, 0> yzxz;
+                float4Swizzle<float4, int4, bool4, 3, 1, 2, 0, 1> yzyx;
+                float4Swizzle<float4, int4, bool4, 3, 1, 2, 1, 1> yzyy;
+                float4Swizzle<float4, int4, bool4, 3, 1, 2, 2, 1> yzyz;
+                float4Swizzle<float4, int4, bool4, 3, 1, 2, 0, 2> yzzx;
+                float4Swizzle<float4, int4, bool4, 3, 1, 2, 1, 2> yzzy;
+                float4Swizzle<float4, int4, bool4, 3, 1, 2, 2, 2> yzzz;
+                float4Swizzle<float4, int4, bool4, 3, 2, 0, 0, 0> zxxx;
+                float4Swizzle<float4, int4, bool4, 3, 2, 0, 1, 0> zxxy;
+                float4Swizzle<float4, int4, bool4, 3, 2, 0, 2, 0> zxxz;
+                float4Swizzle<float4, int4, bool4, 3, 2, 0, 0, 1> zxyx;
+                float4Swizzle<float4, int4, bool4, 3, 2, 0, 1, 1> zxyy;
+                float4Swizzle<float4, int4, bool4, 3, 2, 0, 2, 1> zxyz;
+                float4Swizzle<float4, int4, bool4, 3, 2, 0, 0, 2> zxzx;
+                float4Swizzle<float4, int4, bool4, 3, 2, 0, 1, 2> zxzy;
+                float4Swizzle<float4, int4, bool4, 3, 2, 0, 2, 2> zxzz;
+                float4Swizzle<float4, int4, bool4, 3, 2, 1, 0, 0> zyxx;
+                float4Swizzle<float4, int4, bool4, 3, 2, 1, 1, 0> zyxy;
+                float4Swizzle<float4, int4, bool4, 3, 2, 1, 2, 0> zyxz;
+                float4Swizzle<float4, int4, bool4, 3, 2, 1, 0, 1> zyyx;
+                float4Swizzle<float4, int4, bool4, 3, 2, 1, 1, 1> zyyy;
+                float4Swizzle<float4, int4, bool4, 3, 2, 1, 2, 1> zyyz;
+                float4Swizzle<float4, int4, bool4, 3, 2, 1, 0, 2> zyzx;
+                float4Swizzle<float4, int4, bool4, 3, 2, 1, 1, 2> zyzy;
+                float4Swizzle<float4, int4, bool4, 3, 2, 1, 2, 2> zyzz;
+                float4Swizzle<float4, int4, bool4, 3, 2, 2, 0, 0> zzxx;
+                float4Swizzle<float4, int4, bool4, 3, 2, 2, 1, 0> zzxy;
+                float4Swizzle<float4, int4, bool4, 3, 2, 2, 2, 0> zzxz;
+                float4Swizzle<float4, int4, bool4, 3, 2, 2, 0, 1> zzyx;
+                float4Swizzle<float4, int4, bool4, 3, 2, 2, 1, 1> zzyy;
+                float4Swizzle<float4, int4, bool4, 3, 2, 2, 2, 1> zzyz;
+                float4Swizzle<float4, int4, bool4, 3, 2, 2, 0, 2> zzzx;
+                float4Swizzle<float4, int4, bool4, 3, 2, 2, 1, 2> zzzy;
+                float4Swizzle<float4, int4, bool4, 3, 2, 2, 2, 2> zzzz;
             };
 
-            Float3(float x, float y, float z);
+            float3(float x, float y, float z);
 
-            Float3(float x, const Float2 & yz);
+            float3(float x, const float2 & yz);
 
-            Float3(const Float2 & xy, float z);
+            float3(const float2 & xy, float z);
 
-            Float3(const Float3 & xyz);
+            float3(const float3 & xyz);
 
-            Float3();
+            float3();
 
-            Float3 & operator=(const Float3 & rhs) noexcept;
-Float3 & operator=(float rhs) noexcept;
+            float3 & operator=(const float3 & rhs) noexcept;
+float3 & operator=(float rhs) noexcept;
 
-            Float3 & operator+=(const Float3 & rhs) noexcept;
-Float3 & operator+=(float rhs) noexcept;
+            float3 & operator+=(const float3 & rhs) noexcept;
+float3 & operator+=(float rhs) noexcept;
 
-            Float3 & operator-=(const Float3 & rhs) noexcept;
-Float3 & operator-=(float rhs) noexcept;
+            float3 & operator-=(const float3 & rhs) noexcept;
+float3 & operator-=(float rhs) noexcept;
 
-            Float3 & operator/=(const Float3 & rhs) noexcept;
-Float3 & operator/=(float rhs) noexcept;
+            float3 & operator/=(const float3 & rhs) noexcept;
+float3 & operator/=(float rhs) noexcept;
 
-            Float3 & operator*=(const Float3 & rhs) noexcept;
-Float3 & operator*=(float rhs) noexcept;
+            float3 & operator*=(const float3 & rhs) noexcept;
+float3 & operator*=(float rhs) noexcept;
 
-            Float3 operator*(const Float3 & rhs) const noexcept;
+            float3 operator*(const float3 & rhs) const noexcept;
 
-            Float3 operator/(const Float3 & rhs) const noexcept;
+            float3 operator/(const float3 & rhs) const noexcept;
 
-            Float3 operator+(const Float3 & rhs) const noexcept;
+            float3 operator+(const float3 & rhs) const noexcept;
 
-            Float3 operator-(const Float3 & rhs) const noexcept;
+            float3 operator-(const float3 & rhs) const noexcept;
 
-            Float3 Abs() const noexcept;
+            float3 Abs() const noexcept;
 
-            Float3 Acos() const noexcept;
+            float3 Acos() const noexcept;
 
-            Float3 Asin() const noexcept;
+            float3 Asin() const noexcept;
 
-            Float3 Atan() const noexcept;
+            float3 Atan() const noexcept;
 
-            Float3 Cos() const noexcept;
+            float3 Cos() const noexcept;
 
-            Float3 Sin() const noexcept;
+            float3 Sin() const noexcept;
 
-            Float3 Cosh() const noexcept;
+            float3 Cosh() const noexcept;
 
-            Float3 Sinh() const noexcept;
+            float3 Sinh() const noexcept;
 
-            Float3 Tan() const noexcept;
+            float3 Tan() const noexcept;
 
-            Float3 Exp() const noexcept;
+            float3 Exp() const noexcept;
 
-            Float3 Log() const noexcept;
+            float3 Log() const noexcept;
 
-            Float3 Log10() const noexcept;
+            float3 Log10() const noexcept;
 
-            Float3 Fmod(const Float3 & rhs) const noexcept;
+            float3 Fmod(const float3 & rhs) const noexcept;
 
-            Float3 Atan2(const Float3 & rhs) const noexcept;
+            float3 Atan2(const float3 & rhs) const noexcept;
 
-            Float3 Pow(const Float3 & rhs) const noexcept;
+            float3 Pow(const float3 & rhs) const noexcept;
 
-            Float3 Sqrt() const noexcept;
+            float3 Sqrt() const noexcept;
 
-            Float3 Clamp(const Float3 & low, const Float3 & high) const noexcept;
+            float3 Clamp(const float3 & low, const float3 & high) const noexcept;
 
-            float Dot(const Float3 & rhs) const noexcept;
+            float Dot(const float3 & rhs) const noexcept;
 
-            Float3 Sign() const noexcept;
+            float3 Sign() const noexcept;
 
-            Int3 Round() const noexcept;
+            int3 Round() const noexcept;
 
-            Float3 Saturate() const noexcept;
+            float3 Saturate() const noexcept;
 
             float LengthSquared() const noexcept;
 
             float Length() const noexcept;
 
-            Float3 Normalize() const noexcept;
+            float3 Normalize() const noexcept;
 
-            Bool3 IsNan() const noexcept;
+            bool3 IsNan() const noexcept;
 
-            Bool3 IsFinite() const noexcept;
+            bool3 IsFinite() const noexcept;
 
-            Bool3 IsInfinite() const noexcept;
+            bool3 IsInfinite() const noexcept;
 
-            Float3 operator-() const noexcept;
+            float3 operator-() const noexcept;
 
-            Float3 operator%(const Float3 & rhs) const noexcept;
+            float3 operator%(const float3 & rhs) const noexcept;
 
-            Float3 & operator%=(const Float3 & rhs) noexcept;
+            float3 & operator%=(const float3 & rhs) noexcept;
 
-            Int3 Ceil() const noexcept;
+            int3 Ceil() const noexcept;
 
-            Int3 Floor() const noexcept;
+            int3 Floor() const noexcept;
 
-            Float3 Exp2() const noexcept;
+            float3 Exp2() const noexcept;
 
-            Int3 Trunc() const noexcept;
+            int3 Trunc() const noexcept;
 
-            float Distance(const Float3 & rhs) const noexcept;
+            float Distance(const float3 & rhs) const noexcept;
 
-            Bool3 operator<(const Float3 & rhs) const noexcept;
+            bool3 operator<(const float3 & rhs) const noexcept;
 
-            Bool3 operator>(const Float3 & rhs) const noexcept;
+            bool3 operator>(const float3 & rhs) const noexcept;
 
-            Bool3 operator!=(const Float3 & rhs) const noexcept;
+            bool3 operator!=(const float3 & rhs) const noexcept;
 
-            Bool3 operator==(const Float3 & rhs) const noexcept;
+            bool3 operator==(const float3 & rhs) const noexcept;
 
-            Bool3 operator>=(const Float3 & rhs) const noexcept;
+            bool3 operator>=(const float3 & rhs) const noexcept;
 
-            Bool3 operator<=(const Float3 & rhs) const noexcept;
+            bool3 operator<=(const float3 & rhs) const noexcept;
 
-            static Float3 Random(float lower = 0.0f, float upper = 1.0f) noexcept;
+            static float3 Random(float lower = 0.0f, float upper = 1.0f) noexcept;
 
-            Float3 operator+(float v) const noexcept;
+            float3 operator+(float v) const noexcept;
 
-            Float3 operator-(float v) const noexcept;
+            float3 operator-(float v) const noexcept;
 
-            Float3 operator*(float v) const noexcept;
+            float3 operator*(float v) const noexcept;
 
-            Float3 operator/(float v) const noexcept;
+            float3 operator/(float v) const noexcept;
 
-            Float3 operator%(float v) const noexcept;
+            float3 operator%(float v) const noexcept;
 
-            Float3 Cross(const Float3 & rhs) const noexcept;
+            float3 Cross(const float3 & rhs) const noexcept;
 
-            static const Float3 UnitX;
-            static const Float3 UnitY;
-            static const Float3 UnitZ;
-            static const Float3 Zero;
-            static const Float3 One;
-            static const Float3 Black;
-            static const Float3 Navy;
-            static const Float3 Blue;
-            static const Float3 DarkGreen;
-            static const Float3 Teal;
-            static const Float3 Azure;
-            static const Float3 Green;
-            static const Float3 Cyan;
-            static const Float3 Maroon;
-            static const Float3 Purple;
-            static const Float3 SlateBlue;
-            static const Float3 Olive;
-            static const Float3 Gray;
-            static const Float3 Cornflower;
-            static const Float3 Aquamarine;
-            static const Float3 Red;
-            static const Float3 DeepPink;
-            static const Float3 Magenta;
-            static const Float3 Orange;
-            static const Float3 Coral;
-            static const Float3 Mallow;
-            static const Float3 Yellow;
-            static const Float3 Gold;
-            static const Float3 White;
-            static const Float3 Silver;
+            static const float3 UnitX;
+            static const float3 UnitY;
+            static const float3 UnitZ;
+            static const float3 Zero;
+            static const float3 One;
+            static const float3 Black;
+            static const float3 Navy;
+            static const float3 Blue;
+            static const float3 DarkGreen;
+            static const float3 Teal;
+            static const float3 Azure;
+            static const float3 Green;
+            static const float3 Cyan;
+            static const float3 Maroon;
+            static const float3 Purple;
+            static const float3 SlateBlue;
+            static const float3 Olive;
+            static const float3 Gray;
+            static const float3 Cornflower;
+            static const float3 Aquamarine;
+            static const float3 Red;
+            static const float3 DeepPink;
+            static const float3 Magenta;
+            static const float3 Orange;
+            static const float3 Coral;
+            static const float3 Mallow;
+            static const float3 Yellow;
+            static const float3 Gold;
+            static const float3 White;
+            static const float3 Silver;
         };
     }
 }

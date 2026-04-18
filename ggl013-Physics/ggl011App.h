@@ -85,7 +85,7 @@ public:
 
 		for (int i = 0; i < 100; i++) {
 			auto e = Egg::Scene::StaticEntity::Create(podMesh);
-			e->Translate(Float3(i, 0, 0));
+			e->Translate(float3(i, 0, 0));
 			ManagerApp::AddEntity(e);
 		}
 

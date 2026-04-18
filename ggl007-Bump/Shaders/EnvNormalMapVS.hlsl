@@ -6,7 +6,7 @@ struct IAOutput
     float3 normal : NORMAL;
     float2 texCoord : TEXCOORD;
     float3 tangent : TANGENT;
-    float3 binormal : BINORMAL;
+    float3 bitangent : BITANGENT;
 };
 
 struct VSOutput
@@ -14,7 +14,7 @@ struct VSOutput
     float4 position : SV_Position;
     float3 normal : NORMAL;
     float3 tangent : TANGENT;
-    float3 binormal : BINORMAL;
+    float3 bitangent : BITANGENT;
     float2 texCoord : TEXCOORD;
     float3 viewDir : VIEWDIR;
     float3 lightDir : LIGHTDIR;
@@ -44,14 +44,14 @@ VSOutput main(IAOutput iao)
     float3 viewDir = normalize(eyePos.xyz - descartesPos);
 
     float3 t = normalize(mul(float4(iao.tangent, 0.0f), invModelMat).xyz);
-    float3 b = normalize(mul(float4(iao.binormal, 0.0f), invModelMat).xyz);
+    float3 b = normalize(mul(float4(iao.bitangent, 0.0f), invModelMat).xyz);
     float3 n = normalize(mul(float4(iao.normal, 0.0f), invModelMat).xyz);
     
     VSOutput vso;
     vso.position = mul(viewProj, worldPos);
     vso.normal = n;
     vso.tangent = t;
-    vso.binormal = b;
+    vso.bitangent = b;
     vso.texCoord = iao.texCoord;
     vso.lightDir = lightDir;
     vso.viewDir = viewDir;

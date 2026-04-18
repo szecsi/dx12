@@ -1,14 +1,14 @@
 #pragma once
 
-#include "Int2Swizzle.hpp"
-#include "Int3Swizzle.hpp"
-#include "Int4Swizzle.hpp"
-#include "Bool1.h"
+#include "int2Swizzle.hpp"
+#include "int3Swizzle.hpp"
+#include "int4Swizzle.hpp"
+#include "bool1.h"
 
 namespace Egg {
     namespace Math {
 
-        class Int1 {
+        class int1 {
         public:
             union {
                 struct {
@@ -16,94 +16,94 @@ namespace Egg {
                 };
             };
 
-            Int1(int x);
+            int1(int x);
 
-            Int1();
+            int1();
 
-            Int1 & operator=(const Int1 & rhs) noexcept;
-Int1 & operator=(int rhs) noexcept;
+            int1 & operator=(const int1 & rhs) noexcept;
+int1 & operator=(int rhs) noexcept;
 
-            Int1 & operator+=(const Int1 & rhs) noexcept;
-Int1 & operator+=(int rhs) noexcept;
+            int1 & operator+=(const int1 & rhs) noexcept;
+int1 & operator+=(int rhs) noexcept;
 
-            Int1 & operator-=(const Int1 & rhs) noexcept;
-Int1 & operator-=(int rhs) noexcept;
+            int1 & operator-=(const int1 & rhs) noexcept;
+int1 & operator-=(int rhs) noexcept;
 
-            Int1 & operator/=(const Int1 & rhs) noexcept;
-Int1 & operator/=(int rhs) noexcept;
+            int1 & operator/=(const int1 & rhs) noexcept;
+int1 & operator/=(int rhs) noexcept;
 
-            Int1 & operator*=(const Int1 & rhs) noexcept;
-Int1 & operator*=(int rhs) noexcept;
+            int1 & operator*=(const int1 & rhs) noexcept;
+int1 & operator*=(int rhs) noexcept;
 
-            Int1 & operator%=(const Int1 & rhs) noexcept;
-Int1 & operator%=(int rhs) noexcept;
+            int1 & operator%=(const int1 & rhs) noexcept;
+int1 & operator%=(int rhs) noexcept;
 
-            Int1 & operator|=(const Int1 & rhs) noexcept;
-Int1 & operator|=(int rhs) noexcept;
+            int1 & operator|=(const int1 & rhs) noexcept;
+int1 & operator|=(int rhs) noexcept;
 
-            Int1 & operator&=(const Int1 & rhs) noexcept;
-Int1 & operator&=(int rhs) noexcept;
+            int1 & operator&=(const int1 & rhs) noexcept;
+int1 & operator&=(int rhs) noexcept;
 
-            Int1 & operator^=(const Int1 & rhs) noexcept;
-Int1 & operator^=(int rhs) noexcept;
+            int1 & operator^=(const int1 & rhs) noexcept;
+int1 & operator^=(int rhs) noexcept;
 
-            Int1 & operator<<=(const Int1 & rhs) noexcept;
-Int1 & operator<<=(int rhs) noexcept;
+            int1 & operator<<=(const int1 & rhs) noexcept;
+int1 & operator<<=(int rhs) noexcept;
 
-            Int1 & operator>>=(const Int1 & rhs) noexcept;
-Int1 & operator>>=(int rhs) noexcept;
+            int1 & operator>>=(const int1 & rhs) noexcept;
+int1 & operator>>=(int rhs) noexcept;
 
-            Int1 operator*(const Int1 & rhs) const noexcept;
+            int1 operator*(const int1 & rhs) const noexcept;
 
-            Int1 operator/(const Int1 & rhs) const noexcept;
+            int1 operator/(const int1 & rhs) const noexcept;
 
-            Int1 operator+(const Int1 & rhs) const noexcept;
+            int1 operator+(const int1 & rhs) const noexcept;
 
-            Int1 operator-(const Int1 & rhs) const noexcept;
+            int1 operator-(const int1 & rhs) const noexcept;
 
-            Int1 operator%(const Int1 & rhs) const noexcept;
+            int1 operator%(const int1 & rhs) const noexcept;
 
-            Int1 operator|(const Int1 & rhs) const noexcept;
+            int1 operator|(const int1 & rhs) const noexcept;
 
-            Int1 operator&(const Int1 & rhs) const noexcept;
+            int1 operator&(const int1 & rhs) const noexcept;
 
-            Int1 operator^(const Int1 & rhs) const noexcept;
+            int1 operator^(const int1 & rhs) const noexcept;
 
-            Int1 operator<<(const Int1 & rhs) const noexcept;
+            int1 operator<<(const int1 & rhs) const noexcept;
 
-            Int1 operator>>(const Int1 & rhs) const noexcept;
+            int1 operator>>(const int1 & rhs) const noexcept;
 
-            Int1 operator||(const Int1 & rhs) const noexcept;
+            int1 operator||(const int1 & rhs) const noexcept;
 
-            Int1 operator&&(const Int1 & rhs) const noexcept;
+            int1 operator&&(const int1 & rhs) const noexcept;
 
-            Bool1 operator<(const Int1 & rhs) const noexcept;
+            bool1 operator<(const int1 & rhs) const noexcept;
 
-            Bool1 operator>(const Int1 & rhs) const noexcept;
+            bool1 operator>(const int1 & rhs) const noexcept;
 
-            Bool1 operator!=(const Int1 & rhs) const noexcept;
+            bool1 operator!=(const int1 & rhs) const noexcept;
 
-            Bool1 operator==(const Int1 & rhs) const noexcept;
+            bool1 operator==(const int1 & rhs) const noexcept;
 
-            Bool1 operator>=(const Int1 & rhs) const noexcept;
+            bool1 operator>=(const int1 & rhs) const noexcept;
 
-            Bool1 operator<=(const Int1 & rhs) const noexcept;
+            bool1 operator<=(const int1 & rhs) const noexcept;
 
-            Int1 operator~() const noexcept;
+            int1 operator~() const noexcept;
 
-            Int1 operator!() const noexcept;
+            int1 operator!() const noexcept;
 
-            Int1 operator++() noexcept;
+            int1 operator++() noexcept;
 
-            Int1 operator++(int) noexcept;
+            int1 operator++(int) noexcept;
 
-            Int1 operator--() noexcept;
+            int1 operator--() noexcept;
 
-            Int1 operator--(int) noexcept;
+            int1 operator--(int) noexcept;
 
-            static Int1 Random(int lower = 0, int upper = 6) noexcept;
+            static int1 Random(int lower = 0, int upper = 6) noexcept;
 
-            Int1 operator-() const noexcept;
+            int1 operator-() const noexcept;
 
         };
     }

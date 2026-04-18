@@ -6,7 +6,7 @@ struct IAOutput
     float3 normal : NORMAL;
     float2 texCoord : TEXCOORD;
     float3 tangent : TANGENT;
-    float3 binormal : BINORMAL;
+    float3 bitangent : BITANGENT;
 };
 
 struct VSOutput
@@ -42,7 +42,7 @@ VSOutput main(IAOutput iao)
     float3 viewDir = normalize(eyePos.xyz - descartesPos);
 
     float3 t = normalize(mul(float4(iao.tangent, 0.0f), invModelMat).xyz);
-    float3 b = normalize(mul(float4(iao.binormal, 0.0f), invModelMat).xyz);
+    float3 b = normalize(mul(float4(iao.bitangent, 0.0f), invModelMat).xyz);
     float3 n = normalize(mul(float4(iao.normal, 0.0f), invModelMat).xyz);
 
     float3x3 tbn = { t, b, n };

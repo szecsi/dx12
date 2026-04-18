@@ -26,6 +26,8 @@ namespace Egg {
 
 			void ExitWithErrorMessage(std::exception exception);
 
+			std::map<std::string, Egg::Mesh::Material::P> guiMaterials;
+
 		public:
 			Egg::Script::Shader::P CreateShader(luabind::object nil, luabind::object attributes);
 			Egg::Mesh::Geometry::P CreateIndexedGeometry(luabind::object nil, luabind::object attributes);
@@ -45,6 +47,10 @@ namespace Egg {
 			Egg::Cam::Fixed::P CreateFixedCam(luabind::object nil, luabind::object attributes);
 
 			//void addFixedCam(luabind::object nil, luabind::object attributes);
+
+			void addGuiMaterial(const std::string& name, Egg::Mesh::Material::P material) {
+				guiMaterials[name] = material;
+			}
 
 			void RunScript(const std::string& luaFilename);
 

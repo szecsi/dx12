@@ -8,7 +8,7 @@ struct VSOutput
     float4 position : SV_Position;
     float3 normal : NORMAL;
     float3 tangent : TANGENT;
-    float3 binormal : BINORMAL;
+    float3 bitangent : BITANGENT;
     float2 texCoord : TEXCOORD;
     float3 viewDir : VIEWDIR;
     float3 lightDir : LIGHTDIR;
@@ -36,7 +36,7 @@ float4 main(VSOutput vso) : SV_Target
 {
     
     float3 t = normalize(vso.tangent);
-    float3 b = normalize(vso.binormal);
+    float3 b = normalize(vso.bitangent);
     float3 n = normalize(vso.normal);
 
     float3x3 tbn = { t, b, n };

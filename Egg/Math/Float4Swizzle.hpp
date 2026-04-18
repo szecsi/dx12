@@ -3,7 +3,7 @@ namespace Egg {
     namespace Math {
 
         template<typename F, typename I, typename B, int nBase, int s0 = 0, int s1 = 0, int s2 = 0, int s3 = 0>
-        class Float4Swizzle {
+        class float4Swizzle {
             float v[nBase];
         public:
             operator F () const noexcept {
@@ -14,7 +14,7 @@ namespace Egg {
                     (s3 >= 0) ? v[s3] : ((s3 == -1) ? 0.0f : 1.0f)
                 };
             }
-        Float4Swizzle & operator=(const F & rhs) noexcept {
+        float4Swizzle & operator=(const F & rhs) noexcept {
             if(s0 >= 0) v[s0] = rhs.x;
             if(s1 >= 0) v[s1] = rhs.y;
             if(s2 >= 0) v[s2] = rhs.z;
@@ -22,7 +22,7 @@ namespace Egg {
             return *this;
         }
 
-        Float4Swizzle & operator=(float rhs) noexcept {
+        float4Swizzle & operator=(float rhs) noexcept {
             if(s0 >= 0) v[s0] = rhs;
             if(s1 >= 0) v[s1] = rhs;
             if(s2 >= 0) v[s2] = rhs;
@@ -30,7 +30,7 @@ namespace Egg {
             return *this;
         }
 
-        Float4Swizzle & operator+=(const F & rhs) noexcept {
+        float4Swizzle & operator+=(const F & rhs) noexcept {
             if(s0 >= 0) v[s0] += rhs.x;
             if(s1 >= 0) v[s1] += rhs.y;
             if(s2 >= 0) v[s2] += rhs.z;
@@ -38,7 +38,7 @@ namespace Egg {
             return *this;
         }
 
-        Float4Swizzle & operator+=(float rhs) noexcept {
+        float4Swizzle & operator+=(float rhs) noexcept {
             if(s0 >= 0) v[s0] += rhs;
             if(s1 >= 0) v[s1] += rhs;
             if(s2 >= 0) v[s2] += rhs;
@@ -46,7 +46,7 @@ namespace Egg {
             return *this;
         }
 
-        Float4Swizzle & operator-=(const F & rhs) noexcept {
+        float4Swizzle & operator-=(const F & rhs) noexcept {
             if(s0 >= 0) v[s0] -= rhs.x;
             if(s1 >= 0) v[s1] -= rhs.y;
             if(s2 >= 0) v[s2] -= rhs.z;
@@ -54,7 +54,7 @@ namespace Egg {
             return *this;
         }
 
-        Float4Swizzle & operator-=(float rhs) noexcept {
+        float4Swizzle & operator-=(float rhs) noexcept {
             if(s0 >= 0) v[s0] -= rhs;
             if(s1 >= 0) v[s1] -= rhs;
             if(s2 >= 0) v[s2] -= rhs;
@@ -62,7 +62,7 @@ namespace Egg {
             return *this;
         }
 
-        Float4Swizzle & operator/=(const F & rhs) noexcept {
+        float4Swizzle & operator/=(const F & rhs) noexcept {
             if(s0 >= 0) v[s0] /= rhs.x;
             if(s1 >= 0) v[s1] /= rhs.y;
             if(s2 >= 0) v[s2] /= rhs.z;
@@ -70,7 +70,7 @@ namespace Egg {
             return *this;
         }
 
-        Float4Swizzle & operator/=(float rhs) noexcept {
+        float4Swizzle & operator/=(float rhs) noexcept {
             if(s0 >= 0) v[s0] /= rhs;
             if(s1 >= 0) v[s1] /= rhs;
             if(s2 >= 0) v[s2] /= rhs;
@@ -78,7 +78,7 @@ namespace Egg {
             return *this;
         }
 
-        Float4Swizzle & operator*=(const F & rhs) noexcept {
+        float4Swizzle & operator*=(const F & rhs) noexcept {
             if(s0 >= 0) v[s0] *= rhs.x;
             if(s1 >= 0) v[s1] *= rhs.y;
             if(s2 >= 0) v[s2] *= rhs.z;
@@ -86,7 +86,7 @@ namespace Egg {
             return *this;
         }
 
-        Float4Swizzle & operator*=(float rhs) noexcept {
+        float4Swizzle & operator*=(float rhs) noexcept {
             if(s0 >= 0) v[s0] *= rhs;
             if(s1 >= 0) v[s1] *= rhs;
             if(s2 >= 0) v[s2] *= rhs;

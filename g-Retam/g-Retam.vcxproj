@@ -56,23 +56,14 @@
     <FxCompile>
       <ShaderModel>6.4</ShaderModel>
       <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).cso</ObjectFileOutput>
+      <AdditionalIncludeDirectories>$(SolutionDir)Egg\Shaders</AdditionalIncludeDirectories>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="DDSTextureLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="RetamApp.h" />
-    <ClInclude Include="ComputePass.h" />
-    <ClInclude Include="ComputeShader.h" />
-    <ClInclude Include="ConstantBufferTypes.h" />
-    <ClInclude Include="DDSTextureLoader.h" />
-    <ClInclude Include="Fence.h" />
-    <ClInclude Include="FenceChain.h" />
-    <ClInclude Include="Float4Buffer.h" />
-    <ClInclude Include="Particle.h" />
-    <ClInclude Include="RawBuffer.h" />
     <ClInclude Include="WaveSort.h" />
   </ItemGroup>
   <ItemGroup>
@@ -92,9 +83,17 @@
     <FxCompile Include="Shaders\RadixSort\csPackBeta.hlsl" />
     <FxCompile Include="Shaders\RadixSort\csPackGamma.hlsl" />
     <FxCompile Include="Shaders\RadixSort\csScan.hlsl" />
+    <FxCompile Include="Shaders\Retam\retam256PS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\retamVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\Billboard\billboard.hlsli" />
+    <None Include="Shaders\Retam\Retam.hlsli" />
+    <None Include="Shaders\Retam\RetamCb.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="Lua\scene.lua">

@@ -57,12 +57,12 @@ public:
 		for(int i = 0; i < 7; ++i) {
 			boxes.push_back(Box::Create(shadedBox));
 			boxes[i]->CreateResources(device.Get());
-			boxes[i]->scale = Float4x4::Scaling(Float3{ 0.2f, 0.2f, 0.1f });
-			boxes[i]->rotation = Float4x4::Identity;
-			boxes[i]->position = Float3::Random();
+			boxes[i]->scale = float4x4::Scaling(float3{ 0.2f, 0.2f, 0.1f });
+			boxes[i]->rotation = float4x4::Identity;
+			boxes[i]->position = float3::Random();
 			boxes[i]->position.x = i * 0.25f - 0.75f;
 			boxes[i]->position.z = 0.0f;
-			boxes[i]->meshTransform = Float4x4::Translation(Float3{ 0.0f, 0.0f, 0.5f });
+			boxes[i]->meshTransform = float4x4::Translation(float3{ 0.0f, 0.0f, 0.5f });
 		}
 	}
 

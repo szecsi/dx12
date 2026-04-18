@@ -1,26 +1,26 @@
 #pragma once
 
-#include "Float2Swizzle.hpp"
-#include "Float3Swizzle.hpp"
-#include "Float4Swizzle.hpp"
-#include "Bool2.h"
-#include "Int2.h"
-#include "Float3.h"
-#include "Float4.h"
+#include "float2Swizzle.hpp"
+#include "float3Swizzle.hpp"
+#include "float4Swizzle.hpp"
+#include "bool2.h"
+#include "int2.h"
+#include "float3.h"
+#include "float4.h"
 
 namespace Egg {
     namespace Math {
 
-        class Float3;
-        class Float4;
-        class Bool2;
-        class Bool3;
-        class Bool4;
-        class Int2;
-        class Int3;
-        class Int4;
+        class float3;
+        class float4;
+        class bool2;
+        class bool3;
+        class bool4;
+        class int2;
+        class int3;
+        class int4;
 
-        class Float2 {
+        class float2 {
         public:
             union {
                 struct {
@@ -28,173 +28,173 @@ namespace Egg {
                     float y;
                 };
 
-                Float2Swizzle<Float2, Int2, Bool2, 2, 0, 0> xx;
-                Float2Swizzle<Float2, Int2, Bool2, 2, 0, 1> xy;
-                Float2Swizzle<Float2, Int2, Bool2, 2, 1, 0> yx;
-                Float2Swizzle<Float2, Int2, Bool2, 2, 1, 1> yy;
+                float2Swizzle<float2, int2, bool2, 2, 0, 0> xx;
+                float2Swizzle<float2, int2, bool2, 2, 0, 1> xy;
+                float2Swizzle<float2, int2, bool2, 2, 1, 0> yx;
+                float2Swizzle<float2, int2, bool2, 2, 1, 1> yy;
 
-                Float3Swizzle<Float3, Int3, Bool3, 2, 0, 0, 0> xxx;
-                Float3Swizzle<Float3, Int3, Bool3, 2, 0, 0, 1> xxy;
-                Float3Swizzle<Float3, Int3, Bool3, 2, 0, 1, 0> xyx;
-                Float3Swizzle<Float3, Int3, Bool3, 2, 0, 1, 1> xyy;
-                Float3Swizzle<Float3, Int3, Bool3, 2, 1, 0, 0> yxx;
-                Float3Swizzle<Float3, Int3, Bool3, 2, 1, 0, 1> yxy;
-                Float3Swizzle<Float3, Int3, Bool3, 2, 1, 1, 0> yyx;
-                Float3Swizzle<Float3, Int3, Bool3, 2, 1, 1, 1> yyy;
+                float3Swizzle<float3, int3, bool3, 2, 0, 0, 0> xxx;
+                float3Swizzle<float3, int3, bool3, 2, 0, 0, 1> xxy;
+                float3Swizzle<float3, int3, bool3, 2, 0, 1, 0> xyx;
+                float3Swizzle<float3, int3, bool3, 2, 0, 1, 1> xyy;
+                float3Swizzle<float3, int3, bool3, 2, 1, 0, 0> yxx;
+                float3Swizzle<float3, int3, bool3, 2, 1, 0, 1> yxy;
+                float3Swizzle<float3, int3, bool3, 2, 1, 1, 0> yyx;
+                float3Swizzle<float3, int3, bool3, 2, 1, 1, 1> yyy;
 
-                Float4Swizzle<Float4, Int4, Bool4, 2, 0, 0, 0, 0> xxxx;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 0, 0, 1, 0> xxxy;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 0, 0, 0, 1> xxyx;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 0, 0, 1, 1> xxyy;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 0, 1, 0, 0> xyxx;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 0, 1, 1, 0> xyxy;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 0, 1, 0, 1> xyyx;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 0, 1, 1, 1> xyyy;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 1, 0, 0, 0> yxxx;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 1, 0, 1, 0> yxxy;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 1, 0, 0, 1> yxyx;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 1, 0, 1, 1> yxyy;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 1, 1, 0, 0> yyxx;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 1, 1, 1, 0> yyxy;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 1, 1, 0, 1> yyyx;
-                Float4Swizzle<Float4, Int4, Bool4, 2, 1, 1, 1, 1> yyyy;
+                float4Swizzle<float4, int4, bool4, 2, 0, 0, 0, 0> xxxx;
+                float4Swizzle<float4, int4, bool4, 2, 0, 0, 1, 0> xxxy;
+                float4Swizzle<float4, int4, bool4, 2, 0, 0, 0, 1> xxyx;
+                float4Swizzle<float4, int4, bool4, 2, 0, 0, 1, 1> xxyy;
+                float4Swizzle<float4, int4, bool4, 2, 0, 1, 0, 0> xyxx;
+                float4Swizzle<float4, int4, bool4, 2, 0, 1, 1, 0> xyxy;
+                float4Swizzle<float4, int4, bool4, 2, 0, 1, 0, 1> xyyx;
+                float4Swizzle<float4, int4, bool4, 2, 0, 1, 1, 1> xyyy;
+                float4Swizzle<float4, int4, bool4, 2, 1, 0, 0, 0> yxxx;
+                float4Swizzle<float4, int4, bool4, 2, 1, 0, 1, 0> yxxy;
+                float4Swizzle<float4, int4, bool4, 2, 1, 0, 0, 1> yxyx;
+                float4Swizzle<float4, int4, bool4, 2, 1, 0, 1, 1> yxyy;
+                float4Swizzle<float4, int4, bool4, 2, 1, 1, 0, 0> yyxx;
+                float4Swizzle<float4, int4, bool4, 2, 1, 1, 1, 0> yyxy;
+                float4Swizzle<float4, int4, bool4, 2, 1, 1, 0, 1> yyyx;
+                float4Swizzle<float4, int4, bool4, 2, 1, 1, 1, 1> yyyy;
             };
 
-            Float2(float x, float y);
+            float2(float x, float y);
 
-            Float2(const Float2 & xy);
+            float2(const float2 & xy);
 
-            Float2();
+            float2();
 
-            Float2 & operator=(const Float2 & rhs) noexcept;
-Float2 & operator=(float rhs) noexcept;
+            float2 & operator=(const float2 & rhs) noexcept;
+float2 & operator=(float rhs) noexcept;
 
-            Float2 & operator+=(const Float2 & rhs) noexcept;
-Float2 & operator+=(float rhs) noexcept;
+            float2 & operator+=(const float2 & rhs) noexcept;
+float2 & operator+=(float rhs) noexcept;
 
-            Float2 & operator-=(const Float2 & rhs) noexcept;
-Float2 & operator-=(float rhs) noexcept;
+            float2 & operator-=(const float2 & rhs) noexcept;
+float2 & operator-=(float rhs) noexcept;
 
-            Float2 & operator/=(const Float2 & rhs) noexcept;
-Float2 & operator/=(float rhs) noexcept;
+            float2 & operator/=(const float2 & rhs) noexcept;
+float2 & operator/=(float rhs) noexcept;
 
-            Float2 & operator*=(const Float2 & rhs) noexcept;
-Float2 & operator*=(float rhs) noexcept;
+            float2 & operator*=(const float2 & rhs) noexcept;
+float2 & operator*=(float rhs) noexcept;
 
-            Float2 operator*(const Float2 & rhs) const noexcept;
+            float2 operator*(const float2 & rhs) const noexcept;
 
-            Float2 operator/(const Float2 & rhs) const noexcept;
+            float2 operator/(const float2 & rhs) const noexcept;
 
-            Float2 operator+(const Float2 & rhs) const noexcept;
+            float2 operator+(const float2 & rhs) const noexcept;
 
-            Float2 operator-(const Float2 & rhs) const noexcept;
+            float2 operator-(const float2 & rhs) const noexcept;
 
-            Float2 Abs() const noexcept;
+            float2 Abs() const noexcept;
 
-            Float2 Acos() const noexcept;
+            float2 Acos() const noexcept;
 
-            Float2 Asin() const noexcept;
+            float2 Asin() const noexcept;
 
-            Float2 Atan() const noexcept;
+            float2 Atan() const noexcept;
 
-            Float2 Cos() const noexcept;
+            float2 Cos() const noexcept;
 
-            Float2 Sin() const noexcept;
+            float2 Sin() const noexcept;
 
-            Float2 Cosh() const noexcept;
+            float2 Cosh() const noexcept;
 
-            Float2 Sinh() const noexcept;
+            float2 Sinh() const noexcept;
 
-            Float2 Tan() const noexcept;
+            float2 Tan() const noexcept;
 
-            Float2 Exp() const noexcept;
+            float2 Exp() const noexcept;
 
-            Float2 Log() const noexcept;
+            float2 Log() const noexcept;
 
-            Float2 Log10() const noexcept;
+            float2 Log10() const noexcept;
 
-            Float2 Fmod(const Float2 & rhs) const noexcept;
+            float2 Fmod(const float2 & rhs) const noexcept;
 
-            Float2 Atan2(const Float2 & rhs) const noexcept;
+            float2 Atan2(const float2 & rhs) const noexcept;
 
-            Float2 Pow(const Float2 & rhs) const noexcept;
+            float2 Pow(const float2 & rhs) const noexcept;
 
-            Float2 Sqrt() const noexcept;
+            float2 Sqrt() const noexcept;
 
-            Float2 Clamp(const Float2 & low, const Float2 & high) const noexcept;
+            float2 Clamp(const float2 & low, const float2 & high) const noexcept;
 
-            float Dot(const Float2 & rhs) const noexcept;
+            float Dot(const float2 & rhs) const noexcept;
 
-            Float2 Sign() const noexcept;
+            float2 Sign() const noexcept;
 
-            Int2 Round() const noexcept;
+            int2 Round() const noexcept;
 
-            Float2 Saturate() const noexcept;
+            float2 Saturate() const noexcept;
 
             float LengthSquared() const noexcept;
 
             float Length() const noexcept;
 
-            Float2 Normalize() const noexcept;
+            float2 Normalize() const noexcept;
 
-            Bool2 IsNan() const noexcept;
+            bool2 IsNan() const noexcept;
 
-            Bool2 IsFinite() const noexcept;
+            bool2 IsFinite() const noexcept;
 
-            Bool2 IsInfinite() const noexcept;
+            bool2 IsInfinite() const noexcept;
 
-            Float2 operator-() const noexcept;
+            float2 operator-() const noexcept;
 
-            Float2 operator%(const Float2 & rhs) const noexcept;
+            float2 operator%(const float2 & rhs) const noexcept;
 
-            Float2 & operator%=(const Float2 & rhs) noexcept;
+            float2 & operator%=(const float2 & rhs) noexcept;
 
-            Int2 Ceil() const noexcept;
+            int2 Ceil() const noexcept;
 
-            Int2 Floor() const noexcept;
+            int2 Floor() const noexcept;
 
-            Float2 Exp2() const noexcept;
+            float2 Exp2() const noexcept;
 
-            Int2 Trunc() const noexcept;
+            int2 Trunc() const noexcept;
 
-            float Distance(const Float2 & rhs) const noexcept;
+            float Distance(const float2 & rhs) const noexcept;
 
-            Bool2 operator<(const Float2 & rhs) const noexcept;
+            bool2 operator<(const float2 & rhs) const noexcept;
 
-            Bool2 operator>(const Float2 & rhs) const noexcept;
+            bool2 operator>(const float2 & rhs) const noexcept;
 
-            Bool2 operator!=(const Float2 & rhs) const noexcept;
+            bool2 operator!=(const float2 & rhs) const noexcept;
 
-            Bool2 operator==(const Float2 & rhs) const noexcept;
+            bool2 operator==(const float2 & rhs) const noexcept;
 
-            Bool2 operator>=(const Float2 & rhs) const noexcept;
+            bool2 operator>=(const float2 & rhs) const noexcept;
 
-            Bool2 operator<=(const Float2 & rhs) const noexcept;
+            bool2 operator<=(const float2 & rhs) const noexcept;
 
-            static Float2 Random(float lower = 0.0f, float upper = 1.0f) noexcept;
+            static float2 Random(float lower = 0.0f, float upper = 1.0f) noexcept;
 
-            Float2 operator+(float v) const noexcept;
+            float2 operator+(float v) const noexcept;
 
-            Float2 operator-(float v) const noexcept;
+            float2 operator-(float v) const noexcept;
 
-            Float2 operator*(float v) const noexcept;
+            float2 operator*(float v) const noexcept;
 
-            Float2 operator/(float v) const noexcept;
+            float2 operator/(float v) const noexcept;
 
-            Float2 operator%(float v) const noexcept;
+            float2 operator%(float v) const noexcept;
 
             float Arg() const noexcept;
 
-            Float2 Polar() const noexcept;
+            float2 Polar() const noexcept;
 
-            Float2 ComplexMul(const Float2 & rhs) const noexcept;
+            float2 ComplexMul(const float2 & rhs) const noexcept;
 
-            Float2 Cartesian() const noexcept;
+            float2 Cartesian() const noexcept;
 
-            static const Float2 One;
-            static const Float2 Zero;
-            static const Float2 UnitX;
-            static const Float2 UnitY;
+            static const float2 One;
+            static const float2 Zero;
+            static const float2 UnitX;
+            static const float2 UnitY;
         };
     }
 }

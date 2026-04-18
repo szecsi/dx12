@@ -1,19 +1,19 @@
 #pragma once
 
-#include "Int2.h"
-#include "Bool3.h"
-#include "Int4.h"
+#include "int2.h"
+#include "bool3.h"
+#include "int4.h"
 
 namespace Egg {
     namespace Math {
 
-        class Int2;
-        class Int4;
-        class Bool2;
-        class Bool3;
-        class Bool4;
+        class int2;
+        class int4;
+        class bool2;
+        class bool3;
+        class bool4;
 
-        class Int3 {
+        class int3 {
         public:
             union {
                 struct {
@@ -22,227 +22,227 @@ namespace Egg {
                     int z;
                 };
 
-                Int2Swizzle<Int2, Bool2, 3, 0, 0> xx;
-                Int2Swizzle<Int2, Bool2, 3, 0, 1> xy;
-                Int2Swizzle<Int2, Bool2, 3, 0, 2> xz;
-                Int2Swizzle<Int2, Bool2, 3, 1, 0> yx;
-                Int2Swizzle<Int2, Bool2, 3, 1, 1> yy;
-                Int2Swizzle<Int2, Bool2, 3, 1, 2> yz;
-                Int2Swizzle<Int2, Bool2, 3, 2, 0> zx;
-                Int2Swizzle<Int2, Bool2, 3, 2, 1> zy;
-                Int2Swizzle<Int2, Bool2, 3, 2, 2> zz;
+                int2Swizzle<int2, bool2, 3, 0, 0> xx;
+                int2Swizzle<int2, bool2, 3, 0, 1> xy;
+                int2Swizzle<int2, bool2, 3, 0, 2> xz;
+                int2Swizzle<int2, bool2, 3, 1, 0> yx;
+                int2Swizzle<int2, bool2, 3, 1, 1> yy;
+                int2Swizzle<int2, bool2, 3, 1, 2> yz;
+                int2Swizzle<int2, bool2, 3, 2, 0> zx;
+                int2Swizzle<int2, bool2, 3, 2, 1> zy;
+                int2Swizzle<int2, bool2, 3, 2, 2> zz;
 
-                Int3Swizzle<Int3, Bool3, 3, 0, 0, 0> xxx;
-                Int3Swizzle<Int3, Bool3, 3, 0, 0, 1> xxy;
-                Int3Swizzle<Int3, Bool3, 3, 0, 0, 2> xxz;
-                Int3Swizzle<Int3, Bool3, 3, 0, 1, 0> xyx;
-                Int3Swizzle<Int3, Bool3, 3, 0, 1, 1> xyy;
-                Int3Swizzle<Int3, Bool3, 3, 0, 1, 2> xyz;
-                Int3Swizzle<Int3, Bool3, 3, 0, 2, 0> xzx;
-                Int3Swizzle<Int3, Bool3, 3, 0, 2, 1> xzy;
-                Int3Swizzle<Int3, Bool3, 3, 0, 2, 2> xzz;
-                Int3Swizzle<Int3, Bool3, 3, 1, 0, 0> yxx;
-                Int3Swizzle<Int3, Bool3, 3, 1, 0, 1> yxy;
-                Int3Swizzle<Int3, Bool3, 3, 1, 0, 2> yxz;
-                Int3Swizzle<Int3, Bool3, 3, 1, 1, 0> yyx;
-                Int3Swizzle<Int3, Bool3, 3, 1, 1, 1> yyy;
-                Int3Swizzle<Int3, Bool3, 3, 1, 1, 2> yyz;
-                Int3Swizzle<Int3, Bool3, 3, 1, 2, 0> yzx;
-                Int3Swizzle<Int3, Bool3, 3, 1, 2, 1> yzy;
-                Int3Swizzle<Int3, Bool3, 3, 1, 2, 2> yzz;
-                Int3Swizzle<Int3, Bool3, 3, 2, 0, 0> zxx;
-                Int3Swizzle<Int3, Bool3, 3, 2, 0, 1> zxy;
-                Int3Swizzle<Int3, Bool3, 3, 2, 0, 2> zxz;
-                Int3Swizzle<Int3, Bool3, 3, 2, 1, 0> zyx;
-                Int3Swizzle<Int3, Bool3, 3, 2, 1, 1> zyy;
-                Int3Swizzle<Int3, Bool3, 3, 2, 1, 2> zyz;
-                Int3Swizzle<Int3, Bool3, 3, 2, 2, 0> zzx;
-                Int3Swizzle<Int3, Bool3, 3, 2, 2, 1> zzy;
-                Int3Swizzle<Int3, Bool3, 3, 2, 2, 2> zzz;
+                int3Swizzle<int3, bool3, 3, 0, 0, 0> xxx;
+                int3Swizzle<int3, bool3, 3, 0, 0, 1> xxy;
+                int3Swizzle<int3, bool3, 3, 0, 0, 2> xxz;
+                int3Swizzle<int3, bool3, 3, 0, 1, 0> xyx;
+                int3Swizzle<int3, bool3, 3, 0, 1, 1> xyy;
+                int3Swizzle<int3, bool3, 3, 0, 1, 2> xyz;
+                int3Swizzle<int3, bool3, 3, 0, 2, 0> xzx;
+                int3Swizzle<int3, bool3, 3, 0, 2, 1> xzy;
+                int3Swizzle<int3, bool3, 3, 0, 2, 2> xzz;
+                int3Swizzle<int3, bool3, 3, 1, 0, 0> yxx;
+                int3Swizzle<int3, bool3, 3, 1, 0, 1> yxy;
+                int3Swizzle<int3, bool3, 3, 1, 0, 2> yxz;
+                int3Swizzle<int3, bool3, 3, 1, 1, 0> yyx;
+                int3Swizzle<int3, bool3, 3, 1, 1, 1> yyy;
+                int3Swizzle<int3, bool3, 3, 1, 1, 2> yyz;
+                int3Swizzle<int3, bool3, 3, 1, 2, 0> yzx;
+                int3Swizzle<int3, bool3, 3, 1, 2, 1> yzy;
+                int3Swizzle<int3, bool3, 3, 1, 2, 2> yzz;
+                int3Swizzle<int3, bool3, 3, 2, 0, 0> zxx;
+                int3Swizzle<int3, bool3, 3, 2, 0, 1> zxy;
+                int3Swizzle<int3, bool3, 3, 2, 0, 2> zxz;
+                int3Swizzle<int3, bool3, 3, 2, 1, 0> zyx;
+                int3Swizzle<int3, bool3, 3, 2, 1, 1> zyy;
+                int3Swizzle<int3, bool3, 3, 2, 1, 2> zyz;
+                int3Swizzle<int3, bool3, 3, 2, 2, 0> zzx;
+                int3Swizzle<int3, bool3, 3, 2, 2, 1> zzy;
+                int3Swizzle<int3, bool3, 3, 2, 2, 2> zzz;
 
-                Int4Swizzle<Int4, Bool4, 3, 0, 0, 0, 0> xxxx;
-                Int4Swizzle<Int4, Bool4, 3, 0, 0, 1, 0> xxxy;
-                Int4Swizzle<Int4, Bool4, 3, 0, 0, 2, 0> xxxz;
-                Int4Swizzle<Int4, Bool4, 3, 0, 0, 0, 1> xxyx;
-                Int4Swizzle<Int4, Bool4, 3, 0, 0, 1, 1> xxyy;
-                Int4Swizzle<Int4, Bool4, 3, 0, 0, 2, 1> xxyz;
-                Int4Swizzle<Int4, Bool4, 3, 0, 0, 0, 2> xxzx;
-                Int4Swizzle<Int4, Bool4, 3, 0, 0, 1, 2> xxzy;
-                Int4Swizzle<Int4, Bool4, 3, 0, 0, 2, 2> xxzz;
-                Int4Swizzle<Int4, Bool4, 3, 0, 1, 0, 0> xyxx;
-                Int4Swizzle<Int4, Bool4, 3, 0, 1, 1, 0> xyxy;
-                Int4Swizzle<Int4, Bool4, 3, 0, 1, 2, 0> xyxz;
-                Int4Swizzle<Int4, Bool4, 3, 0, 1, 0, 1> xyyx;
-                Int4Swizzle<Int4, Bool4, 3, 0, 1, 1, 1> xyyy;
-                Int4Swizzle<Int4, Bool4, 3, 0, 1, 2, 1> xyyz;
-                Int4Swizzle<Int4, Bool4, 3, 0, 1, 0, 2> xyzx;
-                Int4Swizzle<Int4, Bool4, 3, 0, 1, 1, 2> xyzy;
-                Int4Swizzle<Int4, Bool4, 3, 0, 1, 2, 2> xyzz;
-                Int4Swizzle<Int4, Bool4, 3, 0, 2, 0, 0> xzxx;
-                Int4Swizzle<Int4, Bool4, 3, 0, 2, 1, 0> xzxy;
-                Int4Swizzle<Int4, Bool4, 3, 0, 2, 2, 0> xzxz;
-                Int4Swizzle<Int4, Bool4, 3, 0, 2, 0, 1> xzyx;
-                Int4Swizzle<Int4, Bool4, 3, 0, 2, 1, 1> xzyy;
-                Int4Swizzle<Int4, Bool4, 3, 0, 2, 2, 1> xzyz;
-                Int4Swizzle<Int4, Bool4, 3, 0, 2, 0, 2> xzzx;
-                Int4Swizzle<Int4, Bool4, 3, 0, 2, 1, 2> xzzy;
-                Int4Swizzle<Int4, Bool4, 3, 0, 2, 2, 2> xzzz;
-                Int4Swizzle<Int4, Bool4, 3, 1, 0, 0, 0> yxxx;
-                Int4Swizzle<Int4, Bool4, 3, 1, 0, 1, 0> yxxy;
-                Int4Swizzle<Int4, Bool4, 3, 1, 0, 2, 0> yxxz;
-                Int4Swizzle<Int4, Bool4, 3, 1, 0, 0, 1> yxyx;
-                Int4Swizzle<Int4, Bool4, 3, 1, 0, 1, 1> yxyy;
-                Int4Swizzle<Int4, Bool4, 3, 1, 0, 2, 1> yxyz;
-                Int4Swizzle<Int4, Bool4, 3, 1, 0, 0, 2> yxzx;
-                Int4Swizzle<Int4, Bool4, 3, 1, 0, 1, 2> yxzy;
-                Int4Swizzle<Int4, Bool4, 3, 1, 0, 2, 2> yxzz;
-                Int4Swizzle<Int4, Bool4, 3, 1, 1, 0, 0> yyxx;
-                Int4Swizzle<Int4, Bool4, 3, 1, 1, 1, 0> yyxy;
-                Int4Swizzle<Int4, Bool4, 3, 1, 1, 2, 0> yyxz;
-                Int4Swizzle<Int4, Bool4, 3, 1, 1, 0, 1> yyyx;
-                Int4Swizzle<Int4, Bool4, 3, 1, 1, 1, 1> yyyy;
-                Int4Swizzle<Int4, Bool4, 3, 1, 1, 2, 1> yyyz;
-                Int4Swizzle<Int4, Bool4, 3, 1, 1, 0, 2> yyzx;
-                Int4Swizzle<Int4, Bool4, 3, 1, 1, 1, 2> yyzy;
-                Int4Swizzle<Int4, Bool4, 3, 1, 1, 2, 2> yyzz;
-                Int4Swizzle<Int4, Bool4, 3, 1, 2, 0, 0> yzxx;
-                Int4Swizzle<Int4, Bool4, 3, 1, 2, 1, 0> yzxy;
-                Int4Swizzle<Int4, Bool4, 3, 1, 2, 2, 0> yzxz;
-                Int4Swizzle<Int4, Bool4, 3, 1, 2, 0, 1> yzyx;
-                Int4Swizzle<Int4, Bool4, 3, 1, 2, 1, 1> yzyy;
-                Int4Swizzle<Int4, Bool4, 3, 1, 2, 2, 1> yzyz;
-                Int4Swizzle<Int4, Bool4, 3, 1, 2, 0, 2> yzzx;
-                Int4Swizzle<Int4, Bool4, 3, 1, 2, 1, 2> yzzy;
-                Int4Swizzle<Int4, Bool4, 3, 1, 2, 2, 2> yzzz;
-                Int4Swizzle<Int4, Bool4, 3, 2, 0, 0, 0> zxxx;
-                Int4Swizzle<Int4, Bool4, 3, 2, 0, 1, 0> zxxy;
-                Int4Swizzle<Int4, Bool4, 3, 2, 0, 2, 0> zxxz;
-                Int4Swizzle<Int4, Bool4, 3, 2, 0, 0, 1> zxyx;
-                Int4Swizzle<Int4, Bool4, 3, 2, 0, 1, 1> zxyy;
-                Int4Swizzle<Int4, Bool4, 3, 2, 0, 2, 1> zxyz;
-                Int4Swizzle<Int4, Bool4, 3, 2, 0, 0, 2> zxzx;
-                Int4Swizzle<Int4, Bool4, 3, 2, 0, 1, 2> zxzy;
-                Int4Swizzle<Int4, Bool4, 3, 2, 0, 2, 2> zxzz;
-                Int4Swizzle<Int4, Bool4, 3, 2, 1, 0, 0> zyxx;
-                Int4Swizzle<Int4, Bool4, 3, 2, 1, 1, 0> zyxy;
-                Int4Swizzle<Int4, Bool4, 3, 2, 1, 2, 0> zyxz;
-                Int4Swizzle<Int4, Bool4, 3, 2, 1, 0, 1> zyyx;
-                Int4Swizzle<Int4, Bool4, 3, 2, 1, 1, 1> zyyy;
-                Int4Swizzle<Int4, Bool4, 3, 2, 1, 2, 1> zyyz;
-                Int4Swizzle<Int4, Bool4, 3, 2, 1, 0, 2> zyzx;
-                Int4Swizzle<Int4, Bool4, 3, 2, 1, 1, 2> zyzy;
-                Int4Swizzle<Int4, Bool4, 3, 2, 1, 2, 2> zyzz;
-                Int4Swizzle<Int4, Bool4, 3, 2, 2, 0, 0> zzxx;
-                Int4Swizzle<Int4, Bool4, 3, 2, 2, 1, 0> zzxy;
-                Int4Swizzle<Int4, Bool4, 3, 2, 2, 2, 0> zzxz;
-                Int4Swizzle<Int4, Bool4, 3, 2, 2, 0, 1> zzyx;
-                Int4Swizzle<Int4, Bool4, 3, 2, 2, 1, 1> zzyy;
-                Int4Swizzle<Int4, Bool4, 3, 2, 2, 2, 1> zzyz;
-                Int4Swizzle<Int4, Bool4, 3, 2, 2, 0, 2> zzzx;
-                Int4Swizzle<Int4, Bool4, 3, 2, 2, 1, 2> zzzy;
-                Int4Swizzle<Int4, Bool4, 3, 2, 2, 2, 2> zzzz;
+                int4Swizzle<int4, bool4, 3, 0, 0, 0, 0> xxxx;
+                int4Swizzle<int4, bool4, 3, 0, 0, 1, 0> xxxy;
+                int4Swizzle<int4, bool4, 3, 0, 0, 2, 0> xxxz;
+                int4Swizzle<int4, bool4, 3, 0, 0, 0, 1> xxyx;
+                int4Swizzle<int4, bool4, 3, 0, 0, 1, 1> xxyy;
+                int4Swizzle<int4, bool4, 3, 0, 0, 2, 1> xxyz;
+                int4Swizzle<int4, bool4, 3, 0, 0, 0, 2> xxzx;
+                int4Swizzle<int4, bool4, 3, 0, 0, 1, 2> xxzy;
+                int4Swizzle<int4, bool4, 3, 0, 0, 2, 2> xxzz;
+                int4Swizzle<int4, bool4, 3, 0, 1, 0, 0> xyxx;
+                int4Swizzle<int4, bool4, 3, 0, 1, 1, 0> xyxy;
+                int4Swizzle<int4, bool4, 3, 0, 1, 2, 0> xyxz;
+                int4Swizzle<int4, bool4, 3, 0, 1, 0, 1> xyyx;
+                int4Swizzle<int4, bool4, 3, 0, 1, 1, 1> xyyy;
+                int4Swizzle<int4, bool4, 3, 0, 1, 2, 1> xyyz;
+                int4Swizzle<int4, bool4, 3, 0, 1, 0, 2> xyzx;
+                int4Swizzle<int4, bool4, 3, 0, 1, 1, 2> xyzy;
+                int4Swizzle<int4, bool4, 3, 0, 1, 2, 2> xyzz;
+                int4Swizzle<int4, bool4, 3, 0, 2, 0, 0> xzxx;
+                int4Swizzle<int4, bool4, 3, 0, 2, 1, 0> xzxy;
+                int4Swizzle<int4, bool4, 3, 0, 2, 2, 0> xzxz;
+                int4Swizzle<int4, bool4, 3, 0, 2, 0, 1> xzyx;
+                int4Swizzle<int4, bool4, 3, 0, 2, 1, 1> xzyy;
+                int4Swizzle<int4, bool4, 3, 0, 2, 2, 1> xzyz;
+                int4Swizzle<int4, bool4, 3, 0, 2, 0, 2> xzzx;
+                int4Swizzle<int4, bool4, 3, 0, 2, 1, 2> xzzy;
+                int4Swizzle<int4, bool4, 3, 0, 2, 2, 2> xzzz;
+                int4Swizzle<int4, bool4, 3, 1, 0, 0, 0> yxxx;
+                int4Swizzle<int4, bool4, 3, 1, 0, 1, 0> yxxy;
+                int4Swizzle<int4, bool4, 3, 1, 0, 2, 0> yxxz;
+                int4Swizzle<int4, bool4, 3, 1, 0, 0, 1> yxyx;
+                int4Swizzle<int4, bool4, 3, 1, 0, 1, 1> yxyy;
+                int4Swizzle<int4, bool4, 3, 1, 0, 2, 1> yxyz;
+                int4Swizzle<int4, bool4, 3, 1, 0, 0, 2> yxzx;
+                int4Swizzle<int4, bool4, 3, 1, 0, 1, 2> yxzy;
+                int4Swizzle<int4, bool4, 3, 1, 0, 2, 2> yxzz;
+                int4Swizzle<int4, bool4, 3, 1, 1, 0, 0> yyxx;
+                int4Swizzle<int4, bool4, 3, 1, 1, 1, 0> yyxy;
+                int4Swizzle<int4, bool4, 3, 1, 1, 2, 0> yyxz;
+                int4Swizzle<int4, bool4, 3, 1, 1, 0, 1> yyyx;
+                int4Swizzle<int4, bool4, 3, 1, 1, 1, 1> yyyy;
+                int4Swizzle<int4, bool4, 3, 1, 1, 2, 1> yyyz;
+                int4Swizzle<int4, bool4, 3, 1, 1, 0, 2> yyzx;
+                int4Swizzle<int4, bool4, 3, 1, 1, 1, 2> yyzy;
+                int4Swizzle<int4, bool4, 3, 1, 1, 2, 2> yyzz;
+                int4Swizzle<int4, bool4, 3, 1, 2, 0, 0> yzxx;
+                int4Swizzle<int4, bool4, 3, 1, 2, 1, 0> yzxy;
+                int4Swizzle<int4, bool4, 3, 1, 2, 2, 0> yzxz;
+                int4Swizzle<int4, bool4, 3, 1, 2, 0, 1> yzyx;
+                int4Swizzle<int4, bool4, 3, 1, 2, 1, 1> yzyy;
+                int4Swizzle<int4, bool4, 3, 1, 2, 2, 1> yzyz;
+                int4Swizzle<int4, bool4, 3, 1, 2, 0, 2> yzzx;
+                int4Swizzle<int4, bool4, 3, 1, 2, 1, 2> yzzy;
+                int4Swizzle<int4, bool4, 3, 1, 2, 2, 2> yzzz;
+                int4Swizzle<int4, bool4, 3, 2, 0, 0, 0> zxxx;
+                int4Swizzle<int4, bool4, 3, 2, 0, 1, 0> zxxy;
+                int4Swizzle<int4, bool4, 3, 2, 0, 2, 0> zxxz;
+                int4Swizzle<int4, bool4, 3, 2, 0, 0, 1> zxyx;
+                int4Swizzle<int4, bool4, 3, 2, 0, 1, 1> zxyy;
+                int4Swizzle<int4, bool4, 3, 2, 0, 2, 1> zxyz;
+                int4Swizzle<int4, bool4, 3, 2, 0, 0, 2> zxzx;
+                int4Swizzle<int4, bool4, 3, 2, 0, 1, 2> zxzy;
+                int4Swizzle<int4, bool4, 3, 2, 0, 2, 2> zxzz;
+                int4Swizzle<int4, bool4, 3, 2, 1, 0, 0> zyxx;
+                int4Swizzle<int4, bool4, 3, 2, 1, 1, 0> zyxy;
+                int4Swizzle<int4, bool4, 3, 2, 1, 2, 0> zyxz;
+                int4Swizzle<int4, bool4, 3, 2, 1, 0, 1> zyyx;
+                int4Swizzle<int4, bool4, 3, 2, 1, 1, 1> zyyy;
+                int4Swizzle<int4, bool4, 3, 2, 1, 2, 1> zyyz;
+                int4Swizzle<int4, bool4, 3, 2, 1, 0, 2> zyzx;
+                int4Swizzle<int4, bool4, 3, 2, 1, 1, 2> zyzy;
+                int4Swizzle<int4, bool4, 3, 2, 1, 2, 2> zyzz;
+                int4Swizzle<int4, bool4, 3, 2, 2, 0, 0> zzxx;
+                int4Swizzle<int4, bool4, 3, 2, 2, 1, 0> zzxy;
+                int4Swizzle<int4, bool4, 3, 2, 2, 2, 0> zzxz;
+                int4Swizzle<int4, bool4, 3, 2, 2, 0, 1> zzyx;
+                int4Swizzle<int4, bool4, 3, 2, 2, 1, 1> zzyy;
+                int4Swizzle<int4, bool4, 3, 2, 2, 2, 1> zzyz;
+                int4Swizzle<int4, bool4, 3, 2, 2, 0, 2> zzzx;
+                int4Swizzle<int4, bool4, 3, 2, 2, 1, 2> zzzy;
+                int4Swizzle<int4, bool4, 3, 2, 2, 2, 2> zzzz;
             };
 
-            Int3(int x, int y, int z);
+            int3(int x, int y, int z);
 
-            Int3(int x, const Int2 & yz);
+            int3(int x, const int2 & yz);
 
-            Int3(const Int2 & xy, int z);
+            int3(const int2 & xy, int z);
 
-            Int3(const Int3 & xyz);
+            int3(const int3 & xyz);
 
-            Int3();
+            int3();
 
-            Int3 & operator=(const Int3 & rhs) noexcept;
-Int3 & operator=(int rhs) noexcept;
+            int3 & operator=(const int3 & rhs) noexcept;
+int3 & operator=(int rhs) noexcept;
 
-            Int3 & operator+=(const Int3 & rhs) noexcept;
-Int3 & operator+=(int rhs) noexcept;
+            int3 & operator+=(const int3 & rhs) noexcept;
+int3 & operator+=(int rhs) noexcept;
 
-            Int3 & operator-=(const Int3 & rhs) noexcept;
-Int3 & operator-=(int rhs) noexcept;
+            int3 & operator-=(const int3 & rhs) noexcept;
+int3 & operator-=(int rhs) noexcept;
 
-            Int3 & operator/=(const Int3 & rhs) noexcept;
-Int3 & operator/=(int rhs) noexcept;
+            int3 & operator/=(const int3 & rhs) noexcept;
+int3 & operator/=(int rhs) noexcept;
 
-            Int3 & operator*=(const Int3 & rhs) noexcept;
-Int3 & operator*=(int rhs) noexcept;
+            int3 & operator*=(const int3 & rhs) noexcept;
+int3 & operator*=(int rhs) noexcept;
 
-            Int3 & operator%=(const Int3 & rhs) noexcept;
-Int3 & operator%=(int rhs) noexcept;
+            int3 & operator%=(const int3 & rhs) noexcept;
+int3 & operator%=(int rhs) noexcept;
 
-            Int3 & operator|=(const Int3 & rhs) noexcept;
-Int3 & operator|=(int rhs) noexcept;
+            int3 & operator|=(const int3 & rhs) noexcept;
+int3 & operator|=(int rhs) noexcept;
 
-            Int3 & operator&=(const Int3 & rhs) noexcept;
-Int3 & operator&=(int rhs) noexcept;
+            int3 & operator&=(const int3 & rhs) noexcept;
+int3 & operator&=(int rhs) noexcept;
 
-            Int3 & operator^=(const Int3 & rhs) noexcept;
-Int3 & operator^=(int rhs) noexcept;
+            int3 & operator^=(const int3 & rhs) noexcept;
+int3 & operator^=(int rhs) noexcept;
 
-            Int3 & operator<<=(const Int3 & rhs) noexcept;
-Int3 & operator<<=(int rhs) noexcept;
+            int3 & operator<<=(const int3 & rhs) noexcept;
+int3 & operator<<=(int rhs) noexcept;
 
-            Int3 & operator>>=(const Int3 & rhs) noexcept;
-Int3 & operator>>=(int rhs) noexcept;
+            int3 & operator>>=(const int3 & rhs) noexcept;
+int3 & operator>>=(int rhs) noexcept;
 
-            Int3 operator*(const Int3 & rhs) const noexcept;
+            int3 operator*(const int3 & rhs) const noexcept;
 
-            Int3 operator/(const Int3 & rhs) const noexcept;
+            int3 operator/(const int3 & rhs) const noexcept;
 
-            Int3 operator+(const Int3 & rhs) const noexcept;
+            int3 operator+(const int3 & rhs) const noexcept;
 
-            Int3 operator-(const Int3 & rhs) const noexcept;
+            int3 operator-(const int3 & rhs) const noexcept;
 
-            Int3 operator%(const Int3 & rhs) const noexcept;
+            int3 operator%(const int3 & rhs) const noexcept;
 
-            Int3 operator|(const Int3 & rhs) const noexcept;
+            int3 operator|(const int3 & rhs) const noexcept;
 
-            Int3 operator&(const Int3 & rhs) const noexcept;
+            int3 operator&(const int3 & rhs) const noexcept;
 
-            Int3 operator^(const Int3 & rhs) const noexcept;
+            int3 operator^(const int3 & rhs) const noexcept;
 
-            Int3 operator<<(const Int3 & rhs) const noexcept;
+            int3 operator<<(const int3 & rhs) const noexcept;
 
-            Int3 operator>>(const Int3 & rhs) const noexcept;
+            int3 operator>>(const int3 & rhs) const noexcept;
 
-            Int3 operator||(const Int3 & rhs) const noexcept;
+            int3 operator||(const int3 & rhs) const noexcept;
 
-            Int3 operator&&(const Int3 & rhs) const noexcept;
+            int3 operator&&(const int3 & rhs) const noexcept;
 
-            Bool3 operator<(const Int3 & rhs) const noexcept;
+            bool3 operator<(const int3 & rhs) const noexcept;
 
-            Bool3 operator>(const Int3 & rhs) const noexcept;
+            bool3 operator>(const int3 & rhs) const noexcept;
 
-            Bool3 operator!=(const Int3 & rhs) const noexcept;
+            bool3 operator!=(const int3 & rhs) const noexcept;
 
-            Bool3 operator==(const Int3 & rhs) const noexcept;
+            bool3 operator==(const int3 & rhs) const noexcept;
 
-            Bool3 operator>=(const Int3 & rhs) const noexcept;
+            bool3 operator>=(const int3 & rhs) const noexcept;
 
-            Bool3 operator<=(const Int3 & rhs) const noexcept;
+            bool3 operator<=(const int3 & rhs) const noexcept;
 
-            Int3 operator~() const noexcept;
+            int3 operator~() const noexcept;
 
-            Int3 operator!() const noexcept;
+            int3 operator!() const noexcept;
 
-            Int3 operator++() noexcept;
+            int3 operator++() noexcept;
 
-            Int3 operator++(int) noexcept;
+            int3 operator++(int) noexcept;
 
-            Int3 operator--() noexcept;
+            int3 operator--() noexcept;
 
-            Int3 operator--(int) noexcept;
+            int3 operator--(int) noexcept;
 
-            static Int3 Random(int lower = 0, int upper = 6) noexcept;
+            static int3 Random(int lower = 0, int upper = 6) noexcept;
 
-            Int3 operator-() const noexcept;
+            int3 operator-() const noexcept;
 
-            static const Int3 One;
-            static const Int3 Zero;
-            static const Int3 UnitX;
-            static const Int3 UnitY;
-            static const Int3 UnitZ;
+            static const int3 One;
+            static const int3 Zero;
+            static const int3 UnitX;
+            static const int3 UnitY;
+            static const int3 UnitZ;
         };
     }
 }

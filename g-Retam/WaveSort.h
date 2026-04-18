@@ -1,15 +1,15 @@
 #pragma once
-#include "ComputeShader.h"
-#include "RawBuffer.h"
+#include "Egg/Compute/ComputeShader.h"
+#include "Egg/Compute/RawBuffer.h"
 
 class WaveSort {
-	ComputeShader csLocalSortAlpha;
-	ComputeShader csLocalSortBeta;
-	ComputeShader csLocalSortGamma;
-	ComputeShader csScan;
-	ComputeShader csPackAlpha;
-	ComputeShader csPackBeta;
-	ComputeShader csPackGamma;
+	Egg::Compute::ComputeShader csLocalSortAlpha;
+	Egg::Compute::ComputeShader csLocalSortBeta;
+	Egg::Compute::ComputeShader csLocalSortGamma;
+	Egg::Compute::ComputeShader csScan;
+	Egg::Compute::ComputeShader csPackAlpha;
+	Egg::Compute::ComputeShader csPackBeta;
+	Egg::Compute::ComputeShader csPackGamma;
 	D3D12_GPU_DESCRIPTOR_HANDLE uavHandle; //uavHeap->GetGPUDescriptorHandleForHeapStart()
 	uint uavOffset;
 	bool interleaveBits;
@@ -18,15 +18,15 @@ class WaveSort {
 
 public:
 	void creaseResources(
-		ComputeShader csLocalSortAlpha,
-		ComputeShader csLocalSortBeta,
-		ComputeShader csLocalSortGamma,
-		ComputeShader csScan,
-		ComputeShader csPackAlpha,
-		ComputeShader csPackBeta,
-		ComputeShader csPackGamma,
+		Egg::Compute::ComputeShader csLocalSortAlpha,
+		Egg::Compute::ComputeShader csLocalSortBeta,
+		Egg::Compute::ComputeShader csLocalSortGamma,
+		Egg::Compute::ComputeShader csScan,
+		Egg::Compute::ComputeShader csPackAlpha,
+		Egg::Compute::ComputeShader csPackBeta,
+		Egg::Compute::ComputeShader csPackGamma,
 		CD3DX12_GPU_DESCRIPTOR_HANDLE uavHandle, uint uavOffset, uint dhIncrSize,
-		const std::vector<RawBuffer>& buffers, bool interleaveBits = false)
+		const std::vector<Egg::Compute::RawBuffer>& buffers, bool interleaveBits = false)
 	{
 		this->csLocalSortAlpha = csLocalSortAlpha;
 		this->csLocalSortBeta = csLocalSortBeta;

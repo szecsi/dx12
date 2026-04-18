@@ -1,26 +1,26 @@
 #pragma once
 
-#include "Math/Float3.h"
+#include "Math/float3.h"
 
 namespace Egg {
 	/*
 	PNT: Position, Normal, Texture
 	*/
 	struct PNT_Vertex {
-		Egg::Math::Float3 position;
-		Egg::Math::Float3 normal;
-		Egg::Math::Float2 tex;
+		Egg::Math::float3 position;
+		Egg::Math::float3 normal;
+		Egg::Math::float2 tex;
 	};
 
 	/*
-	PNTTB: Position, Normal, Texture, Tangent, Binormal
+	PNTTB: Position, Normal, Texture, Tangent, Bitangent
 	*/
 	struct PNTTB_Vertex {
-		Egg::Math::Float3 position;
-		Egg::Math::Float3 normal;
-		Egg::Math::Float2 tex;
-		Egg::Math::Float3 tangent;
-		Egg::Math::Float3 binormal;
+		Egg::Math::float3 position;
+		Egg::Math::float3 normal;
+		Egg::Math::float2 tex;
+		Egg::Math::float3 tangent;
+		Egg::Math::float3 bitangent;
 	};
 
 }

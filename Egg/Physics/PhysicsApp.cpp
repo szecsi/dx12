@@ -103,12 +103,12 @@ Egg::Scene::Entity::P Physics::PhysicsApp::CreatePhysicsEntity(luabind::object n
 	try {
 		using namespace Egg::Math;
 		auto multiMesh = attributeTable.get<Egg::Mesh::Multi>("multiMesh");
-		Float3 position = attributeTable.getFloat3("position");
-		Float3 axis = attributeTable.getFloat3("orientationAxis", Float3(0, 1, 0));
+		float3 position = attributeTable.getfloat3("position");
+		float3 axis = attributeTable.getfloat3("orientationAxis", float3(0, 1, 0));
 		float angle = attributeTable.getFloat("orientationAngle");
 		auto model = attributeTable.get<Egg::Physics::Model>("model");
 		// quaternion from axis and angle
-		Float4 orientation = Float4(axis.Normalize() * sinf(angle / 2), cosf(angle / 2));
+		float4 orientation = float4(axis.Normalize() * sinf(angle / 2), cosf(angle / 2));
 		Physics::PhysicsRigidBody::P rigidBody =
 			Physics::PhysicsRigidBody::Create(
 				scene, model, position, orientation
@@ -118,8 +118,8 @@ Egg::Scene::Entity::P Physics::PhysicsApp::CreatePhysicsEntity(luabind::object n
 		actor->setLinearDamping(attributeTable.getFloat("linearDamping", actor->getLinearDamping()));
 		actor->setAngularDamping(attributeTable.getFloat("angularDamping", actor->getAngularDamping()));
 		actor->setMaxAngularVelocity(attributeTable.getFloat("maxAngularVelocity", actor->getMaxAngularVelocity()));
-		actor->setLinearVelocity(~attributeTable.getFloat3("linearVelocity", ~actor->getLinearVelocity()));
-		actor->setAngularVelocity(~attributeTable.getFloat3("angularVelocity", ~actor->getAngularVelocity()));
+		actor->setLinearVelocity(~attributeTable.getfloat3("linearVelocity", ~actor->getLinearVelocity()));
+		actor->setAngularVelocity(~attributeTable.getfloat3("angularVelocity", ~actor->getAngularVelocity()));
 
 		Scene::Entity::P physicsEntity = 
 			Scene::Entity::Create(multiMesh, rigidBody);
@@ -152,8 +152,8 @@ void Physics::PhysicsApp::AddShapeToModel(Model::P model, luabind::object attrib
 	try {
 		using namespace Egg::Math;
 		using namespace physx;
-		Float3 position = attributeTable.getFloat3("position");
-		Float3 axis = attributeTable.getFloat3("orientationAxis", Float3(0, 1, 0));
+		float3 position = attributeTable.getfloat3("position");
+		float3 axis = attributeTable.getfloat3("orientationAxis", float3(0, 1, 0));
 		axis = axis.Normalize();
 		float angle = attributeTable.getFloat("orientationAngle");
 
@@ -162,7 +162,7 @@ void Physics::PhysicsApp::AddShapeToModel(Model::P model, luabind::object attrib
 		PxGeometryType::Enum e = attributeTable.getEnum<PxGeometryType::Enum>("geometryType", PxGeometryType::eINVALID);
 		switch(e) {
 			case PxGeometryType::eBOX:
-				geometry = new PxBoxGeometry( ~attributeTable.getFloat3("halfExtents", Float3(1, 1, 1)) );
+				geometry = new PxBoxGeometry( ~attributeTable.getfloat3("halfExtents", float3(1, 1, 1)) );
 				break;
 			case PxGeometryType::eCAPSULE:
 				geometry = new PxCapsuleGeometry( attributeTable.getFloat("radius"), attributeTable.getFloat("halfHeight") );

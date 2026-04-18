@@ -19,7 +19,7 @@ Mesh::Indexed::P Mesh::Importer::fromAiMesh(Microsoft::WRL::ComPtr<ID3D11Device>
 	unsigned int positionOffset = 0;
 	unsigned int normalOffset = 0;
 	unsigned int tangentOffset = 0;
-	unsigned int binormalOffset = 0;
+	unsigned int bitangentOffset = 0;
 	unsigned int texcoord0Offset = 0;
 	unsigned int blendIndicesOffset = 0;
 	unsigned int blendWeightsOffset = 0;
@@ -74,17 +74,17 @@ Mesh::Indexed::P Mesh::Importer::fromAiMesh(Microsoft::WRL::ComPtr<ID3D11Device>
 	if(assMesh->HasTangentsAndBitangents())
 	{
 		elements[cElements].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-		elements[cElements].AlignedByteOffset = binormalOffset = cOffset;
+		elements[cElements].AlignedByteOffset = bitangentOffset = cOffset;
 		cOffset += sizeof(float) * 3;
 		elements[cElements].InputSlot = 0;
 		elements[cElements].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
 		elements[cElements].InstanceDataStepRate = 0;
 		elements[cElements].SemanticIndex = 0;
-//		const char* semanticNameLiteral = "BINORMAL";
+//		const char* semanticNameLiteral = "BITANGENT";
 //		char* semanticName = new char[strlen(semanticNameLiteral)+1];
 //		strcpy(semanticName, semanticNameLiteral);
 //		elements[cElements].SemanticName = semanticName;
-		elements[cElements].SemanticName = "BINORMAL";
+		elements[cElements].SemanticName = "BITANGENT";
 		cElements++;
 	}
 	if(assMesh->HasTextureCoords(0))
@@ -140,7 +140,7 @@ Mesh::Indexed::P Mesh::Importer::fromAiMesh(Microsoft::WRL::ComPtr<ID3D11Device>
 		if(assMesh->HasTangentsAndBitangents())
 		{
 			memcpy(sysMemVertices + iVertex * vertexStride + tangentOffset, &assMesh->mTangents[iVertex], sizeof(float) * 3);
-			memcpy(sysMemVertices + iVertex * vertexStride + binormalOffset, &assMesh->mBitangents[iVertex], sizeof(float) * 3);
+			memcpy(sysMemVertices + iVertex * vertexStride + bitangentOffset, &assMesh->mBitangents[iVertex], sizeof(float) * 3);
 		}
 		if(assMesh->HasTextureCoords(0))
 			memcpy(sysMemVertices + iVertex * vertexStride + texcoord0Offset, &assMesh->mTextureCoords[0][iVertex], sizeof(float) * 2);

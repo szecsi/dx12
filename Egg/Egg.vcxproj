@@ -55,10 +55,16 @@
     <ClInclude Include="Cam\FirstPerson.h" />
     <ClInclude Include="Cam\Fixed.h" />
     <ClInclude Include="Common.h" />
+    <ClInclude Include="Compute\ComputePass.h" />
+    <ClInclude Include="Compute\ComputeShader.h" />
+    <ClInclude Include="Compute\Fence.h" />
+    <ClInclude Include="Compute\FenceChain.h" />
+    <ClInclude Include="Compute\RawBuffer.h" />
     <ClInclude Include="ConstantBuffer.hpp" />
     <ClInclude Include="Control\ControlApp.h" />
     <ClInclude Include="Control\LuaControlState.h" />
     <ClInclude Include="d3dx12.h" />
+    <ClInclude Include="DDS\DDSTextureLoader.h" />
     <ClInclude Include="Importer.h" />
     <ClInclude Include="Math\Bool1.h" />
     <ClInclude Include="Math\Bool2.h" />
@@ -128,6 +134,7 @@
     <ClCompile Include="Cam\FirstPerson.cpp" />
     <ClCompile Include="Cam\Fixed.cpp" />
     <ClCompile Include="Control\ControlApp.cpp" />
+    <ClCompile Include="DDS\DDSTextureLoader.cpp" />
     <ClCompile Include="Importer.cpp" />
     <ClCompile Include="Internal.cpp" />
     <ClCompile Include="Math\Bool1.cpp" />

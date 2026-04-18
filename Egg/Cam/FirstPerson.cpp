@@ -5,9 +5,9 @@ using namespace Egg::Math;
 
 Cam::FirstPerson::FirstPerson()
 {
-	position = Float3::UnitZ * -10.0;
-	ahead = Float3::UnitZ;
-	right = Float3::UnitX;
+	position = float3::UnitZ * -10.0;
+	ahead = float3::UnitZ;
+	right = float3::UnitX;
 	yaw = 0.0;
 	pitch = 0.0;
 
@@ -16,13 +16,13 @@ Cam::FirstPerson::FirstPerson()
 	farPlane = 1000.0f;
 	SetAspect(1.33f);
 
-	viewMatrix = Float4x4::View(position, ahead, Float3::UnitY);
-	rayDirMatrix = (Float4x4::View(Float3::Zero, ahead, Float3::UnitY) * projMatrix).Invert();
+	viewMatrix = float4x4::View(position, ahead, float3::UnitY);
+	rayDirMatrix = (float4x4::View(float3::Zero, ahead, float3::UnitY) * projMatrix).Invert();
 
 	speed = 0.5f;
 
-	lastMousePos = Int2::Zero;
-	mouseDelta = Float2::Zero;
+	lastMousePos = int2::Zero;
+	mouseDelta = float2::Zero;
 
 	wPressed = false;
 	aPressed = false;
@@ -32,7 +32,7 @@ Cam::FirstPerson::FirstPerson()
 	ePressed = false;
 }
 
-Cam::FirstPerson::P Cam::FirstPerson::SetView(Egg::Math::Float3 position, Egg::Math::Float3 ahead)
+Cam::FirstPerson::P Cam::FirstPerson::SetView(Egg::Math::float3 position, Egg::Math::float3 ahead)
 {
 	this->position = position;
 	this->ahead =    ahead;
@@ -55,44 +55,44 @@ Cam::FirstPerson::P Cam::FirstPerson::SetSpeed(float speed)
 	return GetShared();
 }
 
-const Float3& Cam::FirstPerson::GetEyePosition()
+const float3& Cam::FirstPerson::GetEyePosition()
 {
 	return position;
 }
 
-const Float3& Cam::FirstPerson::GetAhead()
+const float3& Cam::FirstPerson::GetAhead()
 {
 	return ahead;
 }
 
-const Float4x4& Cam::FirstPerson::GetRayDirMatrix()
+const float4x4& Cam::FirstPerson::GetRayDirMatrix()
 {
 	return rayDirMatrix;
 }
 
-const Float4x4& Cam::FirstPerson::GetViewMatrix()
+const float4x4& Cam::FirstPerson::GetViewMatrix()
 {
 	return viewMatrix;
 }
 
-const Float4x4& Cam::FirstPerson::GetProjMatrix()
+const float4x4& Cam::FirstPerson::GetProjMatrix()
 {
 	return projMatrix;
 }
 
 void Cam::FirstPerson::UpdateView()
 {
-	viewMatrix = Float4x4::View(position, ahead, Float3::UnitY);
-	rayDirMatrix = (Float4x4::View(Float3::Zero, ahead, Float3::UnitY) * projMatrix).Invert();
+	viewMatrix = float4x4::View(position, ahead, float3::UnitY);
+	rayDirMatrix = (float4x4::View(float3::Zero, ahead, float3::UnitY) * projMatrix).Invert();
 
-	right = Float3::UnitY.Cross(ahead).Normalize();
+	right = float3::UnitY.Cross(ahead).Normalize();
 	yaw = atan2f( ahead.x, ahead.z );
 	pitch = -atan2f( ahead.y, ahead.xz.Length() );
 }
 
 void Cam::FirstPerson::UpdateProj()
 {
-	projMatrix = Float4x4::Proj(fov, aspect, nearPlane, farPlane);
+	projMatrix = float4x4::Proj(fov, aspect, nearPlane, farPlane);
 }
 
 void Cam::FirstPerson::Animate(double dt)
@@ -106,17 +106,17 @@ void Cam::FirstPerson::Animate(double dt)
 	if(dPressed)
 		position += right * (shiftPressed?speed*5.0:speed) * dt;
 	if(qPressed)
-		position -= Float3(0,1,0) * (shiftPressed?speed*5.0:speed) * dt;
+		position -= float3(0,1,0) * (shiftPressed?speed*5.0:speed) * dt;
 	if(ePressed)
-		position += Float3(0,1,0) * (shiftPressed?speed*5.0:speed) * dt;
+		position += float3(0,1,0) * (shiftPressed?speed*5.0:speed) * dt;
 
 	yaw += mouseDelta.x * 0.02f;
 	pitch += mouseDelta.y * 0.02f;
-	pitch = Float1(pitch).Clamp(-3.14/2, +3.14/2).x;
+	pitch = float1(pitch).Clamp(-3.14/2, +3.14/2).x;
 
-	mouseDelta = Float2::Zero;
+	mouseDelta = float2::Zero;
 
-	ahead = Float3(sin(yaw)*cos(pitch), -sin(pitch), cos(yaw)*cos(pitch) );
+	ahead = float3(sin(yaw)*cos(pitch), -sin(pitch), cos(yaw)*cos(pitch) );
 
 	UpdateView();
 }
@@ -173,16 +173,16 @@ void Cam::FirstPerson::ProcessMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
 	}
 	else if(uMsg == WM_LBUTTONDOWN)
 	{
-		lastMousePos = Int2( LOWORD(lParam), HIWORD(lParam));
+		lastMousePos = int2( LOWORD(lParam), HIWORD(lParam));
 	}
 	else if(uMsg == WM_LBUTTONUP)
 	{
-		mouseDelta = Float2::Zero;
+		mouseDelta = float2::Zero;
 	}
 	else if(uMsg == WM_MOUSEMOVE && (wParam & MK_LBUTTON))
 	{
-		Int2 mousePos( LOWORD(lParam), HIWORD(lParam));
-		mouseDelta = Float2(mousePos.x - lastMousePos.x,
+		int2 mousePos( LOWORD(lParam), HIWORD(lParam));
+		mouseDelta = float2(mousePos.x - lastMousePos.x,
 			mousePos.y - lastMousePos.y);
 
 		lastMousePos = mousePos;

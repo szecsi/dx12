@@ -167,11 +167,11 @@ namespace Egg { namespace Script
 			return ret;
 		}
 
-		/// Retrieves a table field (which must be a table itself) as a Float3.
+		/// Retrieves a table field (which must be a table itself) as a float3.
 		/// @param paramname the name of the field
 		/// @param defaultValue the value that should be returned if the specified field does not exist
 		/// @return the value of the table field
-		Egg::Math::Float3 getFloat3(const char* paramname, Egg::Math::Float3 defaultValue = Egg::Math::Float3(1, 1, 1))
+		Egg::Math::float3 getfloat3(const char* paramname, Egg::Math::float3 defaultValue = Egg::Math::float3(1, 1, 1))
 		{
 			luabind::adl::index_proxy<luabind::object> a = luaObject[paramname];
 			if( luabind::type(a) == LUA_TNIL)
@@ -179,28 +179,28 @@ namespace Egg { namespace Script
 			if( luabind::type(a) != LUA_TTABLE)
 			{
 				std::stringstream ss;
-				ss << errorLocation << ": Table expected for Float3 parameter '" << paramname << "'.";
+				ss << errorLocation << ": Table expected for float3 parameter '" << paramname << "'.";
 				throwError(ss.str());
 			}
 			LuaTable vectorElements(a, errorLocation);
-			return Egg::Math::Float3 (
+			return Egg::Math::float3 (
 				vectorElements.getFloat("x"),
 				vectorElements.getFloat("y"),
 				vectorElements.getFloat("z") );
 		}
 
-		/// Evaluates the table as a Float3.
+		/// Evaluates the table as a float3.
 		/// @param defaultValue the values that should be returned where the channel fields do not exist
 		/// @return the value of the vactor
-		Egg::Math::Float3 asFloat3(Egg::Math::Float3 defaultValue = Egg::Math::Float3(1, 1, 1))
+		Egg::Math::float3 asfloat3(Egg::Math::float3 defaultValue = Egg::Math::float3(1, 1, 1))
 		{
-			return Egg::Math::Float3 (
+			return Egg::Math::float3 (
 				getFloat("x", defaultValue.x),
 				getFloat("y", defaultValue.y),
 				getFloat("z", defaultValue.z) );
 		}
 
-		Egg::Math::Float4 getFloat4(const char* paramname, Egg::Math::Float4 defaultValue = Egg::Math::Float4(1, 1, 1, 1))
+		Egg::Math::float4 getfloat4(const char* paramname, Egg::Math::float4 defaultValue = Egg::Math::float4(1, 1, 1, 1))
 		{
 			luabind::adl::index_proxy<luabind::object> a = luaObject[paramname];
 			if( luabind::type(a) == LUA_TNIL)
@@ -208,23 +208,23 @@ namespace Egg { namespace Script
 			if( luabind::type(a) != LUA_TTABLE)
 			{
 				std::stringstream ss;
-				ss << errorLocation << ": Table expected for Float4 parameter '" << paramname << "'.";
+				ss << errorLocation << ": Table expected for float4 parameter '" << paramname << "'.";
 				throwError(ss.str());
 			}
 			LuaTable vectorElements(a, errorLocation);
-			return Egg::Math::Float4 (
+			return Egg::Math::float4 (
 				vectorElements.getFloat("x"),
 				vectorElements.getFloat("y"),
 				vectorElements.getFloat("z"),
 				vectorElements.getFloat("w"));
 		}
 
-		/// Evaluates the table as a Float4.
+		/// Evaluates the table as a float4.
 		/// @param defaultValue the values that should be returned where the channel fields do not exist
-		/// @return the value of the Float4
-		Egg::Math::Float4 asFloat4(Egg::Math::Float4 defaultValue = Egg::Math::Float4(1, 1, 1, 1))
+		/// @return the value of the float4
+		Egg::Math::float4 asfloat4(Egg::Math::float4 defaultValue = Egg::Math::float4(1, 1, 1, 1))
 		{
-			return Egg::Math::Float4 (
+			return Egg::Math::float4 (
 				getFloat("x", defaultValue.x),
 				getFloat("y", defaultValue.y),
 				getFloat("z", defaultValue.z),

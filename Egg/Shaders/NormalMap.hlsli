@@ -6,7 +6,7 @@ struct IAOutput
 	float3 normal : NORMAL;
 	float2 texCoord : TEXCOORD;
 	float3 tangent : TANGENT;
-	float3 binormal : BINORMAL;
+	float3 bitangent : bitangent;
 };
 
 struct VSOutput
@@ -18,7 +18,7 @@ struct VSOutput
 	float3 viewDirTS : TEXCOORD2;
 	float4 worldPos : WORLD;
 	float3 tangent : TANGENT;
-	float3 binormal : BINORMAL;
+	float3 bitangent : bitangent;
 	float3 viewDir : VIEWDIR;
 };
 

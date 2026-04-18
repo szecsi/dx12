@@ -47,6 +47,56 @@ Egg::Mesh::IndexedGeometry::P indexedMeshFromAssimpMesh(ID3D12Device* device, ai
 	return geometry;
 }
 
+Egg::Mesh::IndexedGeometry::P indexedMeshFromAssimpMeshWithTangents(ID3D12Device* device, aiMesh* mesh) {
+	std::vector<unsigned int> indices;
+	std::vector<Egg::PNTTB_Vertex> vertices;
+	indices.reserve(mesh->mNumFaces);
+	vertices.reserve(mesh->mNumVertices);
+
+	Egg::PNTTB_Vertex v;
+
+	for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
+		v.position.x = mesh->mVertices[i].x;
+		v.position.y = mesh->mVertices[i].y;
+		v.position.z = mesh->mVertices[i].z;
+
+		v.normal.x = mesh->mNormals[i].x;
+		v.normal.y = mesh->mNormals[i].y;
+		v.normal.z = mesh->mNormals[i].z;
+
+		v.tex.x = mesh->mTextureCoords[0][i].x;
+		v.tex.y = mesh->mTextureCoords[0][i].y;
+
+		v.tangent.x = mesh->mTangents[i].x;
+		v.tangent.y = mesh->mTangents[i].y;
+		v.tangent.z = mesh->mTangents[i].z;
+
+		v.bitangent.x = mesh->mBitangents[i].x;
+		v.bitangent.y = mesh->mBitangents[i].y;
+		v.bitangent.z = mesh->mBitangents[i].z;
+
+		vertices.emplace_back(v);
+	}
+
+	for (unsigned int i = 0; i < mesh->mNumFaces; ++i) {
+		aiFace face = mesh->mFaces[i];
+		for (unsigned int j = 0; j < face.mNumIndices; j++) {
+			indices.emplace_back(face.mIndices[j]);
+		}
+	}
+
+	Egg::Mesh::IndexedGeometry::P geometry = Egg::Mesh::IndexedGeometry::Create(device, &(vertices.at(0)), (unsigned int)(vertices.size() * sizeof(Egg::PNT_Vertex)), (unsigned int)sizeof(Egg::PNT_Vertex),
+		&(indices.at(0)), (unsigned int)(indices.size() * 4), DXGI_FORMAT_R32_UINT);
+
+	geometry->AddInputElement({ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+	geometry->AddInputElement({ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+	geometry->AddInputElement({ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+	geometry->AddInputElement({ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+	geometry->AddInputElement({ "BITANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+
+	return geometry;
+}
+
 Egg::Mesh::Multi::P ManagerApp::LoadMultiMesh(
 	const std::string& filename,
 	unsigned int flags,
@@ -57,7 +107,7 @@ Egg::Mesh::Multi::P ManagerApp::LoadMultiMesh(
 	Assimp::Importer importer;
 
 	if (flags == -1) {
-		flags = aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_GenUVCoords;
+		flags = aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_GenUVCoords | aiProcess_CalcTangentSpace;
 	}
 	const aiScene* scene = importer.ReadFile(path, flags);
 
@@ -71,7 +121,7 @@ Egg::Mesh::Multi::P ManagerApp::LoadMultiMesh(
 
 	for (int i = 0; i < scene->mNumMeshes; i++)
 	{
-		IndexedGeometry::P indexedGeometry = indexedMeshFromAssimpMesh(device.Get(), scene->mMeshes[i]);
+		IndexedGeometry::P indexedGeometry = indexedMeshFromAssimpMeshWithTangents(device.Get(), scene->mMeshes[i]);
 		if (!alias.empty())
 			indexedGeometries[alias + "[" + std::to_string(i) + "]"] = indexedGeometry;
 

@@ -1,14 +1,14 @@
 #pragma once
 
-#include "UInt2Swizzle.hpp"
-#include "UInt3Swizzle.hpp"
-#include "UInt4Swizzle.hpp"
-#include "Bool1.h"
+#include "uint2Swizzle.hpp"
+#include "uint3Swizzle.hpp"
+#include "uint4Swizzle.hpp"
+#include "bool1.h"
 
 namespace Egg {
     namespace Math {
 
-        class UInt1 {
+        class uint1 {
         public:
             union {
                 struct {
@@ -16,92 +16,92 @@ namespace Egg {
                 };
             };
 
-            UInt1(unsigned int x);
+            uint1(unsigned int x);
 
-            UInt1();
+            uint1();
 
-            UInt1 & operator=(const UInt1 & rhs) noexcept;
-UInt1 & operator=(unsigned int rhs) noexcept;
+            uint1 & operator=(const uint1 & rhs) noexcept;
+uint1 & operator=(unsigned int rhs) noexcept;
 
-            UInt1 & operator+=(const UInt1 & rhs) noexcept;
-UInt1 & operator+=(unsigned int rhs) noexcept;
+            uint1 & operator+=(const uint1 & rhs) noexcept;
+uint1 & operator+=(unsigned int rhs) noexcept;
 
-            UInt1 & operator-=(const UInt1 & rhs) noexcept;
-UInt1 & operator-=(unsigned int rhs) noexcept;
+            uint1 & operator-=(const uint1 & rhs) noexcept;
+uint1 & operator-=(unsigned int rhs) noexcept;
 
-            UInt1 & operator/=(const UInt1 & rhs) noexcept;
-UInt1 & operator/=(unsigned int rhs) noexcept;
+            uint1 & operator/=(const uint1 & rhs) noexcept;
+uint1 & operator/=(unsigned int rhs) noexcept;
 
-            UInt1 & operator*=(const UInt1 & rhs) noexcept;
-UInt1 & operator*=(unsigned int rhs) noexcept;
+            uint1 & operator*=(const uint1 & rhs) noexcept;
+uint1 & operator*=(unsigned int rhs) noexcept;
 
-            UInt1 & operator%=(const UInt1 & rhs) noexcept;
-UInt1 & operator%=(unsigned int rhs) noexcept;
+            uint1 & operator%=(const uint1 & rhs) noexcept;
+uint1 & operator%=(unsigned int rhs) noexcept;
 
-            UInt1 & operator|=(const UInt1 & rhs) noexcept;
-UInt1 & operator|=(unsigned int rhs) noexcept;
+            uint1 & operator|=(const uint1 & rhs) noexcept;
+uint1 & operator|=(unsigned int rhs) noexcept;
 
-            UInt1 & operator&=(const UInt1 & rhs) noexcept;
-UInt1 & operator&=(unsigned int rhs) noexcept;
+            uint1 & operator&=(const uint1 & rhs) noexcept;
+uint1 & operator&=(unsigned int rhs) noexcept;
 
-            UInt1 & operator^=(const UInt1 & rhs) noexcept;
-UInt1 & operator^=(unsigned int rhs) noexcept;
+            uint1 & operator^=(const uint1 & rhs) noexcept;
+uint1 & operator^=(unsigned int rhs) noexcept;
 
-            UInt1 & operator<<=(const UInt1 & rhs) noexcept;
-UInt1 & operator<<=(unsigned int rhs) noexcept;
+            uint1 & operator<<=(const uint1 & rhs) noexcept;
+uint1 & operator<<=(unsigned int rhs) noexcept;
 
-            UInt1 & operator>>=(const UInt1 & rhs) noexcept;
-UInt1 & operator>>=(unsigned int rhs) noexcept;
+            uint1 & operator>>=(const uint1 & rhs) noexcept;
+uint1 & operator>>=(unsigned int rhs) noexcept;
 
-            UInt1 operator*(const UInt1 & rhs) const noexcept;
+            uint1 operator*(const uint1 & rhs) const noexcept;
 
-            UInt1 operator/(const UInt1 & rhs) const noexcept;
+            uint1 operator/(const uint1 & rhs) const noexcept;
 
-            UInt1 operator+(const UInt1 & rhs) const noexcept;
+            uint1 operator+(const uint1 & rhs) const noexcept;
 
-            UInt1 operator-(const UInt1 & rhs) const noexcept;
+            uint1 operator-(const uint1 & rhs) const noexcept;
 
-            UInt1 operator%(const UInt1 & rhs) const noexcept;
+            uint1 operator%(const uint1 & rhs) const noexcept;
 
-            UInt1 operator|(const UInt1 & rhs) const noexcept;
+            uint1 operator|(const uint1 & rhs) const noexcept;
 
-            UInt1 operator&(const UInt1 & rhs) const noexcept;
+            uint1 operator&(const uint1 & rhs) const noexcept;
 
-            UInt1 operator^(const UInt1 & rhs) const noexcept;
+            uint1 operator^(const uint1 & rhs) const noexcept;
 
-            UInt1 operator<<(const UInt1 & rhs) const noexcept;
+            uint1 operator<<(const uint1 & rhs) const noexcept;
 
-            UInt1 operator>>(const UInt1 & rhs) const noexcept;
+            uint1 operator>>(const uint1 & rhs) const noexcept;
 
-            UInt1 operator||(const UInt1 & rhs) const noexcept;
+            uint1 operator||(const uint1 & rhs) const noexcept;
 
-            UInt1 operator&&(const UInt1 & rhs) const noexcept;
+            uint1 operator&&(const uint1 & rhs) const noexcept;
 
-            Bool1 operator<(const UInt1 & rhs) const noexcept;
+            bool1 operator<(const uint1 & rhs) const noexcept;
 
-            Bool1 operator>(const UInt1 & rhs) const noexcept;
+            bool1 operator>(const uint1 & rhs) const noexcept;
 
-            Bool1 operator!=(const UInt1 & rhs) const noexcept;
+            bool1 operator!=(const uint1 & rhs) const noexcept;
 
-            Bool1 operator==(const UInt1 & rhs) const noexcept;
+            bool1 operator==(const uint1 & rhs) const noexcept;
 
-            Bool1 operator>=(const UInt1 & rhs) const noexcept;
+            bool1 operator>=(const uint1 & rhs) const noexcept;
 
-            Bool1 operator<=(const UInt1 & rhs) const noexcept;
+            bool1 operator<=(const uint1 & rhs) const noexcept;
 
-            UInt1 operator~() const noexcept;
+            uint1 operator~() const noexcept;
 
-            UInt1 operator!() const noexcept;
+            uint1 operator!() const noexcept;
 
-            UInt1 operator++() noexcept;
+            uint1 operator++() noexcept;
 
-            UInt1 operator++(int) noexcept;
+            uint1 operator++(int) noexcept;
 
-            UInt1 operator--() noexcept;
+            uint1 operator--() noexcept;
 
-            UInt1 operator--(int) noexcept;
+            uint1 operator--(int) noexcept;
 
-            static UInt1 Random(unsigned int lower = 0, unsigned int upper = 6) noexcept;
+            static uint1 Random(unsigned int lower = 0, unsigned int upper = 6) noexcept;
 
         };
     }

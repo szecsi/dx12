@@ -223,9 +223,9 @@ namespace Egg {
 				v.tangent.y = mesh->mTangents[i].y;
 				v.tangent.z = mesh->mTangents[i].z;
 
-				v.binormal.x = mesh->mBitangents[i].x;
-				v.binormal.y = mesh->mBitangents[i].y;
-				v.binormal.z = mesh->mBitangents[i].z;
+				v.bitangent.x = mesh->mBitangents[i].x;
+				v.bitangent.y = mesh->mBitangents[i].y;
+				v.bitangent.z = mesh->mBitangents[i].z;
 
 				vertices.emplace_back(v);
 			}
@@ -244,7 +244,7 @@ namespace Egg {
 			geometry->AddInputElement({ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
 			geometry->AddInputElement({ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
 			geometry->AddInputElement({ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
-			geometry->AddInputElement({ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+			geometry->AddInputElement({ "BITANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
 
 			return geometry;
 		}

@@ -3,7 +3,7 @@ namespace Egg {
     namespace Math {
 
         template<typename I, typename B, int nBase, int s0 = 0, int s1 = 0, int s2 = 0>
-        class Int3Swizzle {
+        class int3Swizzle {
             int v[nBase];
         public:
             operator I () const noexcept {
@@ -13,140 +13,140 @@ namespace Egg {
                     (s2 >= 0) ? v[s2] : ((s2 == -1) ? 0.0f : 1.0f)
                 };
             }
-        Int3Swizzle & operator=(const I & rhs) noexcept {
+        int3Swizzle & operator=(const I & rhs) noexcept {
             if(s0 >= 0) v[s0] = rhs.x;
             if(s1 >= 0) v[s1] = rhs.y;
             if(s2 >= 0) v[s2] = rhs.z;
             return *this;
         }
 
-        Int3Swizzle & operator=(int rhs) noexcept {
+        int3Swizzle & operator=(int rhs) noexcept {
             if(s0 >= 0) v[s0] = rhs;
             if(s1 >= 0) v[s1] = rhs;
             if(s2 >= 0) v[s2] = rhs;
             return *this;
         }
 
-        Int3Swizzle & operator+=(const I & rhs) noexcept {
+        int3Swizzle & operator+=(const I & rhs) noexcept {
             if(s0 >= 0) v[s0] += rhs.x;
             if(s1 >= 0) v[s1] += rhs.y;
             if(s2 >= 0) v[s2] += rhs.z;
             return *this;
         }
 
-        Int3Swizzle & operator+=(int rhs) noexcept {
+        int3Swizzle & operator+=(int rhs) noexcept {
             if(s0 >= 0) v[s0] += rhs;
             if(s1 >= 0) v[s1] += rhs;
             if(s2 >= 0) v[s2] += rhs;
             return *this;
         }
 
-        Int3Swizzle & operator-=(const I & rhs) noexcept {
+        int3Swizzle & operator-=(const I & rhs) noexcept {
             if(s0 >= 0) v[s0] -= rhs.x;
             if(s1 >= 0) v[s1] -= rhs.y;
             if(s2 >= 0) v[s2] -= rhs.z;
             return *this;
         }
 
-        Int3Swizzle & operator-=(int rhs) noexcept {
+        int3Swizzle & operator-=(int rhs) noexcept {
             if(s0 >= 0) v[s0] -= rhs;
             if(s1 >= 0) v[s1] -= rhs;
             if(s2 >= 0) v[s2] -= rhs;
             return *this;
         }
 
-        Int3Swizzle & operator/=(const I & rhs) noexcept {
+        int3Swizzle & operator/=(const I & rhs) noexcept {
             if(s0 >= 0) v[s0] /= rhs.x;
             if(s1 >= 0) v[s1] /= rhs.y;
             if(s2 >= 0) v[s2] /= rhs.z;
             return *this;
         }
 
-        Int3Swizzle & operator/=(int rhs) noexcept {
+        int3Swizzle & operator/=(int rhs) noexcept {
             if(s0 >= 0) v[s0] /= rhs;
             if(s1 >= 0) v[s1] /= rhs;
             if(s2 >= 0) v[s2] /= rhs;
             return *this;
         }
 
-        Int3Swizzle & operator*=(const I & rhs) noexcept {
+        int3Swizzle & operator*=(const I & rhs) noexcept {
             if(s0 >= 0) v[s0] *= rhs.x;
             if(s1 >= 0) v[s1] *= rhs.y;
             if(s2 >= 0) v[s2] *= rhs.z;
             return *this;
         }
 
-        Int3Swizzle & operator*=(int rhs) noexcept {
+        int3Swizzle & operator*=(int rhs) noexcept {
             if(s0 >= 0) v[s0] *= rhs;
             if(s1 >= 0) v[s1] *= rhs;
             if(s2 >= 0) v[s2] *= rhs;
             return *this;
         }
 
-        Int3Swizzle & operator|=(const I & rhs) noexcept {
+        int3Swizzle & operator|=(const I & rhs) noexcept {
             if(s0 >= 0) v[s0] |= rhs.x;
             if(s1 >= 0) v[s1] |= rhs.y;
             if(s2 >= 0) v[s2] |= rhs.z;
             return *this;
         }
 
-        Int3Swizzle & operator|=(int rhs) noexcept {
+        int3Swizzle & operator|=(int rhs) noexcept {
             if(s0 >= 0) v[s0] |= rhs;
             if(s1 >= 0) v[s1] |= rhs;
             if(s2 >= 0) v[s2] |= rhs;
             return *this;
         }
 
-        Int3Swizzle & operator&=(const I & rhs) noexcept {
+        int3Swizzle & operator&=(const I & rhs) noexcept {
             if(s0 >= 0) v[s0] &= rhs.x;
             if(s1 >= 0) v[s1] &= rhs.y;
             if(s2 >= 0) v[s2] &= rhs.z;
             return *this;
         }
 
-        Int3Swizzle & operator&=(int rhs) noexcept {
+        int3Swizzle & operator&=(int rhs) noexcept {
             if(s0 >= 0) v[s0] &= rhs;
             if(s1 >= 0) v[s1] &= rhs;
             if(s2 >= 0) v[s2] &= rhs;
             return *this;
         }
 
-        Int3Swizzle & operator^=(const I & rhs) noexcept {
+        int3Swizzle & operator^=(const I & rhs) noexcept {
             if(s0 >= 0) v[s0] ^= rhs.x;
             if(s1 >= 0) v[s1] ^= rhs.y;
             if(s2 >= 0) v[s2] ^= rhs.z;
             return *this;
         }
 
-        Int3Swizzle & operator^=(int rhs) noexcept {
+        int3Swizzle & operator^=(int rhs) noexcept {
             if(s0 >= 0) v[s0] ^= rhs;
             if(s1 >= 0) v[s1] ^= rhs;
             if(s2 >= 0) v[s2] ^= rhs;
             return *this;
         }
 
-        Int3Swizzle & operator<<=(const I & rhs) noexcept {
+        int3Swizzle & operator<<=(const I & rhs) noexcept {
             if(s0 >= 0) v[s0] <<= rhs.x;
             if(s1 >= 0) v[s1] <<= rhs.y;
             if(s2 >= 0) v[s2] <<= rhs.z;
             return *this;
         }
 
-        Int3Swizzle & operator<<=(int rhs) noexcept {
+        int3Swizzle & operator<<=(int rhs) noexcept {
             if(s0 >= 0) v[s0] <<= rhs;
             if(s1 >= 0) v[s1] <<= rhs;
             if(s2 >= 0) v[s2] <<= rhs;
             return *this;
         }
 
-        Int3Swizzle & operator>>=(const I & rhs) noexcept {
+        int3Swizzle & operator>>=(const I & rhs) noexcept {
             if(s0 >= 0) v[s0] >>= rhs.x;
             if(s1 >= 0) v[s1] >>= rhs.y;
             if(s2 >= 0) v[s2] >>= rhs.z;
             return *this;
         }
 
-        Int3Swizzle & operator>>=(int rhs) noexcept {
+        int3Swizzle & operator>>=(int rhs) noexcept {
             if(s0 >= 0) v[s0] >>= rhs;
             if(s1 >= 0) v[s1] >>= rhs;
             if(s2 >= 0) v[s2] >>= rhs;

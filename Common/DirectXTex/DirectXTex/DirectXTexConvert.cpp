@@ -150,9 +150,9 @@ namespace
     }
 
 #if DIRECTX_MATH_VERSION >= 310
-#define StoreFloat3SE XMStoreFloat3SE
+#define Storefloat3SE XMStoreFloat3SE
 #else
-    inline void XM_CALLCONV StoreFloat3SE(_Out_ XMFLOAT3SE* pDestination, DirectX::FXMVECTOR V)
+    inline void XM_CALLCONV Storefloat3SE(_Out_ XMFLOAT3SE* pDestination, DirectX::FXMVECTOR V)
     {
         assert(pDestination);
 
@@ -2010,7 +2010,7 @@ bool DirectX::_StoreScanline(
         return false;
 
     case DXGI_FORMAT_R9G9B9E5_SHAREDEXP:
-        STORE_SCANLINE(XMFLOAT3SE, StoreFloat3SE)
+        STORE_SCANLINE(XMFLOAT3SE, Storefloat3SE)
 
     case DXGI_FORMAT_R8G8_B8G8_UNORM:
         if (size >= sizeof(XMUBYTEN4))

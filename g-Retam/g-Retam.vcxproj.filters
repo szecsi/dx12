@@ -31,27 +31,29 @@
     <FxCompile Include="Shaders\Billboard\psFire.hlsl">
       <Filter>Shaders\Billboard</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\Retam\retam256PS.hlsl">
+      <Filter>Shaders\Retam</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\retamVS.hlsl">
+      <Filter>Shaders\Retam</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="DDSTextureLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="RetamApp.h" />
-    <ClInclude Include="ComputePass.h" />
-    <ClInclude Include="ComputeShader.h" />
-    <ClInclude Include="ConstantBufferTypes.h" />
-    <ClInclude Include="DDSTextureLoader.h" />
-    <ClInclude Include="Fence.h" />
-    <ClInclude Include="FenceChain.h" />
-    <ClInclude Include="Float4Buffer.h" />
-    <ClInclude Include="Particle.h" />
-    <ClInclude Include="RawBuffer.h" />
     <ClInclude Include="WaveSort.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\Billboard\billboard.hlsli">
       <Filter>Shaders\Billboard</Filter>
+    </None>
+    <None Include="Shaders\Retam\Retam.hlsli">
+      <Filter>Shaders\Retam</Filter>
+    </None>
+    <None Include="Shaders\Retam\RetamCb.hlsli">
+      <Filter>Shaders\Retam</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -66,6 +68,9 @@
     </Filter>
     <Filter Include="Lua">
       <UniqueIdentifier>{7735a2c3-61b3-48b5-aac4-0a23792ca05d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Retam">
+      <UniqueIdentifier>{75e63ddd-6424-4053-9aed-d4f3210e6c18}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

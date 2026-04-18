@@ -27,8 +27,8 @@ using namespace physx;
 PhysicsRigidBody::PhysicsRigidBody(
 	physx::PxScene* scene,
 	Model::P model,
-	Egg::Math::Float3 position,
-	Egg::Math::Float4 orientation){
+	Egg::Math::float3 position,
+	Egg::Math::float4 orientation){
 		actor = scene->getPhysics().
 			createRigidDynamic(
 			PxTransform(~position, ~orientation ));
@@ -52,33 +52,33 @@ PhysicsRigidBody::~PhysicsRigidBody()
 //	actor->release();
 }
 
-Math::Float4x4 PhysicsRigidBody::GetModelMatrix()
+Math::float4x4 PhysicsRigidBody::GetModelMatrix()
 {
 	using namespace Egg::Math;
 
 	PxTransform m = actor->getGlobalPose();
 
 	float angle;
-	Float3 axis;
+	float3 axis;
 	toRadiansAndUnitAxis(m.q, angle, ~axis);
 
-	return Float4x4::Rotation(axis, angle) * Float4x4::Translation(~m.p);
+	return float4x4::Rotation(axis, angle) * float4x4::Translation(~m.p);
 }
 
-Math::Float4x4 PhysicsRigidBody::GetModelMatrixInverse()
+Math::float4x4 PhysicsRigidBody::GetModelMatrixInverse()
 {
 	using namespace Egg::Math;
 
 	PxTransform m = actor->getGlobalPose();
 
 	float angle;
-	Float3 axis;
+	float3 axis;
 	toRadiansAndUnitAxis(m.q, angle, ~axis);
 
-	return Float4x4::Translation(~-m.p) * Float4x4::Rotation(axis, -angle);
+	return float4x4::Translation(~-m.p) * float4x4::Rotation(axis, -angle);
 }
 
-Math::Float3 PhysicsRigidBody::GetPosition()
+Math::float3 PhysicsRigidBody::GetPosition()
 {
 	using namespace Egg::Math;
 
@@ -86,42 +86,42 @@ Math::Float3 PhysicsRigidBody::GetPosition()
 	return ~m.p;
 }
 
-Math::Float4 PhysicsRigidBody::GetOrientation()
+Math::float4 PhysicsRigidBody::GetOrientation()
 {
 	using namespace Egg::Math;
 	PxTransform m = actor->getGlobalPose();
 	return ~m.q;
 }
 
-Math::Float4x4 PhysicsRigidBody::GetRotationMatrix()
+Math::float4x4 PhysicsRigidBody::GetRotationMatrix()
 {
 	using namespace Egg::Math;
 	PxTransform m = actor->getGlobalPose();
 
 	float angle;
-	Float3 axis;
+	float3 axis;
 	toRadiansAndUnitAxis(m.q, angle, ~axis);
 
-	return Float4x4::Rotation(axis, angle);
+	return float4x4::Rotation(axis, angle);
 }
 
-Math::Float4x4 PhysicsRigidBody::GetRotationMatrixInverse()
+Math::float4x4 PhysicsRigidBody::GetRotationMatrixInverse()
 {
 	using namespace Egg::Math;
 	PxTransform m = actor->getGlobalPose();
 
 	float angle;
-	Float3 axis;
+	float3 axis;
 	toRadiansAndUnitAxis(m.q, angle, ~axis);
 
-	return Float4x4::Rotation(axis, -angle);
+	return float4x4::Rotation(axis, -angle);
 }
 
 
-void PhysicsRigidBody::AddForce(Egg::Math::Float3 force) {
+void PhysicsRigidBody::AddForce(Egg::Math::float3 force) {
 	actor->addForce(~force);
 }
 
-void PhysicsRigidBody::AddTorque(Egg::Math::Float3 torque) {
+void PhysicsRigidBody::AddTorque(Egg::Math::float3 torque) {
 	actor->addTorque(~torque);
 }

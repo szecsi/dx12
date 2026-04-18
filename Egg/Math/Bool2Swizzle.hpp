@@ -3,7 +3,7 @@ namespace Egg {
     namespace Math {
 
         template<typename B, int nBase, int s0 = 0, int s1 = 0>
-        class Bool2Swizzle {
+        class bool2Swizzle {
             bool v[nBase];
         public:
             operator B () const noexcept {
@@ -12,13 +12,13 @@ namespace Egg {
                     (s1 >= 0) ? v[s1] : ((s1 == -1) ? 0.0f : 1.0f)
                 };
             }
-        Bool2Swizzle & operator=(const B & rhs) noexcept {
+        bool2Swizzle & operator=(const B & rhs) noexcept {
             if(s0 >= 0) v[s0] = rhs.x;
             if(s1 >= 0) v[s1] = rhs.y;
             return *this;
         }
 
-        Bool2Swizzle & operator=(bool rhs) noexcept {
+        bool2Swizzle & operator=(bool rhs) noexcept {
             if(s0 >= 0) v[s0] = rhs;
             if(s1 >= 0) v[s1] = rhs;
             return *this;

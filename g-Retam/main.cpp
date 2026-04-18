@@ -100,7 +100,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	DX_API("Failed to create debug layer")
 		D3D12GetDebugInterface(IID_PPV_ARGS(debugController.GetAddressOf()));
 
-	//nodebug debugController->EnableDebugLayer();
+	//nodebug
+	debugController->EnableDebugLayer();
 
 	// needed to load WIC files (Windows Imaging Component) such as Jpg-s.
 	DX_API("Failed to initialize COM library (ImportTexture)")
@@ -195,7 +196,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 
 	while(winMessage.message != WM_QUIT) {
 		if(PeekMessage(&winMessage, NULL, 0, 0, PM_REMOVE)) {
-			app->ProcessMessage(windowHandle, winMessage.message, winMessage.wParam, winMessage.lParam);
 			TranslateMessage(&winMessage);
 			DispatchMessage(&winMessage);
 		} else {

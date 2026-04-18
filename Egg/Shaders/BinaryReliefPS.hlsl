@@ -36,7 +36,7 @@ float4 main(VSOutput vso) : SV_Target
 
 	float3 kd = diffuseTex.Sample(sampl, ptex).xyz;
 
-	float3x3 tbn = { vso.tangent, vso.binormal, vso.normal };
+	float3x3 tbn = { vso.tangent, vso.bitangent, vso.normal };
 	float3 worldNormal = normalize(mul(n, tbn));
 
 	return float4(

@@ -86,7 +86,7 @@ public:
 
 		for (int i = 0; i < 100; i++) {
 			auto rb = Egg::Scene::FixedRigidBody::Create();
-			rb->Translate(Float3(i, 0, 0));
+			rb->Translate(float3(i, 0, 0));
 			auto e = Egg::Scene::Entity::Create(podMesh, rb);
 			ManagerApp::AddEntity(e);
 		}

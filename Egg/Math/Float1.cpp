@@ -1,249 +1,249 @@
-#include "Float1.h"
+#include "float1.h"
 #include <cmath>
 #include <cfloat>
 
 namespace Egg {
     namespace Math {
 
-        Float1::Float1(float x) : x { x }{ }
+        float1::float1(float x) : x { x }{ }
 
-        Float1::Float1() : x{ 0.0f }{ }
+        float1::float1() : x{ 0.0f }{ }
 
-        Float1 & Float1::operator=(const Float1 & rhs) noexcept {
+        float1 & float1::operator=(const float1 & rhs) noexcept {
             this->x = rhs.x;
             return *this;
         }
 
-        Float1 & Float1::operator=(float rhs) noexcept {
+        float1 & float1::operator=(float rhs) noexcept {
             this->x = rhs;
             return *this;
         }
 
-        Float1 & Float1::operator+=(const Float1 & rhs) noexcept {
+        float1 & float1::operator+=(const float1 & rhs) noexcept {
             this->x += rhs.x;
             return *this;
         }
 
-        Float1 & Float1::operator+=(float rhs) noexcept {
+        float1 & float1::operator+=(float rhs) noexcept {
             this->x += rhs;
             return *this;
         }
 
-        Float1 & Float1::operator-=(const Float1 & rhs) noexcept {
+        float1 & float1::operator-=(const float1 & rhs) noexcept {
             this->x -= rhs.x;
             return *this;
         }
 
-        Float1 & Float1::operator-=(float rhs) noexcept {
+        float1 & float1::operator-=(float rhs) noexcept {
             this->x -= rhs;
             return *this;
         }
 
-        Float1 & Float1::operator/=(const Float1 & rhs) noexcept {
+        float1 & float1::operator/=(const float1 & rhs) noexcept {
             this->x /= rhs.x;
             return *this;
         }
 
-        Float1 & Float1::operator/=(float rhs) noexcept {
+        float1 & float1::operator/=(float rhs) noexcept {
             this->x /= rhs;
             return *this;
         }
 
-        Float1 & Float1::operator*=(const Float1 & rhs) noexcept {
+        float1 & float1::operator*=(const float1 & rhs) noexcept {
             this->x *= rhs.x;
             return *this;
         }
 
-        Float1 & Float1::operator*=(float rhs) noexcept {
+        float1 & float1::operator*=(float rhs) noexcept {
             this->x *= rhs;
             return *this;
         }
 
-        Float1 Float1::operator*(const Float1 & rhs) const noexcept {
-            return Float1 { this->x * rhs.x };
+        float1 float1::operator*(const float1 & rhs) const noexcept {
+            return float1 { this->x * rhs.x };
         }
 
-        Float1 Float1::operator/(const Float1 & rhs) const noexcept {
-            return Float1 { this->x / rhs.x };
+        float1 float1::operator/(const float1 & rhs) const noexcept {
+            return float1 { this->x / rhs.x };
         }
 
-        Float1 Float1::operator+(const Float1 & rhs) const noexcept {
-            return Float1 { this->x + rhs.x };
+        float1 float1::operator+(const float1 & rhs) const noexcept {
+            return float1 { this->x + rhs.x };
         }
 
-        Float1 Float1::operator-(const Float1 & rhs) const noexcept {
-            return Float1 { this->x - rhs.x };
+        float1 float1::operator-(const float1 & rhs) const noexcept {
+            return float1 { this->x - rhs.x };
         }
 
-        Float1 Float1::Abs() const noexcept {
-            return Float1 { ::abs(this->x) };
+        float1 float1::Abs() const noexcept {
+            return float1 { ::abs(this->x) };
         }
 
-        Float1 Float1::Acos() const noexcept {
-            return Float1 { ::acos(this->x) };
+        float1 float1::Acos() const noexcept {
+            return float1 { ::acos(this->x) };
         }
 
-        Float1 Float1::Asin() const noexcept {
-            return Float1 { ::asin(this->x) };
+        float1 float1::Asin() const noexcept {
+            return float1 { ::asin(this->x) };
         }
 
-        Float1 Float1::Atan() const noexcept {
-            return Float1 { ::atan(this->x) };
+        float1 float1::Atan() const noexcept {
+            return float1 { ::atan(this->x) };
         }
 
-        Float1 Float1::Cos() const noexcept {
-            return Float1 { ::cos(this->x) };
+        float1 float1::Cos() const noexcept {
+            return float1 { ::cos(this->x) };
         }
 
-        Float1 Float1::Sin() const noexcept {
-            return Float1 { ::sin(this->x) };
+        float1 float1::Sin() const noexcept {
+            return float1 { ::sin(this->x) };
         }
 
-        Float1 Float1::Cosh() const noexcept {
-            return Float1 { ::cosh(this->x) };
+        float1 float1::Cosh() const noexcept {
+            return float1 { ::cosh(this->x) };
         }
 
-        Float1 Float1::Sinh() const noexcept {
-            return Float1 { ::sinh(this->x) };
+        float1 float1::Sinh() const noexcept {
+            return float1 { ::sinh(this->x) };
         }
 
-        Float1 Float1::Tan() const noexcept {
-            return Float1 { ::tan(this->x) };
+        float1 float1::Tan() const noexcept {
+            return float1 { ::tan(this->x) };
         }
 
-        Float1 Float1::Exp() const noexcept {
-            return Float1 { ::exp(this->x) };
+        float1 float1::Exp() const noexcept {
+            return float1 { ::exp(this->x) };
         }
 
-        Float1 Float1::Log() const noexcept {
-            return Float1 { ::log(this->x) };
+        float1 float1::Log() const noexcept {
+            return float1 { ::log(this->x) };
         }
 
-        Float1 Float1::Log10() const noexcept {
-            return Float1 { ::log10(this->x) };
+        float1 float1::Log10() const noexcept {
+            return float1 { ::log10(this->x) };
         }
 
-        Float1 Float1::Fmod(const Float1 & rhs) const noexcept {
-            return Float1 { ::fmod(this->x, rhs.x) };
+        float1 float1::Fmod(const float1 & rhs) const noexcept {
+            return float1 { ::fmod(this->x, rhs.x) };
         }
 
-        Float1 Float1::Atan2(const Float1 & rhs) const noexcept {
-            return Float1 { ::atan2(this->x, rhs.x) };
+        float1 float1::Atan2(const float1 & rhs) const noexcept {
+            return float1 { ::atan2(this->x, rhs.x) };
         }
 
-        Float1 Float1::Pow(const Float1 & rhs) const noexcept {
-            return Float1 { ::pow(this->x, rhs.x) };
+        float1 float1::Pow(const float1 & rhs) const noexcept {
+            return float1 { ::pow(this->x, rhs.x) };
         }
 
-        Float1 Float1::Sqrt() const noexcept {
-            return Float1 { ::sqrtf(this->x) };
+        float1 float1::Sqrt() const noexcept {
+            return float1 { ::sqrtf(this->x) };
         }
 
-        Float1 Float1::Clamp(const Float1 & low, const Float1 & high) const noexcept {
-            return Float1 { (x < low.x) ? low.x: ((x > high.x) ? high.x :x) };
+        float1 float1::Clamp(const float1 & low, const float1 & high) const noexcept {
+            return float1 { (x < low.x) ? low.x: ((x > high.x) ? high.x :x) };
         }
 
-        float Float1::Dot(const Float1 & rhs) const noexcept {
+        float float1::Dot(const float1 & rhs) const noexcept {
             return x * rhs.x;
         }
 
-        Float1 Float1::Sign() const noexcept {
-            return Float1 { (x > 0.0f) ? 1.0f : ((x < 0.0f) ? -1.0f : 0.0f) };
+        float1 float1::Sign() const noexcept {
+            return float1 { (x > 0.0f) ? 1.0f : ((x < 0.0f) ? -1.0f : 0.0f) };
         }
 
-        Int1 Float1::Round() const noexcept {
-            return Int1 { (int)(x + 0.5f) }; 
+        int1 float1::Round() const noexcept {
+            return int1 { (int)(x + 0.5f) }; 
         }
 
-        Float1 Float1::Saturate() const noexcept {
-            return Clamp(Float1 { 0 }, Float1 { 1 });
+        float1 float1::Saturate() const noexcept {
+            return Clamp(float1 { 0 }, float1 { 1 });
         }
 
-        float Float1::LengthSquared() const noexcept {
+        float float1::LengthSquared() const noexcept {
             return Dot(*this);
         }
 
-        float Float1::Length() const noexcept {
+        float float1::Length() const noexcept {
             return ::sqrtf(LengthSquared());
         }
 
-        Float1 Float1::Normalize() const noexcept {
+        float1 float1::Normalize() const noexcept {
             float len = Length();
-             return Float1 { x / len  };
+             return float1 { x / len  };
         }
 
-        Bool1 Float1::IsNan() const noexcept {
-            return Bool1 { std::isnan(x) };
+        bool1 float1::IsNan() const noexcept {
+            return bool1 { std::isnan(x) };
         }
 
-        Bool1 Float1::IsFinite() const noexcept {
-            return Bool1 { std::isfinite(x) };
+        bool1 float1::IsFinite() const noexcept {
+            return bool1 { std::isfinite(x) };
         }
 
-        Bool1 Float1::IsInfinite() const noexcept {
-            return Bool1 { !std::isfinite(x) };
+        bool1 float1::IsInfinite() const noexcept {
+            return bool1 { !std::isfinite(x) };
         }
 
-        Float1 Float1::operator-() const noexcept {
-            return Float1 { -x };
+        float1 float1::operator-() const noexcept {
+            return float1 { -x };
         }
 
-        Float1 Float1::operator%(const Float1 & rhs) const noexcept {
-            return Float1 { ::fmodf(x, rhs.x) };
+        float1 float1::operator%(const float1 & rhs) const noexcept {
+            return float1 { ::fmodf(x, rhs.x) };
         }
 
-        Float1 & Float1::operator%=(const Float1 & rhs) noexcept {
+        float1 & float1::operator%=(const float1 & rhs) noexcept {
             x = ::fmodf(x, rhs.x);
             return *this;
         }
 
-        Int1 Float1::Ceil() const noexcept {
-            return Int1 { (int)::ceil(x) };
+        int1 float1::Ceil() const noexcept {
+            return int1 { (int)::ceil(x) };
         }
 
-        Int1 Float1::Floor() const noexcept {
-            return Int1 { (int)::floor(x) };
+        int1 float1::Floor() const noexcept {
+            return int1 { (int)::floor(x) };
         }
 
-        Float1 Float1::Exp2() const noexcept {
-            return Float1 { ::pow(2.0f,x) };
+        float1 float1::Exp2() const noexcept {
+            return float1 { ::pow(2.0f,x) };
         }
 
-        Int1 Float1::Trunc() const noexcept {
-            return Int1 { (int)x };
+        int1 float1::Trunc() const noexcept {
+            return int1 { (int)x };
         }
 
-        float Float1::Distance(const Float1 & rhs) const noexcept {
-            return (( Float1 )(*this) - rhs).Length();
+        float float1::Distance(const float1 & rhs) const noexcept {
+            return (( float1 )(*this) - rhs).Length();
         }
 
-        Bool1 Float1::operator<(const Float1 & rhs) const noexcept {
-            return Bool1 { x < rhs.x };
+        bool1 float1::operator<(const float1 & rhs) const noexcept {
+            return bool1 { x < rhs.x };
         }
 
-        Bool1 Float1::operator>(const Float1 & rhs) const noexcept {
-            return Bool1 { x > rhs.x };
+        bool1 float1::operator>(const float1 & rhs) const noexcept {
+            return bool1 { x > rhs.x };
         }
 
-        Bool1 Float1::operator!=(const Float1 & rhs) const noexcept {
-            return Bool1 { x != rhs.x };
+        bool1 float1::operator!=(const float1 & rhs) const noexcept {
+            return bool1 { x != rhs.x };
         }
 
-        Bool1 Float1::operator==(const Float1 & rhs) const noexcept {
-            return Bool1 { x == rhs.x };
+        bool1 float1::operator==(const float1 & rhs) const noexcept {
+            return bool1 { x == rhs.x };
         }
 
-        Bool1 Float1::operator>=(const Float1 & rhs) const noexcept {
-            return Bool1 { x >= rhs.x };
+        bool1 float1::operator>=(const float1 & rhs) const noexcept {
+            return bool1 { x >= rhs.x };
         }
 
-        Bool1 Float1::operator<=(const Float1 & rhs) const noexcept {
-            return Bool1 { x <= rhs.x };
+        bool1 float1::operator<=(const float1 & rhs) const noexcept {
+            return bool1 { x <= rhs.x };
         }
 
-        Float1 Float1::Random(float lower, float upper) noexcept {
+        float1 float1::Random(float lower, float upper) noexcept {
             float range = upper - lower;
-            return Float1 {  rand() * range / RAND_MAX + lower };
+            return float1 {  rand() * range / RAND_MAX + lower };
         }
 
     }

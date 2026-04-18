@@ -1,22 +1,22 @@
 #pragma once
 
-#include "Int2Swizzle.hpp"
-#include "Int3Swizzle.hpp"
-#include "Int4Swizzle.hpp"
-#include "Bool2.h"
-#include "Int3.h"
-#include "Int4.h"
+#include "int2Swizzle.hpp"
+#include "int3Swizzle.hpp"
+#include "int4Swizzle.hpp"
+#include "bool2.h"
+#include "int3.h"
+#include "int4.h"
 
 namespace Egg {
     namespace Math {
 
-        class Int3;
-        class Int4;
-        class Bool2;
-        class Bool3;
-        class Bool4;
+        class int3;
+        class int4;
+        class bool2;
+        class bool3;
+        class bool4;
 
-        class Int2 {
+        class int2 {
         public:
             union {
                 struct {
@@ -24,133 +24,133 @@ namespace Egg {
                     int y;
                 };
 
-                Int2Swizzle<Int2, Bool2, 2, 0, 0> xx;
-                Int2Swizzle<Int2, Bool2, 2, 0, 1> xy;
-                Int2Swizzle<Int2, Bool2, 2, 1, 0> yx;
-                Int2Swizzle<Int2, Bool2, 2, 1, 1> yy;
+                int2Swizzle<int2, bool2, 2, 0, 0> xx;
+                int2Swizzle<int2, bool2, 2, 0, 1> xy;
+                int2Swizzle<int2, bool2, 2, 1, 0> yx;
+                int2Swizzle<int2, bool2, 2, 1, 1> yy;
 
-                Int3Swizzle<Int3, Bool3, 2, 0, 0, 0> xxx;
-                Int3Swizzle<Int3, Bool3, 2, 0, 0, 1> xxy;
-                Int3Swizzle<Int3, Bool3, 2, 0, 1, 0> xyx;
-                Int3Swizzle<Int3, Bool3, 2, 0, 1, 1> xyy;
-                Int3Swizzle<Int3, Bool3, 2, 1, 0, 0> yxx;
-                Int3Swizzle<Int3, Bool3, 2, 1, 0, 1> yxy;
-                Int3Swizzle<Int3, Bool3, 2, 1, 1, 0> yyx;
-                Int3Swizzle<Int3, Bool3, 2, 1, 1, 1> yyy;
+                int3Swizzle<int3, bool3, 2, 0, 0, 0> xxx;
+                int3Swizzle<int3, bool3, 2, 0, 0, 1> xxy;
+                int3Swizzle<int3, bool3, 2, 0, 1, 0> xyx;
+                int3Swizzle<int3, bool3, 2, 0, 1, 1> xyy;
+                int3Swizzle<int3, bool3, 2, 1, 0, 0> yxx;
+                int3Swizzle<int3, bool3, 2, 1, 0, 1> yxy;
+                int3Swizzle<int3, bool3, 2, 1, 1, 0> yyx;
+                int3Swizzle<int3, bool3, 2, 1, 1, 1> yyy;
 
-                Int4Swizzle<Int4, Bool4, 2, 0, 0, 0, 0> xxxx;
-                Int4Swizzle<Int4, Bool4, 2, 0, 0, 1, 0> xxxy;
-                Int4Swizzle<Int4, Bool4, 2, 0, 0, 0, 1> xxyx;
-                Int4Swizzle<Int4, Bool4, 2, 0, 0, 1, 1> xxyy;
-                Int4Swizzle<Int4, Bool4, 2, 0, 1, 0, 0> xyxx;
-                Int4Swizzle<Int4, Bool4, 2, 0, 1, 1, 0> xyxy;
-                Int4Swizzle<Int4, Bool4, 2, 0, 1, 0, 1> xyyx;
-                Int4Swizzle<Int4, Bool4, 2, 0, 1, 1, 1> xyyy;
-                Int4Swizzle<Int4, Bool4, 2, 1, 0, 0, 0> yxxx;
-                Int4Swizzle<Int4, Bool4, 2, 1, 0, 1, 0> yxxy;
-                Int4Swizzle<Int4, Bool4, 2, 1, 0, 0, 1> yxyx;
-                Int4Swizzle<Int4, Bool4, 2, 1, 0, 1, 1> yxyy;
-                Int4Swizzle<Int4, Bool4, 2, 1, 1, 0, 0> yyxx;
-                Int4Swizzle<Int4, Bool4, 2, 1, 1, 1, 0> yyxy;
-                Int4Swizzle<Int4, Bool4, 2, 1, 1, 0, 1> yyyx;
-                Int4Swizzle<Int4, Bool4, 2, 1, 1, 1, 1> yyyy;
+                int4Swizzle<int4, bool4, 2, 0, 0, 0, 0> xxxx;
+                int4Swizzle<int4, bool4, 2, 0, 0, 1, 0> xxxy;
+                int4Swizzle<int4, bool4, 2, 0, 0, 0, 1> xxyx;
+                int4Swizzle<int4, bool4, 2, 0, 0, 1, 1> xxyy;
+                int4Swizzle<int4, bool4, 2, 0, 1, 0, 0> xyxx;
+                int4Swizzle<int4, bool4, 2, 0, 1, 1, 0> xyxy;
+                int4Swizzle<int4, bool4, 2, 0, 1, 0, 1> xyyx;
+                int4Swizzle<int4, bool4, 2, 0, 1, 1, 1> xyyy;
+                int4Swizzle<int4, bool4, 2, 1, 0, 0, 0> yxxx;
+                int4Swizzle<int4, bool4, 2, 1, 0, 1, 0> yxxy;
+                int4Swizzle<int4, bool4, 2, 1, 0, 0, 1> yxyx;
+                int4Swizzle<int4, bool4, 2, 1, 0, 1, 1> yxyy;
+                int4Swizzle<int4, bool4, 2, 1, 1, 0, 0> yyxx;
+                int4Swizzle<int4, bool4, 2, 1, 1, 1, 0> yyxy;
+                int4Swizzle<int4, bool4, 2, 1, 1, 0, 1> yyyx;
+                int4Swizzle<int4, bool4, 2, 1, 1, 1, 1> yyyy;
             };
 
-            Int2(int x, int y);
+            int2(int x, int y);
 
-            Int2(const Int2 & xy);
+            int2(const int2 & xy);
 
-            Int2();
+            int2();
 
-            Int2 & operator=(const Int2 & rhs) noexcept;
-Int2 & operator=(int rhs) noexcept;
+            int2 & operator=(const int2 & rhs) noexcept;
+int2 & operator=(int rhs) noexcept;
 
-            Int2 & operator+=(const Int2 & rhs) noexcept;
-Int2 & operator+=(int rhs) noexcept;
+            int2 & operator+=(const int2 & rhs) noexcept;
+int2 & operator+=(int rhs) noexcept;
 
-            Int2 & operator-=(const Int2 & rhs) noexcept;
-Int2 & operator-=(int rhs) noexcept;
+            int2 & operator-=(const int2 & rhs) noexcept;
+int2 & operator-=(int rhs) noexcept;
 
-            Int2 & operator/=(const Int2 & rhs) noexcept;
-Int2 & operator/=(int rhs) noexcept;
+            int2 & operator/=(const int2 & rhs) noexcept;
+int2 & operator/=(int rhs) noexcept;
 
-            Int2 & operator*=(const Int2 & rhs) noexcept;
-Int2 & operator*=(int rhs) noexcept;
+            int2 & operator*=(const int2 & rhs) noexcept;
+int2 & operator*=(int rhs) noexcept;
 
-            Int2 & operator%=(const Int2 & rhs) noexcept;
-Int2 & operator%=(int rhs) noexcept;
+            int2 & operator%=(const int2 & rhs) noexcept;
+int2 & operator%=(int rhs) noexcept;
 
-            Int2 & operator|=(const Int2 & rhs) noexcept;
-Int2 & operator|=(int rhs) noexcept;
+            int2 & operator|=(const int2 & rhs) noexcept;
+int2 & operator|=(int rhs) noexcept;
 
-            Int2 & operator&=(const Int2 & rhs) noexcept;
-Int2 & operator&=(int rhs) noexcept;
+            int2 & operator&=(const int2 & rhs) noexcept;
+int2 & operator&=(int rhs) noexcept;
 
-            Int2 & operator^=(const Int2 & rhs) noexcept;
-Int2 & operator^=(int rhs) noexcept;
+            int2 & operator^=(const int2 & rhs) noexcept;
+int2 & operator^=(int rhs) noexcept;
 
-            Int2 & operator<<=(const Int2 & rhs) noexcept;
-Int2 & operator<<=(int rhs) noexcept;
+            int2 & operator<<=(const int2 & rhs) noexcept;
+int2 & operator<<=(int rhs) noexcept;
 
-            Int2 & operator>>=(const Int2 & rhs) noexcept;
-Int2 & operator>>=(int rhs) noexcept;
+            int2 & operator>>=(const int2 & rhs) noexcept;
+int2 & operator>>=(int rhs) noexcept;
 
-            Int2 operator*(const Int2 & rhs) const noexcept;
+            int2 operator*(const int2 & rhs) const noexcept;
 
-            Int2 operator/(const Int2 & rhs) const noexcept;
+            int2 operator/(const int2 & rhs) const noexcept;
 
-            Int2 operator+(const Int2 & rhs) const noexcept;
+            int2 operator+(const int2 & rhs) const noexcept;
 
-            Int2 operator-(const Int2 & rhs) const noexcept;
+            int2 operator-(const int2 & rhs) const noexcept;
 
-            Int2 operator%(const Int2 & rhs) const noexcept;
+            int2 operator%(const int2 & rhs) const noexcept;
 
-            Int2 operator|(const Int2 & rhs) const noexcept;
+            int2 operator|(const int2 & rhs) const noexcept;
 
-            Int2 operator&(const Int2 & rhs) const noexcept;
+            int2 operator&(const int2 & rhs) const noexcept;
 
-            Int2 operator^(const Int2 & rhs) const noexcept;
+            int2 operator^(const int2 & rhs) const noexcept;
 
-            Int2 operator<<(const Int2 & rhs) const noexcept;
+            int2 operator<<(const int2 & rhs) const noexcept;
 
-            Int2 operator>>(const Int2 & rhs) const noexcept;
+            int2 operator>>(const int2 & rhs) const noexcept;
 
-            Int2 operator||(const Int2 & rhs) const noexcept;
+            int2 operator||(const int2 & rhs) const noexcept;
 
-            Int2 operator&&(const Int2 & rhs) const noexcept;
+            int2 operator&&(const int2 & rhs) const noexcept;
 
-            Bool2 operator<(const Int2 & rhs) const noexcept;
+            bool2 operator<(const int2 & rhs) const noexcept;
 
-            Bool2 operator>(const Int2 & rhs) const noexcept;
+            bool2 operator>(const int2 & rhs) const noexcept;
 
-            Bool2 operator!=(const Int2 & rhs) const noexcept;
+            bool2 operator!=(const int2 & rhs) const noexcept;
 
-            Bool2 operator==(const Int2 & rhs) const noexcept;
+            bool2 operator==(const int2 & rhs) const noexcept;
 
-            Bool2 operator>=(const Int2 & rhs) const noexcept;
+            bool2 operator>=(const int2 & rhs) const noexcept;
 
-            Bool2 operator<=(const Int2 & rhs) const noexcept;
+            bool2 operator<=(const int2 & rhs) const noexcept;
 
-            Int2 operator~() const noexcept;
+            int2 operator~() const noexcept;
 
-            Int2 operator!() const noexcept;
+            int2 operator!() const noexcept;
 
-            Int2 operator++() noexcept;
+            int2 operator++() noexcept;
 
-            Int2 operator++(int) noexcept;
+            int2 operator++(int) noexcept;
 
-            Int2 operator--() noexcept;
+            int2 operator--() noexcept;
 
-            Int2 operator--(int) noexcept;
+            int2 operator--(int) noexcept;
 
-            static Int2 Random(int lower = 0, int upper = 6) noexcept;
+            static int2 Random(int lower = 0, int upper = 6) noexcept;
 
-            Int2 operator-() const noexcept;
+            int2 operator-() const noexcept;
 
-            static const Int2 One;
-            static const Int2 Zero;
-            static const Int2 UnitX;
-            static const Int2 UnitY;
+            static const int2 One;
+            static const int2 Zero;
+            static const int2 UnitX;
+            static const int2 UnitY;
         };
     }
 }

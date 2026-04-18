@@ -257,6 +257,24 @@
     <ClInclude Include="Cam\Fixed.h">
       <Filter>Cam</Filter>
     </ClInclude>
+    <ClInclude Include="Compute\ComputePass.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Compute\ComputeShader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Compute\Fence.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Compute\FenceChain.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Compute\RawBuffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DDS\DDSTextureLoader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Math\Bool1.cpp">
@@ -361,6 +379,7 @@
     <ClCompile Include="Cam\Fixed.cpp">
       <Filter>Cam</Filter>
     </ClCompile>
+    <ClCompile Include="DDS\DDSTextureLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="Shaders\RootSignatures.hlsli">

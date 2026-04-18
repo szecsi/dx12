@@ -17,7 +17,7 @@ using namespace Egg::Math;
 class ggl008App : public Egg::SimpleApp {
 protected:
 	Egg::Mesh::Shaded::P shadedMesh;
-	Float4x4 rotation;
+	float4x4 rotation;
 	Egg::ConstantBuffer<PerObjectCb> cb;
 	com_ptr<ID3D12DescriptorHeap> srvHeap;
 	com_ptr<ID3D12DescriptorHeap> particleSrvHeap;
@@ -35,8 +35,8 @@ protected:
 	Egg::Mesh::VertexStreamGeometry::P particlesGeometry;
 public:
 	virtual void Update(float dt, float T) override {
-//		rotation *= Float4x4::Rotation(Float3::UnitY, dt);
-		cb->modelTransform = Float4x4::Translation(Float3{ 0.0f, 0.0f, -0.5f }) * rotation * Float4x4::Translation(Float3{ 0.0f, 0.0f, 0.5f });
+//		rotation *= float4x4::Rotation(float3::UnitY, dt);
+		cb->modelTransform = float4x4::Translation(float3{ 0.0f, 0.0f, -0.5f }) * rotation * float4x4::Translation(float3{ 0.0f, 0.0f, 0.5f });
 		cb->modelTransformInverse = cb->modelTransform.Invert();
 		cb.Upload();
 		camera->Animate(dt);
@@ -44,17 +44,17 @@ public:
 			camera->GetViewMatrix() * 
 			camera->GetProjMatrix();
 		perFrameCb->rayDirTransform = camera->GetRayDirMatrix();
-		perFrameCb->cameraPos = Float4(camera->GetEyePosition(), 1);
-		perFrameCb->lightPos = Float4(0, 1, 0, 0);
-		perFrameCb->lightPowerDensity = Float4(2, 1, 2, 0);
-		perFrameCb->billboardSize = Float4(50.1, 50.1, 0, 0) * camera->GetProjMatrix();
+		perFrameCb->cameraPos = float4(camera->GetEyePosition(), 1);
+		perFrameCb->lightPos = float4(0, 1, 0, 0);
+		perFrameCb->lightPowerDensity = float4(2, 1, 2, 0);
+		perFrameCb->billboardSize = float4(50.1, 50.1, 0, 0) * camera->GetProjMatrix();
 		perFrameCb.Upload();
 
 		for (int i = 0; i < particles.size(); i++)
 			particles.at(i).move(dt);
 		using namespace Egg::Math;
 		struct CameraDepthComparator {
-			Float3 ahead;
+			float3 ahead;
 			bool operator()(const Particle& a,
 				const Particle& b) {
 				return

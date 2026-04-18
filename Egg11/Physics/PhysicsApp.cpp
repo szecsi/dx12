@@ -153,8 +153,8 @@ void Physics::PhysicsApp::addPhysicsEntity(luabind::object nil, luabind::object 
 		std::string entityName = attributeTable.getString("name");
 		std::string multiMeshName = attributeTable.getString("multiMesh");
 		using namespace Egg::Math;
-		float3 position = attributeTable.getFloat3("position");
-		float3 axis = attributeTable.getFloat3("orientationAxis", float3(0, 1, 0));
+		float3 position = attributeTable.getfloat3("position");
+		float3 axis = attributeTable.getfloat3("orientationAxis", float3(0, 1, 0));
 		float angle = attributeTable.getFloat("orientationAngle");
 		Scene::Directory<Mesh::Multi>::iterator iMultiMesh = multiMeshes.find(multiMeshName);
 		if(iMultiMesh == multiMeshes.end())
@@ -179,8 +179,8 @@ void Physics::PhysicsApp::addShapeToPhysicsEntity(PhysicsEntity::P physicsEntity
 	{
 		using namespace Egg::Math;
 		using namespace physx;
-		float3 position = attributeTable.getFloat3("position");
-		float3 axis = attributeTable.getFloat3("orientationAxis", float3(0, 1, 0));
+		float3 position = attributeTable.getfloat3("position");
+		float3 axis = attributeTable.getfloat3("orientationAxis", float3(0, 1, 0));
 		axis = axis.normalize();
 		float angle = attributeTable.getFloat("orientationAngle");
 
@@ -193,7 +193,7 @@ void Physics::PhysicsApp::addShapeToPhysicsEntity(PhysicsEntity::P physicsEntity
 		switch(e)
 		{
 			case PxGeometryType::eBOX:
-				geometry = new PxBoxGeometry( ~attributeTable.getFloat3("halfExtents", float3(1, 1, 1)) );
+				geometry = new PxBoxGeometry( ~attributeTable.getfloat3("halfExtents", float3(1, 1, 1)) );
 				break;
 			case PxGeometryType::eCAPSULE:
 				geometry = new PxCapsuleGeometry( attributeTable.getFloat("radius"), attributeTable.getFloat("halfHeight") );
@@ -229,8 +229,8 @@ void Physics::PhysicsApp::setDynamicsForPhysicsEntity(PhysicsEntity::P physicsEn
 		rigidDynamic->setAngularDamping( attributeTable.getFloat("angularDamping", rigidDynamic->getAngularDamping() ));
 		rigidDynamic->setMaxAngularVelocity( attributeTable.getFloat("maxAngularVelocity", rigidDynamic->getMaxAngularVelocity() ));
 		rigidDynamic->setRigidDynamicFlags( attributeTable.getEnumCombination<PxRigidDynamicFlag::Enum, PxRigidDynamicFlags>("rigidDynamicFlags", rigidDynamic->getRigidDynamicFlags() ));
-		rigidDynamic->setLinearVelocity( ~attributeTable.getFloat3("linearVelocity", ~rigidDynamic->getLinearVelocity() ));
-		rigidDynamic->setAngularVelocity( ~attributeTable.getFloat3("angularVelocity", ~rigidDynamic->getAngularVelocity() ));
+		rigidDynamic->setLinearVelocity( ~attributeTable.getfloat3("linearVelocity", ~rigidDynamic->getLinearVelocity() ));
+		rigidDynamic->setAngularVelocity( ~attributeTable.getfloat3("angularVelocity", ~rigidDynamic->getAngularVelocity() ));
 		float density = attributeTable.getFloat("density", -1.0);
 		if(density > 0)
 			densityForEntityBeingAdded = density;
@@ -248,8 +248,8 @@ void Physics::PhysicsApp::addRagdoll(luabind::object nil, luabind::object attrib
 		std::string entityName = attributeTable.getString("name");
 		std::string multiMeshName = attributeTable.getString("multiMesh");
 		using namespace Egg::Math;
-		float3 position = attributeTable.getFloat3("position");
-		float3 axis = attributeTable.getFloat3("orientationAxis", float3(0, 1, 0));
+		float3 position = attributeTable.getfloat3("position");
+		float3 axis = attributeTable.getfloat3("orientationAxis", float3(0, 1, 0));
 		float angle = attributeTable.getFloat("orientationAngle");
 		Scene::Directory<Mesh::Multi>::iterator iMultiMesh = multiMeshes.find(multiMeshName);
 		if(iMultiMesh == multiMeshes.end())
@@ -273,8 +273,8 @@ void Physics::PhysicsApp::addBoneToRagdoll(RagdollEntity::P ragdoll, luabind::ob
 	{
 		std::string entityName = attributeTable.getString("name");
 		using namespace Egg::Math;
-		float3 position = attributeTable.getFloat3("position");
-		float3 orientation = attributeTable.getFloat3("orientation", float3(0, 0, 0));
+		float3 position = attributeTable.getfloat3("position");
+		float3 orientation = attributeTable.getfloat3("orientation", float3(0, 0, 0));
 		float4 quat = float4(orientation, -sqrtf(std::max<float>(0, 1 - orientation.dot(orientation))) );
 
 		Physics::PhysicsEntity::P physicsEntity = Physics::PhysicsEntity::create(scene, position, quat, Egg::Mesh::Multi::P());

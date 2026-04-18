@@ -302,7 +302,7 @@ namespace boost
 {
     namespace hash_detail
     {
-        template <typename Float1, typename Float2>
+        template <typename float1, typename float2>
         struct select_hash_type_impl {
             typedef double type;
         };

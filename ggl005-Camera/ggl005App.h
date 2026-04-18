@@ -21,7 +21,7 @@ __declspec(align(16)) struct PerBucketCb {
 class ggl005App : public Egg::SimpleApp {
 protected:
 	Egg::Mesh::Shaded::P shadedMesh;
-	Float4x4 rotation;
+	float4x4 rotation;
 	Egg::ConstantBuffer<PerObjectCb> cb;
 	com_ptr<ID3D12DescriptorHeap> srvHeap;
 	Egg::Texture2D tex;
@@ -33,8 +33,8 @@ protected:
 	Egg::Mesh::Shaded::P backgroundMesh;
 public:
 	virtual void Update(float dt, float T) override {
-		rotation *= Float4x4::Rotation(Float3::UnitY, dt);
-		cb->modelTransform = Float4x4::Translation(Float3{ 0.0f, 0.0f, -0.5f }) * rotation * Float4x4::Translation(Float3{ 0.0f, 0.0f, 0.5f });
+		rotation *= float4x4::Rotation(float3::UnitY, dt);
+		cb->modelTransform = float4x4::Translation(float3{ 0.0f, 0.0f, -0.5f }) * rotation * float4x4::Translation(float3{ 0.0f, 0.0f, 0.5f });
 		cb.Upload();
 		camera->Animate(dt);
 		perFrameCb->viewProjTransform =

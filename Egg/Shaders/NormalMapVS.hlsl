@@ -12,7 +12,7 @@ VSOutput main(IAOutput iao)
 	float3 viewDir = normalize(eyePos.xyz - descartesPos);
 
 	float3 t = normalize(mul(float4(iao.tangent, 0.0f), modelMatInv).xyz);
-	float3 b = normalize(mul(float4(iao.binormal, 0.0f), modelMatInv).xyz);
+	float3 b = normalize(mul(float4(iao.bitangent, 0.0f), modelMatInv).xyz);
 	float3 n = normalize(mul(float4(iao.normal, 0.0f), modelMatInv).xyz);
 	float3x3 tbn = { t, -b, n };
 
@@ -22,7 +22,7 @@ VSOutput main(IAOutput iao)
 	vso.position = mul(viewProjMat, worldPos);
 	vso.normal = n;
 	vso.tangent = t;
-	vso.binormal = -b;
+	vso.bitangent = -b;
 	vso.texCoord = iao.texCoord * 4.0f;
 	vso.lightDirTS = mul(tbn, lightDir);
 	vso.viewDirTS = mul(tbn, viewDir);

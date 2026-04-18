@@ -1,14 +1,14 @@
 #pragma once
 
-#include <Egg/Math/Float4x4.h>
+#include <Egg/Math/float4x4.h>
 #include <Egg/Scene/PerObjectData.h>
 
 using namespace Egg::Math;
 
 //__declspec(align(16)) struct PerObjectCb {
 //	struct {
-//		Float4x4 modelTransform;
-//		Float4x4 modelTransformInverse;
+//		float4x4 modelTransform;
+//		float4x4 modelTransformInverse;
 //	} objects[1024];
 //};
 __declspec(align(16)) struct PerObjectCb {
@@ -17,10 +17,10 @@ __declspec(align(16)) struct PerObjectCb {
 
 
 __declspec(align(16)) struct PerFrameCb {
-	Float4x4 viewProjTransform;
-	Float4x4 rayDirTransform;
-	Float4 cameraPos;
-	Float4 lightPos;
-	Float4 lightPowerDensity;
-	Float4 billboardSize;
+	float4x4 viewProjTransform;
+	float4x4 rayDirTransform;
+	float4 cameraPos;
+	float4 lightPos;
+	float4 lightPowerDensity;
+	float4 billboardSize;
 };

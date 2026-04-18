@@ -4,42 +4,26 @@ entities = {}
 materials = {}
 shaders = {}
 
-shaders.vs = O:Shader(_, {file="Shaders/trafoVS.cso"})
-shaders.ps = O:Shader(_, {file="Shaders/MaxBlinnPS.cso"})
-shaders.envmappedPs = O:Shader(_, {file="Shaders/EnvMapPS.cso"})
+shaders.retamVs = O:Shader(_, {file="Shaders/Retam/retamVS.cso"})
+shaders.retam256Ps = O:Shader(_, {file="Shaders/Retam/retam256PS.cso"})
 
-multiMeshes.pod = O:MultiMeshFromFile(_, {file='geopod.x'})
-O:StaticEntity(_, {multiMesh=multiMeshes.pod,
-            position = { x=0, y=-10, z=0} } )
+geometries.torus = O:IndexedGeometryWithTangentSpace(_, {file="torusNiceUV.obj"})
 
-
--- LABTODO: Giraffe with manual MultiMesh
-
-materials.spotted = O:Material(_, {vs=shaders.vs, ps=shaders.ps}, function(_)
-  O:setTexture2D(_, {file='giraffe.jpg'})
-  O:setTextureCube(_, {file='cloudynoon.dds'})
-end )
-
--- LABTODO: Geopod with env mapped windows MultiMesh
+multiMeshes.pod = O:MultiMeshFromFile(_, {file='torusNiceUV.obj'})
 
 geometries.chassis = multiMeshes.pod:getGeometry(0, 0)
-geometries.windows = multiMeshes.pod:getGeometry(0, 1)
 
-materials.envmapped = O:Material(_, {vs=shaders.vs, ps=shaders.envmappedPs}, function(_)
-  O:setTexture2D(_, {file='giraffe.jpg'})
-  O:setTextureCube(_, {file='cloudynoon.dds'})
+materials.retam256 = O:Material(_, {rootParameterIndex=3, vs=shaders.retamVs, ps=shaders.retam256Ps}, function(_)
+  O:setTexture2D(_, {file='carrot.jpg'})
 end )
 
-multiMeshes.pod2 = O:MultiMesh(_, {}, function(_)
+O:addGuiMaterial("RetamMaterialCb", materials.retam256)
+
+multiMeshes.podRetam256 = O:MultiMesh(_, {}, function(_)
   O:FlipMesh(_, {}, function(_)
-    O:ShadedMesh(_, {mien=0, geometry=geometries.chassis, material=materials.spotted})
-  end )
-  O:FlipMesh(_, {}, function(_)
-    O:ShadedMesh(_, {mien=0, geometry=geometries.windows, material=materials.envmapped})
+    O:ShadedMesh(_, {mien=0, geometry=geometries.torus, material=materials.retam256})
   end )
 end )
 
-
-
-entities.pod2 = O:StaticEntity(_, {multiMesh=multiMeshes.pod2, position = { x=20, y=-10, z=0} } )
+entities.podRetam256 = O:StaticEntity(_, {multiMesh=multiMeshes.podRetam256, position = { x=20, y=-10, z=0} } )
 

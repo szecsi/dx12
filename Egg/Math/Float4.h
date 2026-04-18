@@ -1,23 +1,23 @@
 #pragma once
 
-#include "Float2.h"
-#include "Float3.h"
-#include "Bool4.h"
-#include "Int4.h"
+#include "float2.h"
+#include "float3.h"
+#include "bool4.h"
+#include "int4.h"
 
 namespace Egg {
     namespace Math {
 
-        class Float2;
-        class Float3;
-        class Bool2;
-        class Bool3;
-        class Bool4;
-        class Int2;
-        class Int3;
-        class Int4;
+        class float2;
+        class float3;
+        class bool2;
+        class bool3;
+        class bool4;
+        class int2;
+        class int3;
+        class int4;
 
-        class Float4 {
+        class float4 {
         public:
             union {
                 struct {
@@ -27,488 +27,488 @@ namespace Egg {
                     float w;
                 };
 
-                Float2Swizzle<Float2, Int2, Bool2, 4, 0, 0> xx;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 0, 1> xy;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 0, 2> xz;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 0, 3> xw;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 1, 0> yx;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 1, 1> yy;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 1, 2> yz;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 1, 3> yw;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 2, 0> zx;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 2, 1> zy;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 2, 2> zz;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 2, 3> zw;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 3, 0> wx;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 3, 1> wy;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 3, 2> wz;
-                Float2Swizzle<Float2, Int2, Bool2, 4, 3, 3> ww;
+                float2Swizzle<float2, int2, bool2, 4, 0, 0> xx;
+                float2Swizzle<float2, int2, bool2, 4, 0, 1> xy;
+                float2Swizzle<float2, int2, bool2, 4, 0, 2> xz;
+                float2Swizzle<float2, int2, bool2, 4, 0, 3> xw;
+                float2Swizzle<float2, int2, bool2, 4, 1, 0> yx;
+                float2Swizzle<float2, int2, bool2, 4, 1, 1> yy;
+                float2Swizzle<float2, int2, bool2, 4, 1, 2> yz;
+                float2Swizzle<float2, int2, bool2, 4, 1, 3> yw;
+                float2Swizzle<float2, int2, bool2, 4, 2, 0> zx;
+                float2Swizzle<float2, int2, bool2, 4, 2, 1> zy;
+                float2Swizzle<float2, int2, bool2, 4, 2, 2> zz;
+                float2Swizzle<float2, int2, bool2, 4, 2, 3> zw;
+                float2Swizzle<float2, int2, bool2, 4, 3, 0> wx;
+                float2Swizzle<float2, int2, bool2, 4, 3, 1> wy;
+                float2Swizzle<float2, int2, bool2, 4, 3, 2> wz;
+                float2Swizzle<float2, int2, bool2, 4, 3, 3> ww;
 
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 0, 0> xxx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 0, 1> xxy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 0, 2> xxz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 0, 3> xxw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 1, 0> xyx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 1, 1> xyy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 1, 2> xyz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 1, 3> xyw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 2, 0> xzx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 2, 1> xzy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 2, 2> xzz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 2, 3> xzw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 3, 0> xwx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 3, 1> xwy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 3, 2> xwz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 0, 3, 3> xww;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 0, 0> yxx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 0, 1> yxy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 0, 2> yxz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 0, 3> yxw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 1, 0> yyx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 1, 1> yyy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 1, 2> yyz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 1, 3> yyw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 2, 0> yzx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 2, 1> yzy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 2, 2> yzz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 2, 3> yzw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 3, 0> ywx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 3, 1> ywy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 3, 2> ywz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 1, 3, 3> yww;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 0, 0> zxx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 0, 1> zxy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 0, 2> zxz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 0, 3> zxw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 1, 0> zyx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 1, 1> zyy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 1, 2> zyz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 1, 3> zyw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 2, 0> zzx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 2, 1> zzy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 2, 2> zzz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 2, 3> zzw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 3, 0> zwx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 3, 1> zwy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 3, 2> zwz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 2, 3, 3> zww;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 0, 0> wxx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 0, 1> wxy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 0, 2> wxz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 0, 3> wxw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 1, 0> wyx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 1, 1> wyy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 1, 2> wyz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 1, 3> wyw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 2, 0> wzx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 2, 1> wzy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 2, 2> wzz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 2, 3> wzw;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 3, 0> wwx;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 3, 1> wwy;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 3, 2> wwz;
-                Float3Swizzle<Float3, Int3, Bool3, 4, 3, 3, 3> www;
+                float3Swizzle<float3, int3, bool3, 4, 0, 0, 0> xxx;
+                float3Swizzle<float3, int3, bool3, 4, 0, 0, 1> xxy;
+                float3Swizzle<float3, int3, bool3, 4, 0, 0, 2> xxz;
+                float3Swizzle<float3, int3, bool3, 4, 0, 0, 3> xxw;
+                float3Swizzle<float3, int3, bool3, 4, 0, 1, 0> xyx;
+                float3Swizzle<float3, int3, bool3, 4, 0, 1, 1> xyy;
+                float3Swizzle<float3, int3, bool3, 4, 0, 1, 2> xyz;
+                float3Swizzle<float3, int3, bool3, 4, 0, 1, 3> xyw;
+                float3Swizzle<float3, int3, bool3, 4, 0, 2, 0> xzx;
+                float3Swizzle<float3, int3, bool3, 4, 0, 2, 1> xzy;
+                float3Swizzle<float3, int3, bool3, 4, 0, 2, 2> xzz;
+                float3Swizzle<float3, int3, bool3, 4, 0, 2, 3> xzw;
+                float3Swizzle<float3, int3, bool3, 4, 0, 3, 0> xwx;
+                float3Swizzle<float3, int3, bool3, 4, 0, 3, 1> xwy;
+                float3Swizzle<float3, int3, bool3, 4, 0, 3, 2> xwz;
+                float3Swizzle<float3, int3, bool3, 4, 0, 3, 3> xww;
+                float3Swizzle<float3, int3, bool3, 4, 1, 0, 0> yxx;
+                float3Swizzle<float3, int3, bool3, 4, 1, 0, 1> yxy;
+                float3Swizzle<float3, int3, bool3, 4, 1, 0, 2> yxz;
+                float3Swizzle<float3, int3, bool3, 4, 1, 0, 3> yxw;
+                float3Swizzle<float3, int3, bool3, 4, 1, 1, 0> yyx;
+                float3Swizzle<float3, int3, bool3, 4, 1, 1, 1> yyy;
+                float3Swizzle<float3, int3, bool3, 4, 1, 1, 2> yyz;
+                float3Swizzle<float3, int3, bool3, 4, 1, 1, 3> yyw;
+                float3Swizzle<float3, int3, bool3, 4, 1, 2, 0> yzx;
+                float3Swizzle<float3, int3, bool3, 4, 1, 2, 1> yzy;
+                float3Swizzle<float3, int3, bool3, 4, 1, 2, 2> yzz;
+                float3Swizzle<float3, int3, bool3, 4, 1, 2, 3> yzw;
+                float3Swizzle<float3, int3, bool3, 4, 1, 3, 0> ywx;
+                float3Swizzle<float3, int3, bool3, 4, 1, 3, 1> ywy;
+                float3Swizzle<float3, int3, bool3, 4, 1, 3, 2> ywz;
+                float3Swizzle<float3, int3, bool3, 4, 1, 3, 3> yww;
+                float3Swizzle<float3, int3, bool3, 4, 2, 0, 0> zxx;
+                float3Swizzle<float3, int3, bool3, 4, 2, 0, 1> zxy;
+                float3Swizzle<float3, int3, bool3, 4, 2, 0, 2> zxz;
+                float3Swizzle<float3, int3, bool3, 4, 2, 0, 3> zxw;
+                float3Swizzle<float3, int3, bool3, 4, 2, 1, 0> zyx;
+                float3Swizzle<float3, int3, bool3, 4, 2, 1, 1> zyy;
+                float3Swizzle<float3, int3, bool3, 4, 2, 1, 2> zyz;
+                float3Swizzle<float3, int3, bool3, 4, 2, 1, 3> zyw;
+                float3Swizzle<float3, int3, bool3, 4, 2, 2, 0> zzx;
+                float3Swizzle<float3, int3, bool3, 4, 2, 2, 1> zzy;
+                float3Swizzle<float3, int3, bool3, 4, 2, 2, 2> zzz;
+                float3Swizzle<float3, int3, bool3, 4, 2, 2, 3> zzw;
+                float3Swizzle<float3, int3, bool3, 4, 2, 3, 0> zwx;
+                float3Swizzle<float3, int3, bool3, 4, 2, 3, 1> zwy;
+                float3Swizzle<float3, int3, bool3, 4, 2, 3, 2> zwz;
+                float3Swizzle<float3, int3, bool3, 4, 2, 3, 3> zww;
+                float3Swizzle<float3, int3, bool3, 4, 3, 0, 0> wxx;
+                float3Swizzle<float3, int3, bool3, 4, 3, 0, 1> wxy;
+                float3Swizzle<float3, int3, bool3, 4, 3, 0, 2> wxz;
+                float3Swizzle<float3, int3, bool3, 4, 3, 0, 3> wxw;
+                float3Swizzle<float3, int3, bool3, 4, 3, 1, 0> wyx;
+                float3Swizzle<float3, int3, bool3, 4, 3, 1, 1> wyy;
+                float3Swizzle<float3, int3, bool3, 4, 3, 1, 2> wyz;
+                float3Swizzle<float3, int3, bool3, 4, 3, 1, 3> wyw;
+                float3Swizzle<float3, int3, bool3, 4, 3, 2, 0> wzx;
+                float3Swizzle<float3, int3, bool3, 4, 3, 2, 1> wzy;
+                float3Swizzle<float3, int3, bool3, 4, 3, 2, 2> wzz;
+                float3Swizzle<float3, int3, bool3, 4, 3, 2, 3> wzw;
+                float3Swizzle<float3, int3, bool3, 4, 3, 3, 0> wwx;
+                float3Swizzle<float3, int3, bool3, 4, 3, 3, 1> wwy;
+                float3Swizzle<float3, int3, bool3, 4, 3, 3, 2> wwz;
+                float3Swizzle<float3, int3, bool3, 4, 3, 3, 3> www;
 
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 0, 0> xxxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 1, 0> xxxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 2, 0> xxxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 3, 0> xxxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 0, 1> xxyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 1, 1> xxyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 2, 1> xxyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 3, 1> xxyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 0, 2> xxzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 1, 2> xxzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 2, 2> xxzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 3, 2> xxzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 0, 3> xxwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 1, 3> xxwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 2, 3> xxwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 0, 3, 3> xxww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 0, 0> xyxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 1, 0> xyxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 2, 0> xyxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 3, 0> xyxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 0, 1> xyyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 1, 1> xyyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 2, 1> xyyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 3, 1> xyyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 0, 2> xyzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 1, 2> xyzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 2, 2> xyzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 3, 2> xyzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 0, 3> xywx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 1, 3> xywy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 2, 3> xywz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 1, 3, 3> xyww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 0, 0> xzxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 1, 0> xzxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 2, 0> xzxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 3, 0> xzxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 0, 1> xzyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 1, 1> xzyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 2, 1> xzyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 3, 1> xzyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 0, 2> xzzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 1, 2> xzzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 2, 2> xzzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 3, 2> xzzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 0, 3> xzwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 1, 3> xzwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 2, 3> xzwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 2, 3, 3> xzww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 0, 0> xwxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 1, 0> xwxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 2, 0> xwxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 3, 0> xwxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 0, 1> xwyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 1, 1> xwyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 2, 1> xwyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 3, 1> xwyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 0, 2> xwzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 1, 2> xwzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 2, 2> xwzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 3, 2> xwzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 0, 3> xwwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 1, 3> xwwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 2, 3> xwwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 0, 3, 3, 3> xwww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 0, 0> yxxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 1, 0> yxxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 2, 0> yxxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 3, 0> yxxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 0, 1> yxyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 1, 1> yxyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 2, 1> yxyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 3, 1> yxyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 0, 2> yxzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 1, 2> yxzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 2, 2> yxzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 3, 2> yxzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 0, 3> yxwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 1, 3> yxwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 2, 3> yxwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 0, 3, 3> yxww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 0, 0> yyxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 1, 0> yyxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 2, 0> yyxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 3, 0> yyxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 0, 1> yyyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 1, 1> yyyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 2, 1> yyyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 3, 1> yyyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 0, 2> yyzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 1, 2> yyzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 2, 2> yyzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 3, 2> yyzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 0, 3> yywx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 1, 3> yywy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 2, 3> yywz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 1, 3, 3> yyww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 0, 0> yzxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 1, 0> yzxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 2, 0> yzxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 3, 0> yzxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 0, 1> yzyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 1, 1> yzyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 2, 1> yzyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 3, 1> yzyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 0, 2> yzzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 1, 2> yzzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 2, 2> yzzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 3, 2> yzzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 0, 3> yzwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 1, 3> yzwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 2, 3> yzwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 2, 3, 3> yzww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 0, 0> ywxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 1, 0> ywxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 2, 0> ywxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 3, 0> ywxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 0, 1> ywyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 1, 1> ywyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 2, 1> ywyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 3, 1> ywyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 0, 2> ywzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 1, 2> ywzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 2, 2> ywzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 3, 2> ywzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 0, 3> ywwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 1, 3> ywwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 2, 3> ywwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 1, 3, 3, 3> ywww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 0, 0> zxxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 1, 0> zxxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 2, 0> zxxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 3, 0> zxxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 0, 1> zxyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 1, 1> zxyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 2, 1> zxyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 3, 1> zxyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 0, 2> zxzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 1, 2> zxzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 2, 2> zxzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 3, 2> zxzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 0, 3> zxwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 1, 3> zxwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 2, 3> zxwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 0, 3, 3> zxww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 0, 0> zyxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 1, 0> zyxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 2, 0> zyxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 3, 0> zyxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 0, 1> zyyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 1, 1> zyyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 2, 1> zyyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 3, 1> zyyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 0, 2> zyzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 1, 2> zyzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 2, 2> zyzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 3, 2> zyzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 0, 3> zywx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 1, 3> zywy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 2, 3> zywz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 1, 3, 3> zyww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 0, 0> zzxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 1, 0> zzxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 2, 0> zzxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 3, 0> zzxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 0, 1> zzyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 1, 1> zzyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 2, 1> zzyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 3, 1> zzyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 0, 2> zzzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 1, 2> zzzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 2, 2> zzzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 3, 2> zzzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 0, 3> zzwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 1, 3> zzwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 2, 3> zzwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 2, 3, 3> zzww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 0, 0> zwxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 1, 0> zwxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 2, 0> zwxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 3, 0> zwxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 0, 1> zwyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 1, 1> zwyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 2, 1> zwyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 3, 1> zwyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 0, 2> zwzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 1, 2> zwzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 2, 2> zwzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 3, 2> zwzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 0, 3> zwwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 1, 3> zwwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 2, 3> zwwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 2, 3, 3, 3> zwww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 0, 0> wxxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 1, 0> wxxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 2, 0> wxxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 3, 0> wxxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 0, 1> wxyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 1, 1> wxyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 2, 1> wxyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 3, 1> wxyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 0, 2> wxzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 1, 2> wxzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 2, 2> wxzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 3, 2> wxzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 0, 3> wxwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 1, 3> wxwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 2, 3> wxwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 0, 3, 3> wxww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 0, 0> wyxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 1, 0> wyxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 2, 0> wyxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 3, 0> wyxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 0, 1> wyyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 1, 1> wyyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 2, 1> wyyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 3, 1> wyyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 0, 2> wyzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 1, 2> wyzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 2, 2> wyzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 3, 2> wyzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 0, 3> wywx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 1, 3> wywy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 2, 3> wywz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 1, 3, 3> wyww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 0, 0> wzxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 1, 0> wzxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 2, 0> wzxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 3, 0> wzxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 0, 1> wzyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 1, 1> wzyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 2, 1> wzyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 3, 1> wzyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 0, 2> wzzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 1, 2> wzzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 2, 2> wzzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 3, 2> wzzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 0, 3> wzwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 1, 3> wzwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 2, 3> wzwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 2, 3, 3> wzww;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 0, 0> wwxx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 1, 0> wwxy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 2, 0> wwxz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 3, 0> wwxw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 0, 1> wwyx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 1, 1> wwyy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 2, 1> wwyz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 3, 1> wwyw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 0, 2> wwzx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 1, 2> wwzy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 2, 2> wwzz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 3, 2> wwzw;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 0, 3> wwwx;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 1, 3> wwwy;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 2, 3> wwwz;
-                Float4Swizzle<Float4, Int4, Bool4, 4, 3, 3, 3, 3> wwww;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 0, 0> xxxx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 1, 0> xxxy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 2, 0> xxxz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 3, 0> xxxw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 0, 1> xxyx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 1, 1> xxyy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 2, 1> xxyz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 3, 1> xxyw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 0, 2> xxzx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 1, 2> xxzy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 2, 2> xxzz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 3, 2> xxzw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 0, 3> xxwx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 1, 3> xxwy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 2, 3> xxwz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 0, 3, 3> xxww;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 0, 0> xyxx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 1, 0> xyxy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 2, 0> xyxz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 3, 0> xyxw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 0, 1> xyyx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 1, 1> xyyy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 2, 1> xyyz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 3, 1> xyyw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 0, 2> xyzx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 1, 2> xyzy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 2, 2> xyzz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 3, 2> xyzw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 0, 3> xywx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 1, 3> xywy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 2, 3> xywz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 1, 3, 3> xyww;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 0, 0> xzxx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 1, 0> xzxy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 2, 0> xzxz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 3, 0> xzxw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 0, 1> xzyx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 1, 1> xzyy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 2, 1> xzyz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 3, 1> xzyw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 0, 2> xzzx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 1, 2> xzzy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 2, 2> xzzz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 3, 2> xzzw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 0, 3> xzwx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 1, 3> xzwy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 2, 3> xzwz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 2, 3, 3> xzww;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 0, 0> xwxx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 1, 0> xwxy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 2, 0> xwxz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 3, 0> xwxw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 0, 1> xwyx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 1, 1> xwyy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 2, 1> xwyz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 3, 1> xwyw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 0, 2> xwzx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 1, 2> xwzy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 2, 2> xwzz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 3, 2> xwzw;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 0, 3> xwwx;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 1, 3> xwwy;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 2, 3> xwwz;
+                float4Swizzle<float4, int4, bool4, 4, 0, 3, 3, 3> xwww;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 0, 0> yxxx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 1, 0> yxxy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 2, 0> yxxz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 3, 0> yxxw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 0, 1> yxyx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 1, 1> yxyy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 2, 1> yxyz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 3, 1> yxyw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 0, 2> yxzx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 1, 2> yxzy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 2, 2> yxzz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 3, 2> yxzw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 0, 3> yxwx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 1, 3> yxwy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 2, 3> yxwz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 0, 3, 3> yxww;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 0, 0> yyxx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 1, 0> yyxy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 2, 0> yyxz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 3, 0> yyxw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 0, 1> yyyx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 1, 1> yyyy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 2, 1> yyyz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 3, 1> yyyw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 0, 2> yyzx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 1, 2> yyzy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 2, 2> yyzz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 3, 2> yyzw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 0, 3> yywx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 1, 3> yywy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 2, 3> yywz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 1, 3, 3> yyww;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 0, 0> yzxx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 1, 0> yzxy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 2, 0> yzxz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 3, 0> yzxw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 0, 1> yzyx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 1, 1> yzyy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 2, 1> yzyz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 3, 1> yzyw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 0, 2> yzzx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 1, 2> yzzy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 2, 2> yzzz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 3, 2> yzzw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 0, 3> yzwx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 1, 3> yzwy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 2, 3> yzwz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 2, 3, 3> yzww;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 0, 0> ywxx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 1, 0> ywxy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 2, 0> ywxz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 3, 0> ywxw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 0, 1> ywyx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 1, 1> ywyy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 2, 1> ywyz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 3, 1> ywyw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 0, 2> ywzx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 1, 2> ywzy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 2, 2> ywzz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 3, 2> ywzw;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 0, 3> ywwx;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 1, 3> ywwy;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 2, 3> ywwz;
+                float4Swizzle<float4, int4, bool4, 4, 1, 3, 3, 3> ywww;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 0, 0> zxxx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 1, 0> zxxy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 2, 0> zxxz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 3, 0> zxxw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 0, 1> zxyx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 1, 1> zxyy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 2, 1> zxyz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 3, 1> zxyw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 0, 2> zxzx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 1, 2> zxzy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 2, 2> zxzz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 3, 2> zxzw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 0, 3> zxwx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 1, 3> zxwy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 2, 3> zxwz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 0, 3, 3> zxww;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 0, 0> zyxx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 1, 0> zyxy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 2, 0> zyxz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 3, 0> zyxw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 0, 1> zyyx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 1, 1> zyyy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 2, 1> zyyz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 3, 1> zyyw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 0, 2> zyzx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 1, 2> zyzy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 2, 2> zyzz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 3, 2> zyzw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 0, 3> zywx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 1, 3> zywy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 2, 3> zywz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 1, 3, 3> zyww;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 0, 0> zzxx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 1, 0> zzxy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 2, 0> zzxz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 3, 0> zzxw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 0, 1> zzyx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 1, 1> zzyy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 2, 1> zzyz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 3, 1> zzyw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 0, 2> zzzx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 1, 2> zzzy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 2, 2> zzzz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 3, 2> zzzw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 0, 3> zzwx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 1, 3> zzwy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 2, 3> zzwz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 2, 3, 3> zzww;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 0, 0> zwxx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 1, 0> zwxy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 2, 0> zwxz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 3, 0> zwxw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 0, 1> zwyx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 1, 1> zwyy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 2, 1> zwyz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 3, 1> zwyw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 0, 2> zwzx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 1, 2> zwzy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 2, 2> zwzz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 3, 2> zwzw;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 0, 3> zwwx;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 1, 3> zwwy;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 2, 3> zwwz;
+                float4Swizzle<float4, int4, bool4, 4, 2, 3, 3, 3> zwww;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 0, 0> wxxx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 1, 0> wxxy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 2, 0> wxxz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 3, 0> wxxw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 0, 1> wxyx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 1, 1> wxyy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 2, 1> wxyz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 3, 1> wxyw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 0, 2> wxzx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 1, 2> wxzy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 2, 2> wxzz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 3, 2> wxzw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 0, 3> wxwx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 1, 3> wxwy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 2, 3> wxwz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 0, 3, 3> wxww;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 0, 0> wyxx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 1, 0> wyxy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 2, 0> wyxz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 3, 0> wyxw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 0, 1> wyyx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 1, 1> wyyy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 2, 1> wyyz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 3, 1> wyyw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 0, 2> wyzx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 1, 2> wyzy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 2, 2> wyzz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 3, 2> wyzw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 0, 3> wywx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 1, 3> wywy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 2, 3> wywz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 1, 3, 3> wyww;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 0, 0> wzxx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 1, 0> wzxy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 2, 0> wzxz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 3, 0> wzxw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 0, 1> wzyx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 1, 1> wzyy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 2, 1> wzyz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 3, 1> wzyw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 0, 2> wzzx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 1, 2> wzzy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 2, 2> wzzz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 3, 2> wzzw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 0, 3> wzwx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 1, 3> wzwy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 2, 3> wzwz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 2, 3, 3> wzww;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 0, 0> wwxx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 1, 0> wwxy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 2, 0> wwxz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 3, 0> wwxw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 0, 1> wwyx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 1, 1> wwyy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 2, 1> wwyz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 3, 1> wwyw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 0, 2> wwzx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 1, 2> wwzy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 2, 2> wwzz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 3, 2> wwzw;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 0, 3> wwwx;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 1, 3> wwwy;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 2, 3> wwwz;
+                float4Swizzle<float4, int4, bool4, 4, 3, 3, 3, 3> wwww;
             };
 
-            Float4(float x, float y, float z, float w);
+            float4(float x, float y, float z, float w);
 
-            Float4(float x, float y, const Float2 & zw);
+            float4(float x, float y, const float2 & zw);
 
-            Float4(const Float2 & xy, const Float2 & zw);
+            float4(const float2 & xy, const float2 & zw);
 
-            Float4(const Float2 & xy, float z, float w);
+            float4(const float2 & xy, float z, float w);
 
-            Float4(const Float3 & xyz, float w);
+            float4(const float3 & xyz, float w);
 
-            Float4(float x, const Float3 & yzw);
+            float4(float x, const float3 & yzw);
 
-            Float4(const Float4 & xyzw);
+            float4(const float4 & xyzw);
 
-            Float4();
+            float4();
 
-            Float4 & operator=(const Float4 & rhs) noexcept;
-Float4 & operator=(float rhs) noexcept;
+            float4 & operator=(const float4 & rhs) noexcept;
+float4 & operator=(float rhs) noexcept;
 
-            Float4 & operator+=(const Float4 & rhs) noexcept;
-Float4 & operator+=(float rhs) noexcept;
+            float4 & operator+=(const float4 & rhs) noexcept;
+float4 & operator+=(float rhs) noexcept;
 
-            Float4 & operator-=(const Float4 & rhs) noexcept;
-Float4 & operator-=(float rhs) noexcept;
+            float4 & operator-=(const float4 & rhs) noexcept;
+float4 & operator-=(float rhs) noexcept;
 
-            Float4 & operator/=(const Float4 & rhs) noexcept;
-Float4 & operator/=(float rhs) noexcept;
+            float4 & operator/=(const float4 & rhs) noexcept;
+float4 & operator/=(float rhs) noexcept;
 
-            Float4 & operator*=(const Float4 & rhs) noexcept;
-Float4 & operator*=(float rhs) noexcept;
+            float4 & operator*=(const float4 & rhs) noexcept;
+float4 & operator*=(float rhs) noexcept;
 
-            Float4 operator*(const Float4 & rhs) const noexcept;
+            float4 operator*(const float4 & rhs) const noexcept;
 
-            Float4 operator/(const Float4 & rhs) const noexcept;
+            float4 operator/(const float4 & rhs) const noexcept;
 
-            Float4 operator+(const Float4 & rhs) const noexcept;
+            float4 operator+(const float4 & rhs) const noexcept;
 
-            Float4 operator-(const Float4 & rhs) const noexcept;
+            float4 operator-(const float4 & rhs) const noexcept;
 
-            Float4 Abs() const noexcept;
+            float4 Abs() const noexcept;
 
-            Float4 Acos() const noexcept;
+            float4 Acos() const noexcept;
 
-            Float4 Asin() const noexcept;
+            float4 Asin() const noexcept;
 
-            Float4 Atan() const noexcept;
+            float4 Atan() const noexcept;
 
-            Float4 Cos() const noexcept;
+            float4 Cos() const noexcept;
 
-            Float4 Sin() const noexcept;
+            float4 Sin() const noexcept;
 
-            Float4 Cosh() const noexcept;
+            float4 Cosh() const noexcept;
 
-            Float4 Sinh() const noexcept;
+            float4 Sinh() const noexcept;
 
-            Float4 Tan() const noexcept;
+            float4 Tan() const noexcept;
 
-            Float4 Exp() const noexcept;
+            float4 Exp() const noexcept;
 
-            Float4 Log() const noexcept;
+            float4 Log() const noexcept;
 
-            Float4 Log10() const noexcept;
+            float4 Log10() const noexcept;
 
-            Float4 Fmod(const Float4 & rhs) const noexcept;
+            float4 Fmod(const float4 & rhs) const noexcept;
 
-            Float4 Atan2(const Float4 & rhs) const noexcept;
+            float4 Atan2(const float4 & rhs) const noexcept;
 
-            Float4 Pow(const Float4 & rhs) const noexcept;
+            float4 Pow(const float4 & rhs) const noexcept;
 
-            Float4 Sqrt() const noexcept;
+            float4 Sqrt() const noexcept;
 
-            Float4 Clamp(const Float4 & low, const Float4 & high) const noexcept;
+            float4 Clamp(const float4 & low, const float4 & high) const noexcept;
 
-            float Dot(const Float4 & rhs) const noexcept;
+            float Dot(const float4 & rhs) const noexcept;
 
-            Float4 Sign() const noexcept;
+            float4 Sign() const noexcept;
 
-            Int4 Round() const noexcept;
+            int4 Round() const noexcept;
 
-            Float4 Saturate() const noexcept;
+            float4 Saturate() const noexcept;
 
             float LengthSquared() const noexcept;
 
             float Length() const noexcept;
 
-            Float4 Normalize() const noexcept;
+            float4 Normalize() const noexcept;
 
-            Bool4 IsNan() const noexcept;
+            bool4 IsNan() const noexcept;
 
-            Bool4 IsFinite() const noexcept;
+            bool4 IsFinite() const noexcept;
 
-            Bool4 IsInfinite() const noexcept;
+            bool4 IsInfinite() const noexcept;
 
-            Float4 operator-() const noexcept;
+            float4 operator-() const noexcept;
 
-            Float4 operator%(const Float4 & rhs) const noexcept;
+            float4 operator%(const float4 & rhs) const noexcept;
 
-            Float4 & operator%=(const Float4 & rhs) noexcept;
+            float4 & operator%=(const float4 & rhs) noexcept;
 
-            Int4 Ceil() const noexcept;
+            int4 Ceil() const noexcept;
 
-            Int4 Floor() const noexcept;
+            int4 Floor() const noexcept;
 
-            Float4 Exp2() const noexcept;
+            float4 Exp2() const noexcept;
 
-            Int4 Trunc() const noexcept;
+            int4 Trunc() const noexcept;
 
-            float Distance(const Float4 & rhs) const noexcept;
+            float Distance(const float4 & rhs) const noexcept;
 
-            Bool4 operator<(const Float4 & rhs) const noexcept;
+            bool4 operator<(const float4 & rhs) const noexcept;
 
-            Bool4 operator>(const Float4 & rhs) const noexcept;
+            bool4 operator>(const float4 & rhs) const noexcept;
 
-            Bool4 operator!=(const Float4 & rhs) const noexcept;
+            bool4 operator!=(const float4 & rhs) const noexcept;
 
-            Bool4 operator==(const Float4 & rhs) const noexcept;
+            bool4 operator==(const float4 & rhs) const noexcept;
 
-            Bool4 operator>=(const Float4 & rhs) const noexcept;
+            bool4 operator>=(const float4 & rhs) const noexcept;
 
-            Bool4 operator<=(const Float4 & rhs) const noexcept;
+            bool4 operator<=(const float4 & rhs) const noexcept;
 
-            static Float4 Random(float lower = 0.0f, float upper = 1.0f) noexcept;
+            static float4 Random(float lower = 0.0f, float upper = 1.0f) noexcept;
 
-            Float4 operator+(float v) const noexcept;
+            float4 operator+(float v) const noexcept;
 
-            Float4 operator-(float v) const noexcept;
+            float4 operator-(float v) const noexcept;
 
-            Float4 operator*(float v) const noexcept;
+            float4 operator*(float v) const noexcept;
 
-            Float4 operator/(float v) const noexcept;
+            float4 operator/(float v) const noexcept;
 
-            Float4 operator%(float v) const noexcept;
+            float4 operator%(float v) const noexcept;
 
-            Float4 operator!() const noexcept;
+            float4 operator!() const noexcept;
 
-            static const Float4 UnitX;
-            static const Float4 UnitY;
-            static const Float4 UnitZ;
-            static const Float4 UnitW;
-            static const Float4 Zero;
-            static const Float4 One;
-            static const Float4 Identity;
+            static const float4 UnitX;
+            static const float4 UnitY;
+            static const float4 UnitZ;
+            static const float4 UnitW;
+            static const float4 Zero;
+            static const float4 One;
+            static const float4 Identity;
         };
     }
 }

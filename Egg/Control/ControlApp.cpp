@@ -42,13 +42,13 @@ Egg::Scene::Entity::P Egg::Control::ControlApp::CreateControlledEntity(luabind::
 	try {
 		using namespace Egg::Math;
 		auto multiMesh = attributeTable.get<Egg::Mesh::Multi>("multiMesh");
-		Float3 position = attributeTable.getFloat3("position");
-		Float3 axis = attributeTable.getFloat3("orientationAxis", Float3(0, 1, 0));
+		float3 position = attributeTable.getfloat3("position");
+		float3 axis = attributeTable.getfloat3("orientationAxis", float3(0, 1, 0));
 		float angle = attributeTable.getFloat("orientationAngle");
 		auto model = attributeTable.get<Egg::Physics::Model>("model");
 		auto controlStateObj = attributeTable.getLuaBindObject("controlState");
 		// quaternion from axis and angle
-		Float4 orientation = Float4(axis.Normalize() * sinf(angle / 2), cosf(angle / 2));
+		float4 orientation = float4(axis.Normalize() * sinf(angle / 2), cosf(angle / 2));
 		Physics::PhysicsRigidBody::P rigidBody =
 			Physics::PhysicsRigidBody::Create(
 				scene, model, position, orientation
@@ -58,8 +58,8 @@ Egg::Scene::Entity::P Egg::Control::ControlApp::CreateControlledEntity(luabind::
 		actor->setLinearDamping(attributeTable.getFloat("linearDamping", actor->getLinearDamping()));
 		actor->setAngularDamping(attributeTable.getFloat("angularDamping", actor->getAngularDamping()));
 		actor->setMaxAngularVelocity(attributeTable.getFloat("maxAngularVelocity", actor->getMaxAngularVelocity()));
-		actor->setLinearVelocity(~attributeTable.getFloat3("linearVelocity", ~actor->getLinearVelocity()));
-		actor->setAngularVelocity(~attributeTable.getFloat3("angularVelocity", ~actor->getAngularVelocity()));
+		actor->setLinearVelocity(~attributeTable.getfloat3("linearVelocity", ~actor->getLinearVelocity()));
+		actor->setAngularVelocity(~attributeTable.getfloat3("angularVelocity", ~actor->getAngularVelocity()));
 
 
 		Scene::Entity::P physicsEntity =
@@ -73,10 +73,10 @@ Egg::Scene::Entity::P Egg::Control::ControlApp::CreateControlledEntity(luabind::
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
 }
 
-Egg::Math::Float4 quatMul(
-	const Egg::Math::Float4& p,
-	const Egg::Math::Float4& o) {
-	return Egg::Math::Float4(
+Egg::Math::float4 quatMul(
+	const Egg::Math::float4& p,
+	const Egg::Math::float4& o) {
+	return Egg::Math::float4(
 		p.y * o.z - p.z * o.y + p.w * o.x + p.x * o.w,
 		p.z * o.x - p.x * o.z + p.w * o.y + p.y * o.w,
 		p.x * o.y - p.y * o.x + p.w * o.z + p.z * o.w,
@@ -90,18 +90,18 @@ void Egg::Control::ControlApp::SpawnControlledEntity(Egg::Scene::Entity::P paren
 	try {
 		using namespace Egg::Math;
 		auto multiMesh = attributeTable.get<Egg::Mesh::Multi>("multiMesh");
-		Float3 position = attributeTable.getFloat3("position");
-		Float3 axis = attributeTable.getFloat3("orientationAxis", Float3(0, 1, 0));
+		float3 position = attributeTable.getfloat3("position");
+		float3 axis = attributeTable.getfloat3("orientationAxis", float3(0, 1, 0));
 		float angle = attributeTable.getFloat("orientationAngle");
 		auto model = attributeTable.get<Egg::Physics::Model>("model");
 		auto controlStateObj = attributeTable.getLuaBindObject("controlState");
 		// quaternion from axis and angle
-		Float4 orientation = Float4(axis.Normalize() * sinf(angle / 2), cosf(angle / 2));
+		float4 orientation = float4(axis.Normalize() * sinf(angle / 2), cosf(angle / 2));
 
 		auto parentModelMatrix = parentEntity->GetRigidBody()->GetModelMatrix();
 		auto parentOrientation = parentEntity->GetRigidBody()->GetOrientation();
 
-		position = (Float4(position, 1) * parentModelMatrix).xyz;
+		position = (float4(position, 1) * parentModelMatrix).xyz;
 		orientation = quatMul(parentOrientation, orientation);
 
 		Physics::PhysicsRigidBody::P rigidBody =
@@ -110,15 +110,15 @@ void Egg::Control::ControlApp::SpawnControlledEntity(Egg::Scene::Entity::P paren
 			);
 		auto actor = rigidBody->GetActor();
 
-		auto linearVelocity = attributeTable.getFloat3("linearVelocity", ~actor->getLinearVelocity());
-		linearVelocity = (Float4(linearVelocity, 0) * parentModelMatrix).xyz;
+		auto linearVelocity = attributeTable.getfloat3("linearVelocity", ~actor->getLinearVelocity());
+		linearVelocity = (float4(linearVelocity, 0) * parentModelMatrix).xyz;
 		actor->setLinearVelocity(~linearVelocity);
 
 		actor->setLinearDamping(attributeTable.getFloat("linearDamping", actor->getLinearDamping()));
 		actor->setAngularDamping(attributeTable.getFloat("angularDamping", actor->getAngularDamping()));
 		actor->setMaxAngularVelocity(attributeTable.getFloat("maxAngularVelocity", actor->getMaxAngularVelocity()));
-	//	actor->setLinearVelocity(~attributeTable.getFloat3("linearVelocity", ~actor->getLinearVelocity()));
-		actor->setAngularVelocity(~attributeTable.getFloat3("angularVelocity", ~actor->getAngularVelocity()));
+	//	actor->setLinearVelocity(~attributeTable.getfloat3("linearVelocity", ~actor->getLinearVelocity()));
+		actor->setAngularVelocity(~attributeTable.getfloat3("angularVelocity", ~actor->getAngularVelocity()));
 
 
 		Scene::Entity::P physicsEntity =
@@ -180,8 +180,8 @@ void Egg::Control::ControlApp::AddForceAndTorque(Egg::Scene::Entity::P entity, l
 	LuaTable attributeTable(attributes, "AddForceAndTorque");
 	try {
 		auto rigid = entity->GetRigidBody();
-		rigid->AddForce((attributeTable.getFloat4("force")  * rigid->GetRotationMatrix() ).xyz  );
-		rigid->AddTorque((attributeTable.getFloat4("torque")  * rigid->GetRotationMatrix() ).xyz );
+		rigid->AddForce((attributeTable.getfloat4("force")  * rigid->GetRotationMatrix() ).xyz  );
+		rigid->AddTorque((attributeTable.getfloat4("torque")  * rigid->GetRotationMatrix() ).xyz );
 	}
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }
 }
@@ -195,18 +195,18 @@ bool Egg::Control::ControlApp::AddForceAndTorqueForTarget(Egg::Scene::Entity::P 
 		float proximityRadius = attributeTable.getFloat("proximityRadius");
 		float maxForce = attributeTable.getFloat("maxForce");
 		float maxTorque = attributeTable.getFloat("maxTorque");
-		Float3 markPosition = attributeTable.getFloat3("position");
+		float3 markPosition = attributeTable.getfloat3("position");
 		auto mark = attributeTable.get<Egg::Scene::Entity>("mark", nullptr);
 		if (mark)
 		{
-			markPosition = (Float4(markPosition, 1) * mark->GetRigidBody()->GetModelMatrix()).xyz;
+			markPosition = (float4(markPosition, 1) * mark->GetRigidBody()->GetModelMatrix()).xyz;
 		}
 		auto rigid = entity->GetRigidBody();
 
-		Float3 markDiff = markPosition - rigid->GetPosition();
+		float3 markDiff = markPosition - rigid->GetPosition();
 		float markDist = markDiff.Length();
-		Float3 markDir = markDiff / markDist;
-		Float3 ahead = (Float4(1, 0, 0, 0) * rigid->GetRotationMatrix()).xyz;
+		float3 markDir = markDiff / markDist;
+		float3 ahead = (float4(1, 0, 0, 0) * rigid->GetRotationMatrix()).xyz;
 		rigid->AddForce(ahead * std::max(markDir.Dot(ahead), 0.0f) * maxForce);
 		rigid->AddTorque(ahead.Cross(markDir) * maxTorque);
 

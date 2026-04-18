@@ -206,20 +206,20 @@ namespace foreach_detail_
 ///////////////////////////////////////////////////////////////////////////////
 // Define some utilities for assessing the properties of expressions
 //
-template<typename Bool1, typename Bool2>
-inline boost::mpl::and_<Bool1, Bool2> *and_(Bool1 *, Bool2 *) { return 0; }
+template<typename bool1, typename bool2>
+inline boost::mpl::and_<bool1, bool2> *and_(bool1 *, bool2 *) { return 0; }
 
-template<typename Bool1, typename Bool2, typename Bool3>
-inline boost::mpl::and_<Bool1, Bool2, Bool3> *and_(Bool1 *, Bool2 *, Bool3 *) { return 0; }
+template<typename bool1, typename bool2, typename bool3>
+inline boost::mpl::and_<bool1, bool2, bool3> *and_(bool1 *, bool2 *, bool3 *) { return 0; }
 
-template<typename Bool1, typename Bool2>
-inline boost::mpl::or_<Bool1, Bool2> *or_(Bool1 *, Bool2 *) { return 0; }
+template<typename bool1, typename bool2>
+inline boost::mpl::or_<bool1, bool2> *or_(bool1 *, bool2 *) { return 0; }
 
-template<typename Bool1, typename Bool2, typename Bool3>
-inline boost::mpl::or_<Bool1, Bool2, Bool3> *or_(Bool1 *, Bool2 *, Bool3 *) { return 0; }
+template<typename bool1, typename bool2, typename bool3>
+inline boost::mpl::or_<bool1, bool2, bool3> *or_(bool1 *, bool2 *, bool3 *) { return 0; }
 
-template<typename Bool1>
-inline boost::mpl::not_<Bool1> *not_(Bool1 *) { return 0; }
+template<typename bool1>
+inline boost::mpl::not_<bool1> *not_(bool1 *) { return 0; }
 
 template<typename T>
 inline boost::is_array<T> *is_array_(T const &) { return 0; }

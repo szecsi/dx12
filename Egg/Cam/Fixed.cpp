@@ -4,9 +4,9 @@ using namespace Egg;
 using namespace Egg::Math;
 
 Cam::Fixed::Fixed(Egg::Scene::Entity::P owner,
-	Float3 position,
-	Float3 ahead,
-	Float3 up,
+	float3 position,
+	float3 ahead,
+	float3 up,
 	float fov,
 	float aspect,
 	float front,
@@ -20,9 +20,9 @@ Cam::Fixed::Fixed(Egg::Scene::Entity::P owner,
 	nearPlane(front),
 	farPlane(back)
 {
-/*	position = Float3::UnitZ * -10.0;
-	ahead = Float3::UnitZ;
-	right = Float3::UnitX;
+/*	position = float3::UnitZ * -10.0;
+	ahead = float3::UnitZ;
+	right = float3::UnitX;
 	yaw = 0.0;
 	pitch = 0.0;
 
@@ -31,12 +31,12 @@ Cam::Fixed::Fixed(Egg::Scene::Entity::P owner,
 	farPlane = 1000.0f;*/
 	SetAspect(1.33f);
 
-	viewMatrix = Float4x4::View(position, ahead, modelUp);
-	rayDirMatrix = (Float4x4::View(Float3::Zero, ahead, modelUp) * projMatrix).Invert();
+	viewMatrix = float4x4::View(position, ahead, modelUp);
+	rayDirMatrix = (float4x4::View(float3::Zero, ahead, modelUp) * projMatrix).Invert();
 	
 }
 
-Cam::Fixed::P Cam::Fixed::SetView(Egg::Math::Float3 position, Egg::Math::Float3 ahead)
+Cam::Fixed::P Cam::Fixed::SetView(Egg::Math::float3 position, Egg::Math::float3 ahead)
 {
 	this->position = position;
 	this->ahead =    ahead;
@@ -54,25 +54,25 @@ Cam::Fixed::P Cam::Fixed::SetProj(float fov, float aspect, float nearPlane, floa
 }
 
 
-const Float3& Cam::Fixed::GetEyePosition()
+const float3& Cam::Fixed::GetEyePosition()
 {
 	Egg::Scene::Entity::P entity = owner.lock();
 	if (entity) {
-		return (Float4(position, 1) * entity->GetRigidBody()->GetModelMatrix()).xyz;
+		return (float4(position, 1) * entity->GetRigidBody()->GetModelMatrix()).xyz;
 	}
 	return position;
 }
 
-const Float3& Cam::Fixed::GetAhead()
+const float3& Cam::Fixed::GetAhead()
 {
 	Egg::Scene::Entity::P entity = owner.lock();
 	//if (entity) {
-	//	return (Float4(ahead, 0) * entity->GetRigidBody()->GetRotationMatrix()).xyz;
+	//	return (float4(ahead, 0) * entity->GetRigidBody()->GetRotationMatrix()).xyz;
 	//}
 	return ahead;
 }
 
-const Float4x4& Cam::Fixed::GetRayDirMatrix()
+const float4x4& Cam::Fixed::GetRayDirMatrix()
 {
 	Egg::Scene::Entity::P entity = owner.lock();
 	if (entity) {
@@ -85,7 +85,7 @@ const Float4x4& Cam::Fixed::GetRayDirMatrix()
 	return rayDirMatrixWorld;
 }
 
-const Float4x4& Cam::Fixed::GetViewMatrix()
+const float4x4& Cam::Fixed::GetViewMatrix()
 {
 	Egg::Scene::Entity::P entity = owner.lock();
 	if (entity) {
@@ -98,15 +98,15 @@ const Float4x4& Cam::Fixed::GetViewMatrix()
 	return viewMatrixWorld;
 }
 
-const Float4x4& Cam::Fixed::GetProjMatrix()
+const float4x4& Cam::Fixed::GetProjMatrix()
 {
 	return projMatrix;
 }
 
 void Cam::Fixed::UpdateView()
 {
-	viewMatrix = Float4x4::View(position, ahead, modelUp);
-	rayDirMatrix = (Float4x4::View(Float3::Zero, GetAhead(), modelUp) * projMatrix).Invert();
+	viewMatrix = float4x4::View(position, ahead, modelUp);
+	rayDirMatrix = (float4x4::View(float3::Zero, GetAhead(), modelUp) * projMatrix).Invert();
 
 	right = modelUp.Cross(ahead).Normalize();
 	yaw = atan2f( ahead.x, ahead.z );
@@ -115,7 +115,7 @@ void Cam::Fixed::UpdateView()
 
 void Cam::Fixed::UpdateProj()
 {
-	projMatrix = Float4x4::Proj(fov, aspect, nearPlane, farPlane);
+	projMatrix = float4x4::Proj(fov, aspect, nearPlane, farPlane);
 }
 
 void Cam::Fixed::SetAspect(float aspect)
