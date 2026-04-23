@@ -37,6 +37,30 @@
     <FxCompile Include="Shaders\Retam\retamVS.hlsl">
       <Filter>Shaders\Retam</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\Retam\qid256PS.hlsl">
+      <Filter>Shaders\Retam</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\retam256CollectPS.hlsl">
+      <Filter>Shaders\Retam</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\retamCollectVS.hlsl">
+      <Filter>Shaders\Retam</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\layDownDepthPS.hlsl">
+      <Filter>Shaders\Retam</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\sortCS.hlsl">
+      <Filter>Shaders\Retam</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\extrudeGS.hlsl">
+      <Filter>Shaders\Retam</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\extrudePS.hlsl">
+      <Filter>Shaders\Retam</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\extrudeVS.hlsl">
+      <Filter>Shaders\Retam</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />

@@ -90,7 +90,7 @@ namespace Egg {
 			}
 
 			unsigned int* mapReadback() {
-				D3D12_RANGE readbackBufferRange{ 0, 4 * 32 * 32 * 32 };
+				D3D12_RANGE readbackBufferRange{ 0, bufferUintSize / 16 };
 				unsigned int* pReadbackBufferData;
 				readbackBuffer->Map
 				(

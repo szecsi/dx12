@@ -54,7 +54,7 @@
       <ShaderType>Compute</ShaderType>
     </FxCompile>
     <FxCompile>
-      <ShaderModel>6.4</ShaderModel>
+      <ShaderModel>6.8</ShaderModel>
       <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).cso</ObjectFileOutput>
       <AdditionalIncludeDirectories>$(SolutionDir)Egg\Shaders</AdditionalIncludeDirectories>
     </FxCompile>
@@ -83,10 +83,34 @@
     <FxCompile Include="Shaders\RadixSort\csPackBeta.hlsl" />
     <FxCompile Include="Shaders\RadixSort\csPackGamma.hlsl" />
     <FxCompile Include="Shaders\RadixSort\csScan.hlsl" />
+    <FxCompile Include="Shaders\Retam\extrudeGS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Geometry</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\extrudePS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\qid256PS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\retam256CollectPS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
     <FxCompile Include="Shaders\Retam\retam256PS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="Shaders\Retam\retamVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\retamCollectVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\layDownDepthPS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\sortCS.hlsl">
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\extrudeVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
   </ItemGroup>

@@ -15,10 +15,6 @@ namespace Egg {
 			com_ptr<ID3DBlob> domainShader;
 			com_ptr<ID3DBlob> geometryShader;
 			com_ptr<ID3DBlob> pixelShader;
-			D3D12_BLEND_DESC blendState;
-			D3D12_RASTERIZER_DESC rasterizerState;
-			D3D12_DEPTH_STENCIL_DESC depthStencilState;
-			DXGI_FORMAT dsvFormat;
 
 			com_ptr<ID3D12VersionedRootSignatureDeserializer> rsDeserializer;
 			com_ptr<ID3D12ShaderReflection> vsReflection;
@@ -77,6 +73,11 @@ namespace Egg {
 			}
 
 		public:
+
+			D3D12_BLEND_DESC blendState;
+			D3D12_RASTERIZER_DESC rasterizerState;
+			D3D12_DEPTH_STENCIL_DESC depthStencilState;
+			DXGI_FORMAT dsvFormat;
 
 			Material() : rootSignature{ nullptr }, vertexShader{ nullptr }, geometryShader{ nullptr }, pixelShader{ nullptr }, blendState{}, rasterizerState{}, depthStencilState{}
 				, rsDeserializer{ nullptr }, vsReflection{ nullptr }, gsReflection{ nullptr }, psReflection{ nullptr },

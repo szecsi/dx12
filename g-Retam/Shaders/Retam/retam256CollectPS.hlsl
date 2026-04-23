@@ -1,9 +1,9 @@
 #include "Retam.hlsli"
 #include "RetamCb.hlsli"
 
-Texture2D strokeTexture : register(t0);
-SamplerState sampl : register(s0);
-
+RWByteAddressBuffer counters : register(u0);
+RWBuffer<uint4> fragments : register(u1);	
+	
 cbuffer PerFrameCb : register(b1) {
 	float4x4 viewProjMat   : packoffset(c0);
 	float4   cameraPos     : packoffset(c8);
@@ -33,10 +33,27 @@ uint4 cycle(uint4 i) {
 	o.z |= i.w >> 31u;
 	return o;
 }
-
-[RootSignature(RootSigRetam)]
-float4 retam256PS(VSOutput input) : SV_Target
+	
+uint4 cyclen(uint4 i, uint n)
 {
+	if(n & 0xffffffe0) {
+		i = i.yxwz;
+		n &= 0x1f;
+	}
+	if(n == 0)
+		return i;
+	uint4 o = i << n;
+	n = (~n & 0x1f) + 1;
+	o.y |= i.x >> n;
+	o.x |= i.y >> n;
+	o.w |= i.z >> n;
+	o.z |= i.w >> n;
+	return o;
+}
+	
+
+[RootSignature(RootSigRetamCollect)]
+void retam256CollectPS(VSOutput input) {
 	float3 normal = normalize(input.worldNormal.xyz);
 	float3 bitangent = cross(normal, input.worldTangent.xyz);
 	float3 tangent = cross(bitangent, normal);
@@ -59,11 +76,18 @@ float4 retam256PS(VSOutput input) : SV_Target
 		float ilod = floor(lod + 1000.0) - 1000.0;
 		float flod = frac(lod + 1000.0);
 		float2 stex = tex / exp2(ilod);
+		uint level = uint(ilod);
 		uint4 bits = bitPatterns[j - 1u];
 		for (uint i = 0u; i < 256u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 16u) / float(0xffff);
-
-			float2 fromSeed = stex - seedUvPos + float2(100.5, 100.5);
+			float2 fromSeed = stex - seedUvPos + float2(2048.5, 2048.5);
+			uint2 quadId = uint2(fromSeed);
+			quadId <<= level;
+			uint4 bs = cyclen(bits, (level + 96) % 64);
+			quadId |= bs.xz & (0xffffffff >> (32 - level));
+			uint sid = ((quadId.x & 0x7fff) << 14)  | (quadId.y & 0x7fff);
+			sid |= j << 30;				
+				
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
 			uint2 quadrant = uint2(
 				(frac(fromSeed.x * 0.5) > 0.5) ? 1u : 0u,
@@ -93,18 +117,23 @@ float4 retam256PS(VSOutput input) : SV_Target
 				strokeTexPos.x * cos(rang) + strokeTexPos.y * sin(rang),
 				-strokeTexPos.x * sin(rang) + strokeTexPos.y * cos(rang));
 			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy / exp2(flod);
-			if (strokeTexPos.x > -0.5 &&
-				strokeTexPos.y > -0.5 &&
-				strokeTexPos.x <  0.5 &&
-				strokeTexPos.y <  0.5)
-			{
-				float4 c = strokeTexture.Sample(sampl, strokeTexPos.yx + float2(0.5, 0.5));
-				c.a = 1.0 - c.b;
-				c.a *= alpha;
-				fragmentColor = fragmentColor * (1.0 - c.a) + c * c.a;
+			if (	strokeTexPos.x > -0.5 &&
+					strokeTexPos.y > -0.5 &&
+					strokeTexPos.x <  0.5 &&
+					strokeTexPos.y <  0.5) {
+				if(alpha > 0.05){
+					uint t = (strokeTexPos.x + 0.5) * 256 * 256;
+					t |= (uint)(alpha * 256) << 16;
+					uint x = input.position.x;
+					uint y = input.position.y;
+                    uint hash = (sid & 0x7f) | ((sid >> 7) & 0x3f80); //& 0x3fff;
+                    hash = hash & 0xf;
+					uint place;
+                    counters.InterlockedAdd(hash << 2, 1, place);
+					fragments[hash * 1024 + place] = uint4( sid, x, y, t );
+				}					
 			}
 			bits = cycle(bits);
 		}
 	}
-	return fragmentColor;
 }

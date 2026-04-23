@@ -24,7 +24,7 @@ namespace Egg {
 				pso->SetName(L"Compute PSO" /* + csoName*/);
 			}
 
-			void setup(com_ptr<ID3D12GraphicsCommandList> computeCommandList, D3D12_GPU_DESCRIPTOR_HANDLE uavHandle) {
+			void setup(com_ptr<ID3D12GraphicsCommandList> computeCommandList, D3D12_GPU_DESCRIPTOR_HANDLE uavHandle, int rootDescriptorIndex = 1) {
 				computeCommandList->SetComputeRootSignature(rootSig.Get());
 				computeCommandList->SetComputeRootDescriptorTable(1, uavHandle);
 				computeCommandList->SetPipelineState(pso.Get());

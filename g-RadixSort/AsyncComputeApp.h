@@ -322,9 +322,9 @@ public:
 		commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		//READBACK HERE?
-//		for (auto name : { BUFFERNAMES }) {
-//			buffers[name].copyBack(commandList/*s[swapChainBackBufferIndex]*/);
-//		}
+		for (auto name : { BUFFERNAMES }) {
+			buffers[name].copyBack(commandList/*s[swapChainBackBufferIndex]*/);
+		}
 //
 //		//TEST HERE
 //		//for (auto name : { BUFFERNAMES }) {

@@ -248,10 +248,13 @@ void Script::ScriptedApp::AddShadedMeshToFlipMesh(Egg::Mesh::Flip::P flipMesh, l
 	try
 	{
 		unsigned int mien = attributeTable.getInt("mien", 0);
-		auto geometry = attributeTable.
-			get<Mesh::Geometry>("geometry");
-		auto material= attributeTable.get<Mesh::Material>("material");
-		Egg::Mesh::Shaded::P shadedMesh = Mesh::Shaded::Create(psoManager, material, geometry);
+		auto geometry = attributeTable.get<Mesh::Geometry>("geometry");
+		auto material = attributeTable.get<Mesh::Material>("material");
+		int renderTargets = attributeTable.getInt("renderTargets", 1);
+		std::vector<DXGI_FORMAT> formats;
+		if (renderTargets > 0)
+			formats = { DXGI_FORMAT_R8G8B8A8_UNORM };
+		Egg::Mesh::Shaded::P shadedMesh = Mesh::Shaded::Create(psoManager, material, geometry, formats);
 		flipMesh->Add(mien, shadedMesh);
 	}
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }

@@ -45,7 +45,7 @@
       <EntryPointName>main</EntryPointName>
     </FxCompile>
     <FxCompile>
-      <ShaderModel>6.4</ShaderModel>
+      <ShaderModel>6.8</ShaderModel>
       <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).cso</ObjectFileOutput>
     </FxCompile>
   </ItemDefinitionGroup>
@@ -60,6 +60,7 @@
     <ClInclude Include="Compute\Fence.h" />
     <ClInclude Include="Compute\FenceChain.h" />
     <ClInclude Include="Compute\RawBuffer.h" />
+    <ClInclude Include="Compute\TypedBuffer.h" />
     <ClInclude Include="ConstantBuffer.hpp" />
     <ClInclude Include="Control\ControlApp.h" />
     <ClInclude Include="Control\LuaControlState.h" />

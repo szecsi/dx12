@@ -5,9 +5,9 @@
 #include <algorithm>
 
 #include "Egg/Compute/RawBuffer.h"
+#include "Egg/Compute/TypedBuffer.h"
 #include "Egg/Compute/ComputePass.h"
 #include "Egg/Compute/FenceChain.h"
-#include "WaveSort.h"
 
 #include "Shaders/Retam/RetamCb.hlsli"
 #include "Egg/Script/StructReflectionMap.h"
@@ -15,75 +15,6 @@
 
 #include <commctrl.h>
 #pragma comment(lib, "comctl32.lib")
-
-bool verifyStarterCount(uint* data, uint* starterCount) {
-	uint prev = 0xffffffff;
-	for (uint iPage = 0; iPage < 32; iPage++)
-	{
-		uint aStarters = 0;
-		uint aLeadingNonStarters = 0;
-		if (data[iPage * 32 * 32]  == 0xffffffff)
-			return true;
-		for (uint i = 0; i < 32 * 32; i++) {
-			uint c = data[iPage * 32 * 32 + i];
-
-			if (c != prev)
-				aStarters++;
-			if (aStarters == 0)
-				aLeadingNonStarters++;
-			prev = c;
-		}
-		if (starterCount[iPage] != ((aLeadingNonStarters << 16) | aStarters))
-				return false;
-	}
-	return true;
-}
-
-struct MaskedComp {
-	MaskedComp(uint offsets) : maskOffsets(offsets){}
-	uint maskOffsets;
-	bool operator()(const uint& a, const uint& b)const {
-		uint ma =
-			(a >> (maskOffsets & 0xff)) & 0x1 |
-			(a >> ((maskOffsets & 0xff00) >> 8) << 1) & 0x2 |
-			(a >> ((maskOffsets & 0xff0000) >> 16) << 2) & 0x4 |
-			(a >> ((maskOffsets & 0xff000000) >> 24) << 3) & 0x8;
-		uint mb =
-			(b >> (maskOffsets & 0xff)) & 0x1 |
-			(b >> ((maskOffsets & 0xff00) >> 8) << 1) & 0x2 |
-			(b >> ((maskOffsets & 0xff0000) >> 16) << 2) & 0x4 |
-			(b >> ((maskOffsets & 0xff000000) >> 24) << 3) & 0x8;
-		return ma < mb;
-	}
-};
-
-struct MortonComp {
-	uint mortonHashFromCellIndex(uint a) const {
-		uint x = (a      ) & 0x7ff;
-		uint y = (a >> 11) & 0x7ff;
-		uint z = (a >> 22) & 0x7ff;
-		uint hash = 0;
-		uint i;
-		for (i = 0; i < 7; ++i)
-		{
-			hash |= ((x & (1 << i)) << (2 * i)) | ((y & (1 << i)) << (2 * i + 1)) | ((z & (1 << i)) << (2 * i + 2));
-		}
-		return hash;
-	}
-
-	bool operator()(const uint& a, const uint& b)const {
-		return mortonHashFromCellIndex(a) < mortonHashFromCellIndex(b);
-	}
-};
-
-struct KeyComp {
-	uint* pKeys;
-	uint mask;
-	KeyComp(uint* pKeys, uint mask = 0xffffffff) :pKeys(pKeys),mask(mask) {}
-	bool operator()(const uint& a, const uint& b)const {
-		return (pKeys[a>>12] & mask) < (pKeys[b>>12] & mask);
-	}
-};
 
 class RetamApp : public Egg::Script::ScriptedApp {
 
@@ -204,8 +135,18 @@ protected:
 	Egg::Compute::FenceChain computeFenceChain;
 	Egg::Compute::FenceChain graphicsFenceChain;
 
+	com_ptr<ID3D12Resource> collectDepthBuffer;
+	com_ptr<ID3D12DescriptorHeap> collectDsvHeap;
+
 	com_ptr<ID3D12DescriptorHeap> uavHeap;
-	std::vector<Egg::Compute::RawBuffer> buffers;
+	Egg::Compute::RawBuffer   fragmentCountsBuffer;
+	Egg::Compute::TypedBuffer fragmentsBuffer;
+	Egg::Compute::TypedBuffer designBuffer;
+	Egg::Compute::RawBuffer   strokeCountsBuffer;
+	Egg::Compute::RawBuffer   debugBuffer;
+
+	Egg::Compute::ComputeShader sortCS;
+	//D3D12_RESOURCE_BARRIER uavBarrier;
 
 #define BUFFERNAMES 		keys, perPageBucketOffsets, indicesWithKeyBits0, indicesWithKeyBits1, globalBucketOffsets
 
@@ -222,10 +163,14 @@ protected:
 		}
 	}
 
-	WaveSort waveSort;
-
 public:
-	RetamApp() : ScriptedApp() {}
+	RetamApp() : ScriptedApp(),
+		fragmentCountsBuffer(L"fragmentCounts", 16 * 1024),
+		fragmentsBuffer(L"fragments", 1024u * 1024u * 16u),
+		designBuffer(L"design", 8u * 5u * 1024u * 16u, DXGI_FORMAT_R32G32B32A32_FLOAT),
+		strokeCountsBuffer(L"strokeCounts", 1024u * 16u),
+		debugBuffer(L"debug", 1024u * 1024u * 16u)
+	{}
 
 	virtual void CreateResources() override {
 		Egg::Script::ScriptedApp::CreateResources();
@@ -237,50 +182,26 @@ public:
 		D3D12_DESCRIPTOR_HEAP_DESC dhd;
 		dhd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		dhd.NodeMask = 0;
-		dhd.NumDescriptors = 7;
+		dhd.NumDescriptors = 5;
 		dhd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 		DX_API("create descriptor heap for uavs")
 			device->CreateDescriptorHeap(&dhd, IID_PPV_ARGS(uavHeap.GetAddressOf()));
 
-		for (auto name : { BUFFERNAMES }) {
-			std::wstring wname = bufferToString(name);
-			buffers.push_back(Egg::Compute::RawBuffer(wname));
-			CD3DX12_CPU_DESCRIPTOR_HANDLE handle(
-				uavHeap->GetCPUDescriptorHandleForHeapStart(),
-				name,
-				device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV));
-			buffers[name].createResources(device, handle);
-		}
 
-		buffers[keys].fillRandomMask(0xffffffff);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE CountsHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 0, dhIncrSize);
+		fragmentCountsBuffer.createResources(device, CountsHandle);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE fragmentsHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 1, dhIncrSize);
+		fragmentsBuffer.createResources(device, fragmentsHandle);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE designHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 2, dhIncrSize);
+		designBuffer.createResources(device, designHandle);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE strokeCountsHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 3, dhIncrSize);
+		strokeCountsBuffer.createResources(device, strokeCountsHandle);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE debugHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 4, dhIncrSize);
+		debugBuffer.createResources(device, debugHandle);
 
-		auto dhStart = CD3DX12_GPU_DESCRIPTOR_HANDLE(uavHeap->GetGPUDescriptorHandleForHeapStart());
-		Egg::Compute::ComputeShader csLocalSortAlpha;
-		Egg::Compute::ComputeShader csLocalSortBeta;
-		Egg::Compute::ComputeShader csLocalSortGamma;
-		Egg::Compute::ComputeShader csScan;
-		Egg::Compute::ComputeShader csPackAlpha;
-		Egg::Compute::ComputeShader csPackBeta;
-		Egg::Compute::ComputeShader csPackGamma;
-		csLocalSortAlpha.createResources(device, "Shaders/RadixSort/csLocalSortAlpha.cso");
-		csLocalSortBeta.createResources(device, "Shaders/RadixSort/csLocalSortBeta.cso");
-		csLocalSortGamma.createResources(device, "Shaders/RadixSort/csLocalSortGamma.cso");
-		csScan.createResources(device, "Shaders/RadixSort/csScan.cso");
-		csPackAlpha.createResources(device, "Shaders/RadixSort/csPackAlpha.cso");
-		csPackBeta.createResources(device, "Shaders/RadixSort/csPackBeta.cso");
-		csPackGamma.createResources(device, "Shaders/RadixSort/csPackGamma.cso");
-
-		waveSort.creaseResources(
-			csLocalSortAlpha,
-			csLocalSortBeta,
-			csLocalSortGamma,
-			csScan,
-			csPackAlpha,
-			csPackBeta,
-			csPackGamma,
-			dhStart, 0, dhIncrSize, buffers, false);
+		sortCS.createResources(device, "Shaders/Retam/sortCS.cso");
 
 		D3D12_COMMAND_QUEUE_DESC descCommandQueue = { D3D12_COMMAND_LIST_TYPE_COMPUTE, 0, D3D12_COMMAND_QUEUE_FLAG_NONE };
 		DX_API("create compute command queue.")
@@ -297,8 +218,6 @@ public:
 				uploadAllocator.Get(),
 				nullptr,
 				IID_PPV_ARGS(uploadCommandList.ReleaseAndGetAddressOf()));
-
-		buffers[keys].upload(uploadCommandList);
 
 		DX_API("close command list.")
 			uploadCommandList->Close();
@@ -331,6 +250,32 @@ public:
 					IID_PPV_ARGS(computeCommandLists[i].ReleaseAndGetAddressOf()));
 			computeCommandLists[i]->Close();
 		}
+
+		D3D12_DESCRIPTOR_HEAP_DESC collectDsvHeapDesc = {};
+		collectDsvHeapDesc.NumDescriptors = 1;
+		collectDsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+		collectDsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		DX_API("create collect DSV heap")
+			device->CreateDescriptorHeap(&collectDsvHeapDesc, IID_PPV_ARGS(collectDsvHeap.ReleaseAndGetAddressOf()));
+
+		D3D12_CLEAR_VALUE collectDepthClearVal = {};
+		collectDepthClearVal.Format = DXGI_FORMAT_D32_FLOAT;
+		collectDepthClearVal.DepthStencil.Depth = 1.0f;
+		DX_API("create collect depth buffer")
+			device->CreateCommittedResource(
+				&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+				D3D12_HEAP_FLAG_NONE,
+				&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, 1024, 1024, 1, 0, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL),
+				D3D12_RESOURCE_STATE_DEPTH_WRITE,
+				&collectDepthClearVal,
+				IID_PPV_ARGS(collectDepthBuffer.ReleaseAndGetAddressOf()));
+		collectDepthBuffer->SetName(L"Collect Depth Buffer");
+
+		D3D12_DEPTH_STENCIL_VIEW_DESC collectDsvDesc = {};
+		collectDsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+		collectDsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+		collectDsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+		device->CreateDepthStencilView(collectDepthBuffer.Get(), &collectDsvDesc, collectDsvHeap->GetCPUDescriptorHandleForHeapStart());
 	}
 
 	void SceneUploadResources() {
@@ -360,6 +305,11 @@ public:
 
 		retamMaterialCb.CreateResources(device.Get());
 
+		retamMaterialCb.data.lineSize    = { 0.6f, 0.2f };
+		retamMaterialCb.data.fading      = { 1.0f, 1.0f };
+		retamMaterialCb.data.texScale    = { 2.0f, 2.0f, 2.0f, 2.0f };
+		retamMaterialCb.data.crossAngle  = { 0.0f, 0.125f, 0.25f, 0.375f };
+
 		RunScript("scene.lua");
 
 		GG_STRUCT(RetamMaterialCb)
@@ -373,6 +323,17 @@ public:
 		if (matIt != guiMaterials.end())
 			matIt->second->SetConstantBuffer(retamMaterialCb);
 
+		auto collectIt = guiMaterials.find("retam256Collect");
+		if (collectIt != guiMaterials.end()) {
+			collectIt->second->SetConstantBuffer(retamMaterialCb);
+			collectIt->second->SetSrvHeap(3, uavHeap, 0);
+			collectIt->second->depthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+		}
+
+		auto depthIt = guiMaterials.find("layDownDepth");
+		//if (depthIt != guiMaterials.end())
+		//	depthIt->second->SetConstantBuffer(retamMaterialCb);
+
 		SceneUploadResources();
 	}
 
@@ -380,7 +341,10 @@ public:
 		ID3D12DescriptorHeap* pHeaps[] = { uavHeap.Get() };
 		computeCommandLists[swapChainBackBufferIndex]->SetDescriptorHeaps(_countof(pHeaps), pHeaps);
 
-		waveSort.populate(computeCommandLists[swapChainBackBufferIndex]);
+		sortCS.setup(computeCommandLists[swapChainBackBufferIndex], uavHeap->GetGPUDescriptorHandleForHeapStart(), 0);
+		computeCommandLists[swapChainBackBufferIndex]->Dispatch(1024*16, 1, 1);
+		computeCommandLists[swapChainBackBufferIndex]->ResourceBarrier(1, &debugBuffer.uavBarrier());
+
 	}
 
 	virtual void PopulateCommandList() override {
@@ -403,17 +367,69 @@ public:
 		// Wait for compute before graphics
 		computeFenceChain.gpuWait(commandQueue, swapChainBackBufferIndex);
 
+		if (frameCount > 1) {
+			// check compute results
+/*			uint* fragmentsBufferData = (uint*)fragmentsBuffer.mapReadback();
+			uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();
+			uint* strokeCountsData = strokeCountsBuffer.mapReadback();
+
+			for (int si = 0; si < 1024 * 16; si++) {
+				uint count = fragmentCountsData[si];
+				if (count > 0) {
+					printf("Stroke %d: %d fragments\n", si, count);
+					uint* con = fragmentsBufferData + si * 1024 * 4;
+
+					for (int i = 0; i < count; i++) {
+						uint f = con[i];
+						uint x = f & 0xFFFF;
+						uint y = (f >> 16) & 0xFFFF;
+						printf("\tFragment %d: (%d, %d)\n", i, x, y);
+					}
+
+				}
+			}*/
+
+			uint* debugData = debugBuffer.mapReadback();
+			debugBuffer.unmapReadback();
+/*			strokeCountsBuffer.unmapReadback();
+			fragmentCountsBuffer.unmapReadback();
+			fragmentsBuffer.unmapReadback();*/
+		}
+
 		// --- Graphics/render pass ---
 		commandAllocator->Reset();
 		commandList->Reset(commandAllocator.Get(), nullptr);
 
-		commandList->RSSetViewports(1, &viewPort);
-		commandList->RSSetScissorRects(1, &scissorRect);
-
-		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
-
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rHandle(rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), swapChainBackBufferIndex, rtvDescriptorHandleIncrementSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(dsvHeap->GetCPUDescriptorHandleForHeapStart());
+		CD3DX12_CPU_DESCRIPTOR_HANDLE collectDsvHandle(collectDsvHeap->GetCPUDescriptorHandleForHeapStart());
+
+		D3D12_VIEWPORT collectViewPort = { 0.0f, 0.0f, 1024.0f, 1024.0f, 0.0f, 1.0f };
+		D3D12_RECT collectScissor = { 0, 0, 1024, 1024 };
+		commandList->RSSetViewports(1, &collectViewPort);
+		commandList->RSSetScissorRects(1, &collectScissor);
+
+		// Clear counts and lay down depth into 1024x1024 depth buffer
+		fragmentCountsBuffer.upload(commandList);
+		commandList->OMSetRenderTargets(0, nullptr, FALSE, &collectDsvHandle);
+		commandList->ClearDepthStencilView(collectDsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+		for (int i = 0; i < (int)entities.size(); i++)
+			entities[i]->Draw(commandList.Get(), 2, i);
+
+		// Collect pass — depth test, no depth write, writes to UAV buffers
+		for (int i = 0; i < (int)entities.size(); i++)
+			entities[i]->Draw(commandList.Get(), 1, i);
+
+		//commandList->ResourceBarrier(1, &fragmentCountsBuffer.uavBarrier());
+
+		//fragmentCountsBuffer.copyBack(commandList);
+		//fragmentsBuffer.copyBack(commandList);
+		debugBuffer.copyBack(commandList);
+
+		// Restore main viewport and render to swap chain
+		commandList->RSSetViewports(1, &viewPort);
+		commandList->RSSetScissorRects(1, &scissorRect);
+		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 		commandList->OMSetRenderTargets(1, &rHandle, FALSE, &dsvHandle);
 
 		const float clearColor[] = { 0.5f, 0.2f, 0.4f, 1.0f };
@@ -452,12 +468,17 @@ public:
 	}
 
 	virtual void ReleaseSwapChainResources() override {
+		collectDepthBuffer.Reset();
+		collectDsvHeap.Reset();
 		__super::ReleaseSwapChainResources();
 	}
 
 	virtual void ReleaseResources() override {
 		if (guiHwnd) { DestroyWindow(guiHwnd); guiHwnd = nullptr; }
 		retamMaterialCb.ReleaseResources();
+		fragmentCountsBuffer.releaseResources();
+		fragmentsBuffer.releaseResources();
+		designBuffer.releaseResources();
 		uavHeap.Reset();
 		Egg::Script::ScriptedApp::ReleaseResources();
 	}
