@@ -150,7 +150,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         if (rei < nValid){
             uint elementIndex = rei + gid.x * rowSize * nRowsPerPage;
             uint sid = fragments.Load(elementIndex << 4);
-            localasses[did] = sid;
+            s[flatid] = sid;
         }
     }
     
@@ -169,35 +169,45 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     GroupMemoryBarrierWithGroupSync();
 
     uint oversteps = WaveActiveBallot( s[(tid.x << 5)+31] != s[(tid.x << 5) + 32]).x;
+    sat[0x40] = oversteps;
+    GroupMemoryBarrierWithGroupSync();
     
     for (int did = 0; did < groupDivisor; did++)
     {
-        uint rowst = (tid.y + did * nRowsPerPage / groupDivisor) << 5;
-        uint flatid = rowst | tid.x;
+        uint row = (tid.y + did * nRowsPerPage / groupDivisor);
+        uint flatid = (row << 5) | tid.x;
         
-        uint groupMask = WaveMatch(localasses[did]).x;
+        uint groupMask = WaveMatch(s[flatid]).x;
         uint step;
         if(tid.x == 0){
             step = 0;      
         } else {
             step = 1 - ((groupMask >> (tid.x - 1)) & 0x1u);
         }
-        s[flatid] = WavePrefixSum(step) + step;
+        localasses[did] = WavePrefixSum(step) + step;
+        if(tid.x == 31){
+            sat[row] = localasses[did];
+        }
     }
     
     GroupMemoryBarrierWithGroupSync();
 
-//    sat[tid.x] = WavePrefixSum(s[(tid.x << 5)+31] + 
-//        (tid.x ? countbits(oversteps << (32-tid.x)) : 0)
-//    );
-//    for (int did = 0; did < groupDivisor; did++) {
-//        //serials[did] = 0; //TODO
-//        uint rowst = (tid.y + did * nRowsPerPage / groupDivisor) << 5;
-//        uint flatid = rowst | tid.x;
-//        
-//        s[flatid] += sat[tid.y];
-//    }
-//
+    if (tid.y == 0){
+         uint tmp = WavePrefixSum(sat[tid.x]
+       // +           (tid.x ? countbits(oversteps << (32 - tid.x)) : 0)
+        );
+        sat[tid.x+32] = tmp;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    
+    for (int did = 0; did < groupDivisor; did++) {
+        //serials[did] = 0; //TODO
+        uint row = (tid.y + did * nRowsPerPage / groupDivisor) ;
+        uint flatid = (row << 5) | tid.x;
+        
+        localasses[did] += sat[row+32];
+    }
+
     GroupMemoryBarrierWithGroupSync();
     
         for (int did = 0; did < groupDivisor; did++){
@@ -209,8 +219,8 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
                 //WaveGetLaneIndex());
                 //tid.x);
                 //WavePrefixSum(1) + 1);
-            //localasses[did]);
-            s[flatid]);
+            localasses[did]);
+            //s[flatid]);
             //sat[flatid]);
         }
     
