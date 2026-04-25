@@ -15,7 +15,13 @@ RWByteAddressBuffer debugBuffer : register(u4);
 
 groupshared uint s[rowSize * nRowsPerPage]; // sort step buffer, then sorted rows
 groupshared uint sat[nBuckets * nRowsPerPage];
-groupshared float4 overdesign[(nRowsPerPage-1)*5];
+groupshared float4 tPowersCarry;
+groupshared float4 xtpolyCarry;
+groupshared float4 ytpolyCarry;
+groupshared float4 design0Carry;
+groupshared float4 design1Carry;
+groupshared float4 extremaCarry;
+groupshared uint sidCarry;
 
 [RootSignature(SortSig)]
 [numthreads(rowSize * nRowsPerPage / groupDivisor, 1, 1)]
@@ -36,7 +42,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         uint flatid = rowst | tid.x;
         if (flatid < nValid) {
             uint initialElementIndex = flatid + gid.x * rowSize * nRowsPerPage;
-            uint sid = fragments.Load(initialElementIndex << 4);
+            uint sid = fragments.Load(initialElementIndex /*<< 4*/).x;
             localasses[did] = (flatid << 16) | (sid & 0xffff);
         } else {
             localasses[did] = 0xffffffff;
@@ -121,7 +127,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
                 uint flatid = localasses[did] >> 16;
                 if (flatid < nValid){
                     uint elementIndex = flatid + gid.x * rowSize * nRowsPerPage;
-                    uint sid = fragments.Load(elementIndex << 4);
+                    uint sid = fragments.Load(elementIndex /*<< 4*/).x;
                     s[target] = (localasses[did] & 0xffff0000) | (sid >> 16);
                 }
             } else {
@@ -149,7 +155,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         uint rei = localasses[did] >> 16;
         if (rei < nValid){
             uint elementIndex = rei + gid.x * rowSize * nRowsPerPage;
-            uint sid = fragments.Load(elementIndex << 4);
+            uint sid = fragments.Load(elementIndex /*<< 4*/).x;
             s[flatid] = sid;
         }
     }
@@ -184,9 +190,9 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         } else {
             step = 1 - ((groupMask >> (tid.x - 1)) & 0x1u);
         }
-        localasses[did] = WavePrefixSum(step) + step;
+        serials[did] = WavePrefixSum(step) + step;
         if(tid.x == 31){
-            sat[row] = localasses[did];
+            sat[row] = serials[did];
         }
     }
     
@@ -205,7 +211,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         uint row = (tid.y + did * nRowsPerPage / groupDivisor) ;
         uint flatid = (row << 5) | tid.x;
         
-        localasses[did] += sat[row+32];
+        serials[did] += sat[row+32];
     }
 
     GroupMemoryBarrierWithGroupSync();
@@ -219,32 +225,68 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
                 //WaveGetLaneIndex());
                 //tid.x);
                 //WavePrefixSum(1) + 1);
-            localasses[did]);
+            //loacalasses[did]);
+            serials[did]);
             //s[flatid]);
             //sat[flatid]);
         }
     
     
     GroupMemoryBarrierWithGroupSync();
+
+    for (int did = 0; did < groupDivisor; did++){
+        uint rowst = (tid.y + did * nRowsPerPage / groupDivisor) << 5;
+        uint flatid = rowst | tid.x;
+        s[flatid] = (localasses[did] & 0xffff0000) | (serials[did] & 0xffff);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    if(tid.y > 0) return;
     
     // we read fragments and sum designs here
-    uint4 fragment[groupDivisor];
-    for (int did = 0; did < groupDivisor; did++)
+
+    for (int row = 0; row < nRowsPerPage; row++)
     {
-        fragment[did] = fragments.Load((localasses[did] >> 16) << 4);
+        uint flatid = (row << 5) | tid.x;
+        uint reiser = s[flatid] ;
+        uint elementIndex = (reiser >> 16) + gid.x * rowSize * nRowsPerPage;
+        uint4 fragment = fragments.Load(elementIndex);
  
-        float t = fragment[did].w / 256.0 / 256.0;
+        float t = fragment.w / 256.0 / 256.0;
+        uint mask = WaveMatch(fragment.x).x;
+        bool leader = (firstbithigh(mask) == tid.x);
+        bool starter = mask & 1;
+        bool closer = mask & (1 << 31);
+        
         float t2 = t * t;
         float t3 = t2 * t;
         float4 tPowers = float4(1, t, t2, t3);
-
-        float4 xtpoly = tPowers * fragment[did].y;
-        float4 ytpoly = tPowers * fragment[did].z;
-
+        float4 tPowersSum = WaveMultiPrefixSum(tPowers, mask);
+        if(leader){
+            if (starter)
+            {
+                if (fragment.x == sidCarry)
+                {
+                    tPowersSum += tPowersCarry;
+                } else {
+                    designs[(reiser & 0xffff) - 1 /*TODO plus page base*/] = tPowersCarry;
+                }
+            }
+            tPowersSum += tPowers;
+            if(closer){
+                tPowersCarry = tPowersSum;
+            } else {
+                designs[(reiser & 0xffff) /*TODO plus page base*/] = tPowersSum;
+            }
+        }        
+        float4 xtpoly = tPowers * fragment.y;
+        float4 ytpoly = tPowers * fragment.z;
         float4 design0 = float4(1, t, t2, t3);
         float4 design1 = design0 * t3;
+
         float4 extrema;
-        if (fragment[did].z < 128)
+        if (fragment.z < 128)
             extrema = float4(0, 0, 0, 0);
         else
             extrema = float4(1 - t, t, 0, 0);
