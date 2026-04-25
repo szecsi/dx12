@@ -12,16 +12,36 @@ RWByteAddressBuffer debugBuffer : register(u4);
 #define nRowsPerPage 32
 #define groupDivisor 4
 #define nBuckets 16
+#define designPerPage 8
+#define designFloat4Size 5
+
+uint4 OneHotEncode7(uint value) {
+    uint top7 = value >> 25;        // 0..127
+    uint4 result = uint4(0, 0, 0, 0);
+    result[top7 >> 5] = 1u << (top7 & 31);
+    return result;
+}
+
+uint DecodeMax7(uint4 orResult) {
+    if (orResult.w != 0) return (firstbithigh(orResult.w) + 96) ;
+    if (orResult.z != 0) return (firstbithigh(orResult.z) + 64) ;
+    if (orResult.y != 0) return (firstbithigh(orResult.y) + 32) ;
+    if (orResult.x != 0) return  firstbithigh(orResult.x)       ;
+    return 0;
+}
+
+uint DecodeMin7(uint4 orResult) {
+    if (orResult.x != 0) return  firstbitlow(orResult.x)        ;
+    if (orResult.y != 0) return (firstbitlow(orResult.y) + 32)  ;
+    if (orResult.z != 0) return (firstbitlow(orResult.z) + 64)  ;
+    if (orResult.w != 0) return (firstbitlow(orResult.w) + 96)  ;
+    return 0;
+}
+
+
 
 groupshared uint s[rowSize * nRowsPerPage]; // sort step buffer, then sorted rows
 groupshared uint sat[nBuckets * nRowsPerPage];
-groupshared float4 tPowersCarry;
-groupshared float4 xtpolyCarry;
-groupshared float4 ytpolyCarry;
-groupshared float4 design0Carry;
-groupshared float4 design1Carry;
-groupshared float4 extremaCarry;
-groupshared uint sidCarry;
 
 [RootSignature(SortSig)]
 [numthreads(rowSize * nRowsPerPage / groupDivisor, 1, 1)]
@@ -245,7 +265,13 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     if(tid.y > 0) return;
     
     // we read fragments and sum designs here
-
+    float4 xtpolyCarry;
+    float4 ytpolyCarry;
+    float4 design0Carry;
+    float4 design1Carry;
+    uint4 extremaCarry;
+    uint sidCarry;
+    
     for (int row = 0; row < nRowsPerPage; row++)
     {
         uint flatid = (row << 5) | tid.x;
@@ -262,34 +288,59 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         float t2 = t * t;
         float t3 = t2 * t;
         float4 tPowers = float4(1, t, t2, t3);
-        float4 tPowersSum = WaveMultiPrefixSum(tPowers, mask);
+        float4 xtpoly = tPowers * fragment.y;
+        float4 xtpolySum = WaveMultiPrefixSum(xtpoly, mask);
+        float4 ytpoly = tPowers * fragment.z;
+        float4 ytpolySum = WaveMultiPrefixSum(ytpoly, mask);
+        float4 design0 = tPowers;
+        float4 design0Sum = WaveMultiPrefixSum(design0, mask);
+        float4 design1 = tPowers * t3;
+        float4 design1Sum = WaveMultiPrefixSum(design1, mask);
+        uint4 extrema;
+        if (fragment.w < 128)
+            extrema = uint4(0, 0, 0, 0);
+        else
+            extrema = OneHotEncode7(fragment.w);
+        uint4 extremaMax = WaveMultiPrefixBitOr(extrema, mask);
         if(leader){
             if (starter)
             {
                 if (fragment.x == sidCarry)
                 {
-                    tPowersSum += tPowersCarry;
+                    xtpolySum  += xtpolyCarry;
+                    ytpolySum  += ytpolyCarry;
+                    design0Sum += design0Carry;
+                    design1Sum += design1Carry;
+                    extremaMax = extremaCarry | extremaMax;
                 } else {
-                    designs[(reiser & 0xffff) - 1 /*TODO plus page base*/] = tPowersCarry;
+                    designs[((reiser & 0xffff) - 1) * designFloat4Size + 0 + gid.x * 8] = xtpolyCarry;
+                    designs[((reiser & 0xffff) - 1) * designFloat4Size + 1 + gid.x * 8] = ytpolyCarry;
+                    designs[((reiser & 0xffff) - 1) * designFloat4Size + 2 + gid.x * 8] = design0Carry;
+                    designs[((reiser & 0xffff) - 1) * designFloat4Size + 3 + gid.x * 8] = design1Carry;
+                    designs[((reiser & 0xffff) - 1) * designFloat4Size + 4 + gid.x * 8] = extremaCarry;
                 }
             }
-            tPowersSum += tPowers;
+            xtpolySum += xtpoly;
+            ytpolySum += ytpoly;
+            design0Sum += design0;
+            design1Sum += design1;
+            extremaMax = extrema | extremaMax;
             if(closer){
-                tPowersCarry = tPowersSum;
+                xtpolyCarry = xtpolySum;
+                ytpolyCarry = ytpolySum;
+                design0Carry = design0Sum;
+                design1Carry = design1Sum;
+                extremaCarry = extremaMax;
             } else {
-                designs[(reiser & 0xffff) /*TODO plus page base*/] = tPowersSum;
+                designs[(reiser & 0xffff) * designFloat4Size + 0 + gid.x * 8] = xtpolySum;
+                designs[(reiser & 0xffff) * designFloat4Size + 1 + gid.x * 8] = ytpolySum;
+                designs[(reiser & 0xffff) * designFloat4Size + 2 + gid.x * 8] = design0Sum;
+                designs[(reiser & 0xffff) * designFloat4Size + 3 + gid.x * 8] = design1Sum;
+                designs[(reiser & 0xffff) * designFloat4Size + 4 + gid.x * 8] = float4(
+                    float(DecodeMax7(extremaMax)) / 128.0, float(DecodeMin7(extremaMax)) / 128.0, 0, 0
+                );
             }
         }        
-        float4 xtpoly = tPowers * fragment.y;
-        float4 ytpoly = tPowers * fragment.z;
-        float4 design0 = float4(1, t, t2, t3);
-        float4 design1 = design0 * t3;
-
-        float4 extrema;
-        if (fragment.z < 128)
-            extrema = float4(0, 0, 0, 0);
-        else
-            extrema = float4(1 - t, t, 0, 0);
     }
     //sum designs for identical sids, get maximum of extrema for identical sids, write out design and stroke count for each sid   
  
