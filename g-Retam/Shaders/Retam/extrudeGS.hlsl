@@ -86,12 +86,12 @@ void extrudeGS(point GsisDummy dummy[1], uint pid : SV_PrimitiveID, inout Triang
 			tx * tx.y - tn * tn.y,
 			tx * tx.z - tn * tn.z
 			);
-		des += float4x4 ( 
+		des += /* t0_3.x * */ (float4x4 ( 
 			float4(1.0,   1.0/2, 1.0/3, 1.0/4),
 			float4(1.0/2, 1.0/3, 1.0/4, 1.0/5),
 			float4(1.0/3, 1.0/4, 1.0/5, 1.0/6),
 			float4(1.0/4, 1.0/5, 1.0/6, 1.0/7)
-			) * tix * t0_3.x;
+			) * tix ) ;
 		float4 r = t0_3;
 		float4 p = r;
 		for(uint i=0; i<4; i++)
@@ -128,7 +128,7 @@ void extrudeGS(point GsisDummy dummy[1], uint pid : SV_PrimitiveID, inout Triang
 		output.tex.y = dot(cubicV, tPowers);
 		output.pos.xy = float2(dot(cubicX, tPowers), dot(cubicY, tPowers));
 		output.pos.y += 5.15;
-		float2 tangent = float2(dot(cubicX.yzw * float3(1,2,3), tPowers.xyz), dot(cubicY.yzw * float3(1, 2, 3), tPowers));
+		float2 tangent = float2(dot(cubicX.yzw * float3(1,2,3), tPowers.xyz), dot(cubicY.yzw * float3(1, 2, 3), tPowers.xyz));
 
 		tangent = normalize(tangent);
 		float2 normal = tangent.yx;

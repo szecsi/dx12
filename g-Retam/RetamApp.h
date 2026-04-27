@@ -8,6 +8,7 @@
 #include "Egg/Compute/TypedBuffer.h"
 #include "Egg/Compute/ComputePass.h"
 #include "Egg/Compute/FenceChain.h"
+#include "Egg/Shader.h"
 
 #include "Shaders/Retam/RetamCb.hlsli"
 #include "Egg/Script/StructReflectionMap.h"
@@ -142,11 +143,24 @@ protected:
 	Egg::Compute::RawBuffer   fragmentCountsBuffer;
 	Egg::Compute::TypedBuffer fragmentsBuffer;
 	Egg::Compute::TypedBuffer designBuffer;
+	Egg::Compute::TypedBuffer cubicBuffer;
 	Egg::Compute::RawBuffer   strokeCountsBuffer;
+	Egg::Compute::RawBuffer   strokeOffsetsBuffer;
+	Egg::Compute::RawBuffer   strokeListBuffer;
 	Egg::Compute::RawBuffer   debugBuffer;
 
+	com_ptr<ID3D12Resource>          dispatchArgsResource;
+	com_ptr<ID3D12CommandSignature>  dispatchCommandSignature;
+
 	Egg::Compute::ComputeShader sortCS;
-	//D3D12_RESOURCE_BARRIER uavBarrier;
+	Egg::Compute::ComputeShader prefixSumCS;
+	Egg::Compute::ComputeShader compactCS;
+	Egg::Compute::ComputeShader argsCS;
+	Egg::Compute::ComputeShader cubicCS;
+
+	com_ptr<ID3D12CommandSignature>  drawCommandSignature;
+	com_ptr<ID3D12RootSignature>     cubicExtrudeRootSig;
+	com_ptr<ID3D12PipelineState>     cubicExtrudePSO;
 
 #define BUFFERNAMES 		keys, perPageBucketOffsets, indicesWithKeyBits0, indicesWithKeyBits1, globalBucketOffsets
 
@@ -168,7 +182,10 @@ public:
 		fragmentCountsBuffer(L"fragmentCounts", 16 * 1024),
 		fragmentsBuffer(L"fragments", 1024u * 1024u * 16u),
 		designBuffer(L"design", 8u * 5u * 1024u * 16u, DXGI_FORMAT_R32G32B32A32_FLOAT),
+		cubicBuffer(L"cubic", 1024u * 16u * 16u * 4u, DXGI_FORMAT_R32G32B32A32_FLOAT),
 		strokeCountsBuffer(L"strokeCounts", 1024u * 16u),
+		strokeOffsetsBuffer(L"strokeOffsets", 1024u * 16u),
+		strokeListBuffer(L"strokeList", 1024u * 16u * 16u),
 		debugBuffer(L"debug", 1024u * 1024u * 16u)
 	{}
 
@@ -182,7 +199,7 @@ public:
 		D3D12_DESCRIPTOR_HEAP_DESC dhd;
 		dhd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		dhd.NodeMask = 0;
-		dhd.NumDescriptors = 5;
+		dhd.NumDescriptors = 10;
 		dhd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
@@ -200,8 +217,97 @@ public:
 		strokeCountsBuffer.createResources(device, strokeCountsHandle);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE debugHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 4, dhIncrSize);
 		debugBuffer.createResources(device, debugHandle);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE strokeOffsetsHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 5, dhIncrSize);
+		strokeOffsetsBuffer.createResources(device, strokeOffsetsHandle);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE cubicHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 6, dhIncrSize);
+		cubicBuffer.createResources(device, cubicHandle);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE strokeListHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 7, dhIncrSize);
+		strokeListBuffer.createResources(device, strokeListHandle);
+
+		{
+			D3D12_RESOURCE_DESC argsDesc = CD3DX12_RESOURCE_DESC::Buffer(7 * sizeof(uint), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+			DX_API("create dispatch args buffer")
+				device->CreateCommittedResource(
+					&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+					D3D12_HEAP_FLAG_NONE, &argsDesc,
+					D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+					IID_PPV_ARGS(dispatchArgsResource.GetAddressOf()));
+			dispatchArgsResource->SetName(L"dispatchArgs");
+
+			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+			uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+			uavDesc.Buffer.NumElements = 7;
+			uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+			CD3DX12_CPU_DESCRIPTOR_HANDLE argsHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 8, dhIncrSize);
+			device->CreateUnorderedAccessView(dispatchArgsResource.Get(), nullptr, &uavDesc, argsHandle);
+		}
+
+		{
+			D3D12_INDIRECT_ARGUMENT_DESC argDesc = {};
+			argDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
+			D3D12_COMMAND_SIGNATURE_DESC csDesc = {};
+			csDesc.ByteStride = sizeof(D3D12_DISPATCH_ARGUMENTS);
+			csDesc.NumArgumentDescs = 1;
+			csDesc.pArgumentDescs = &argDesc;
+			DX_API("create dispatch command signature")
+				device->CreateCommandSignature(&csDesc, nullptr, IID_PPV_ARGS(dispatchCommandSignature.GetAddressOf()));
+		}
+
+		{
+			D3D12_INDIRECT_ARGUMENT_DESC argDesc = {};
+			argDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+			D3D12_COMMAND_SIGNATURE_DESC csDesc = {};
+			csDesc.ByteStride = sizeof(D3D12_DRAW_ARGUMENTS);
+			csDesc.NumArgumentDescs = 1;
+			csDesc.pArgumentDescs = &argDesc;
+			DX_API("create draw command signature")
+				device->CreateCommandSignature(&csDesc, nullptr, IID_PPV_ARGS(drawCommandSignature.GetAddressOf()));
+		}
+
+		{
+			CD3DX12_CPU_DESCRIPTOR_HANDLE cubicSrvHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 9, dhIncrSize);
+			cubicBuffer.createSrv(device, cubicSrvHandle);
+		}
+
+		{
+			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/Retam/extrudeCubicVS.cso");
+			com_ptr<ID3DBlob> gs = Egg::Shader::LoadCso("Shaders/Retam/extrudeCubicGS.cso");
+			com_ptr<ID3DBlob> ps = Egg::Shader::LoadCso("Shaders/Retam/extrudeCubicPS.cso");
+			cubicExtrudeRootSig = Egg::Shader::LoadRootSignature(device.Get(), vs.Get());
+
+			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = cubicExtrudeRootSig.Get();
+			psoDesc.VS = { vs->GetBufferPointer(), vs->GetBufferSize() };
+			psoDesc.GS = { gs->GetBufferPointer(), gs->GetBufferSize() };
+			psoDesc.PS = { ps->GetBufferPointer(), ps->GetBufferSize() };
+			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
+			psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+			psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+			psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+			psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+			psoDesc.BlendState.RenderTarget[0].BlendEnable           = TRUE;
+			psoDesc.BlendState.RenderTarget[0].SrcBlend              = D3D12_BLEND_SRC_ALPHA;
+			psoDesc.BlendState.RenderTarget[0].DestBlend             = D3D12_BLEND_INV_SRC_ALPHA;
+			psoDesc.BlendState.RenderTarget[0].BlendOp               = D3D12_BLEND_OP_ADD;
+			psoDesc.BlendState.RenderTarget[0].SrcBlendAlpha         = D3D12_BLEND_ONE;
+			psoDesc.BlendState.RenderTarget[0].DestBlendAlpha        = D3D12_BLEND_ZERO;
+			psoDesc.BlendState.RenderTarget[0].BlendOpAlpha          = D3D12_BLEND_OP_ADD;
+			psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+			psoDesc.NumRenderTargets = 1;
+			psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.SampleMask = UINT_MAX;
+			psoDesc.SampleDesc.Count = 1;
+			DX_API("create cubic extrude PSO")
+				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(cubicExtrudePSO.GetAddressOf()));
+		}
 
 		sortCS.createResources(device, "Shaders/Retam/sortCS.cso");
+		prefixSumCS.createResources(device, "Shaders/Retam/prefixSumCS.cso");
+		compactCS.createResources(device, "Shaders/Retam/compactCS.cso");
+		argsCS.createResources(device, "Shaders/Retam/argsCS.cso");
+		cubicCS.createResources(device, "Shaders/Retam/cubicCS.cso");
 
 		D3D12_COMMAND_QUEUE_DESC descCommandQueue = { D3D12_COMMAND_LIST_TYPE_COMPUTE, 0, D3D12_COMMAND_QUEUE_FLAG_NONE };
 		DX_API("create compute command queue.")
@@ -338,13 +444,61 @@ public:
 	}
 
 	void recordComputeCommands() {
+		auto& cmd = computeCommandLists[swapChainBackBufferIndex];
 		ID3D12DescriptorHeap* pHeaps[] = { uavHeap.Get() };
-		computeCommandLists[swapChainBackBufferIndex]->SetDescriptorHeaps(_countof(pHeaps), pHeaps);
+		cmd->SetDescriptorHeaps(_countof(pHeaps), pHeaps);
+		D3D12_GPU_DESCRIPTOR_HANDLE heap0 = uavHeap->GetGPUDescriptorHandleForHeapStart();
 
-		sortCS.setup(computeCommandLists[swapChainBackBufferIndex], uavHeap->GetGPUDescriptorHandleForHeapStart(), 0);
-		computeCommandLists[swapChainBackBufferIndex]->Dispatch(1024*16, 1, 1);
-		computeCommandLists[swapChainBackBufferIndex]->ResourceBarrier(1, &debugBuffer.uavBarrier());
+		sortCS.setup(cmd, heap0, 0);
+		cmd->Dispatch(1024*16, 1, 1);
+		cmd->ResourceBarrier(1, &strokeCountsBuffer.uavBarrier());
 
+		prefixSumCS.setup(cmd, heap0, 0);
+		cmd->Dispatch(1, 1, 1);
+		{
+			D3D12_RESOURCE_BARRIER b[] = { strokeOffsetsBuffer.uavBarrier(), designBuffer.uavBarrier() };
+			cmd->ResourceBarrier(2, b);
+		}
+		
+		compactCS.setup(cmd, heap0, 0);
+		cmd->Dispatch(1024*16, 1, 1);
+		
+		argsCS.setup(cmd, heap0, 0);
+		cmd->Dispatch(1, 1, 1);
+
+		{
+			D3D12_RESOURCE_BARRIER argsUAV = {};
+			argsUAV.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+			argsUAV.UAV.pResource = dispatchArgsResource.Get();
+			D3D12_RESOURCE_BARRIER b[] = { strokeListBuffer.uavBarrier(), argsUAV };
+			cmd->ResourceBarrier(2, b);
+		}
+		{
+			D3D12_RESOURCE_BARRIER toIndirect = {};
+			toIndirect.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			toIndirect.Transition.pResource   = dispatchArgsResource.Get();
+			toIndirect.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			toIndirect.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+			toIndirect.Transition.StateAfter  = D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+			cmd->ResourceBarrier(1, &toIndirect);
+		}
+		
+		cubicCS.setup(cmd, heap0, 0);
+		cmd->ExecuteIndirect(dispatchCommandSignature.Get(), 1, dispatchArgsResource.Get(), 0, nullptr, 0);
+
+		{
+			D3D12_RESOURCE_BARRIER fromIndirect = {};
+			fromIndirect.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			fromIndirect.Transition.pResource   = dispatchArgsResource.Get();
+			fromIndirect.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			fromIndirect.Transition.StateBefore = D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+			fromIndirect.Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+			cmd->ResourceBarrier(1, &fromIndirect);
+		}
+		{
+			D3D12_RESOURCE_BARRIER b[] = { debugBuffer.uavBarrier(), cubicBuffer.uavBarrier() };
+			cmd->ResourceBarrier(2, b);
+		}
 	}
 
 	virtual void PopulateCommandList() override {
@@ -389,8 +543,8 @@ public:
 				}
 			}*/
 
-			uint* debugData = debugBuffer.mapReadback();
-			debugBuffer.unmapReadback();
+			//uint* debugData = debugBuffer.mapReadback();
+			//debugBuffer.unmapReadback();
 /*			strokeCountsBuffer.unmapReadback();
 			fragmentCountsBuffer.unmapReadback();
 			fragmentsBuffer.unmapReadback();*/
@@ -411,6 +565,7 @@ public:
 
 		// Clear counts and lay down depth into 1024x1024 depth buffer
 		fragmentCountsBuffer.upload(commandList);
+		strokeCountsBuffer.upload(commandList);
 		commandList->OMSetRenderTargets(0, nullptr, FALSE, &collectDsvHandle);
 		commandList->ClearDepthStencilView(collectDsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 		for (int i = 0; i < (int)entities.size(); i++)
@@ -424,7 +579,7 @@ public:
 
 		//fragmentCountsBuffer.copyBack(commandList);
 		//fragmentsBuffer.copyBack(commandList);
-		debugBuffer.copyBack(commandList);
+		//debugBuffer.copyBack(commandList);
 
 		// Restore main viewport and render to swap chain
 		commandList->RSSetViewports(1, &viewPort);
@@ -437,7 +592,39 @@ public:
 		commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		__super::PopulateCommandList();
-
+		
+		{
+			D3D12_RESOURCE_BARRIER barriers[] = {
+				CD3DX12_RESOURCE_BARRIER::Transition(cubicBuffer.getResource(),
+					D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+					D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+				CD3DX12_RESOURCE_BARRIER::Transition(dispatchArgsResource.Get(),
+					D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT)
+			};
+			commandList->ResourceBarrier(2, barriers);
+		}
+		{
+			uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			CD3DX12_GPU_DESCRIPTOR_HANDLE cubicSrvGpu(uavHeap->GetGPUDescriptorHandleForHeapStart(), 9, dhIncrSize);
+			ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
+			commandList->SetDescriptorHeaps(1, heaps);
+			commandList->SetGraphicsRootSignature(cubicExtrudeRootSig.Get());
+			commandList->SetGraphicsRootDescriptorTable(0, cubicSrvGpu);
+			commandList->SetPipelineState(cubicExtrudePSO.Get());
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
+		//	commandList->ExecuteIndirect(drawCommandSignature.Get(), 1, dispatchArgsResource.Get(), 12, nullptr, 0);
+		}
+		{
+			D3D12_RESOURCE_BARRIER barriers[] = {
+				CD3DX12_RESOURCE_BARRIER::Transition(cubicBuffer.getResource(),
+					D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+					D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+				CD3DX12_RESOURCE_BARRIER::Transition(dispatchArgsResource.Get(),
+					D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+			};
+			commandList->ResourceBarrier(2, barriers);
+		}
+		
 		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
 		DX_API("close graphics command list")
@@ -479,6 +666,12 @@ public:
 		fragmentCountsBuffer.releaseResources();
 		fragmentsBuffer.releaseResources();
 		designBuffer.releaseResources();
+		strokeListBuffer.releaseResources();
+		dispatchArgsResource.Reset();
+		dispatchCommandSignature.Reset();
+		drawCommandSignature.Reset();
+		cubicExtrudePSO.Reset();
+		cubicExtrudeRootSig.Reset();
 		uavHeap.Reset();
 		Egg::Script::ScriptedApp::ReleaseResources();
 	}

@@ -127,7 +127,7 @@ void retam256CollectPS(VSOutput input) {
 					uint x = input.position.x;
 					uint y = input.position.y;
                     uint hash = (sid & 0x7f) | ((sid >> 7) & 0x3f80); //& 0x3fff;
-                    hash = hash & 0xf;
+                    hash = hash & 0xff;
 					uint place;
                     counters.InterlockedAdd(hash << 2, 1, place);
 					fragments[hash * 1024 + place] = uint4( sid, x, y, t );

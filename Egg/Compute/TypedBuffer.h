@@ -112,6 +112,24 @@ namespace Egg {
 				readbackBuffer->Unmap(0, &emptyRange);
 			}
 
+			ID3D12Resource* getResource() const { return buffer.Get(); }
+
+			D3D12_RESOURCE_BARRIER uavBarrier() const {
+				D3D12_RESOURCE_BARRIER b = {};
+				b.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+				b.UAV.pResource = buffer.Get();
+				return b;
+			}
+
+			void createSrv(com_ptr<ID3D12Device> device, const D3D12_CPU_DESCRIPTOR_HANDLE& handle) const {
+				D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+				srvDesc.Format = format;
+				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+				srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+				srvDesc.Buffer.NumElements = numElements;
+				device->CreateShaderResourceView(buffer.Get(), &srvDesc, handle);
+			}
+
 			void releaseResources() {
 				buffer.Reset();
 				uploadBuffer.Reset();
