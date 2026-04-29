@@ -8,6 +8,7 @@ cbuffer PerFrameCb : register(b1) {
 	float4x4 viewProjMat   : packoffset(c0);
 	float4   cameraPos     : packoffset(c8);
 	float4   ahead         : packoffset(c22);
+	float4   time          : packoffset(c23);
 }
 
 struct VSOutput {
@@ -51,9 +52,9 @@ uint4 cyclen(uint4 i, uint n)
 	return o;
 }
 	
-
+[earlydepthstencil]
 [RootSignature(RootSigRetamCollect)]
-void retam256CollectPS(VSOutput input) {
+float4 retam256CollectPS(VSOutput input) : SV_Target{
 	float3 normal = normalize(input.worldNormal.xyz);
 	float3 bitangent = cross(normal, input.worldTangent.xyz);
 	float3 tangent = cross(bitangent, normal);
@@ -64,7 +65,7 @@ void retam256CollectPS(VSOutput input) {
 	float3 lightDir = normalize(float3(1, 1, 1));
 	float tone = clamp(dot(normal, lightDir), 0.0, 1.0) * 4.2;
 
-	float4 fragmentColor = float4(normal, 1);
+	float4 dbgColor = float4(0.5, 0.0, 0.0, 1);
 
 	for (uint j = 4u; j > (uint)tone && j > 0u; j--) {
 		float2 tex = input.texCoord.xy / input.texCoord.w / texScale[j - 1u] * 0.5;
@@ -79,7 +80,7 @@ void retam256CollectPS(VSOutput input) {
 		uint level = uint(ilod);
 		uint4 bits = bitPatterns[j - 1u];
 		for (uint i = 0u; i < 256u; i++) {
-			float2 seedUvPos = float2(bits.xz >> 16u) / float(0xffff);
+			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
 			float2 fromSeed = stex - seedUvPos + float2(2048.5, 2048.5);
 			uint2 quadId = uint2(fromSeed);
 			quadId <<= level;
@@ -126,14 +127,31 @@ void retam256CollectPS(VSOutput input) {
 					t |= (uint)(alpha * 256) << 16;
 					uint x = input.position.x;
 					uint y = input.position.y;
-                    uint hash = (sid & 0x7f) | ((sid >> 7) & 0x3f80); //& 0x3fff;
-                    hash = hash & 0xff;
+                    //uint hash = (sid & 0x7f) | ((sid >> 7) & 0x3f80); //& 0x3fff;
+                    //hash = hash & 0x3fff;
+					uint hash = (sid * 13) & 0x3fff;
 					uint place;
                     counters.InterlockedAdd(hash << 2, 1, place);
-					fragments[hash * 1024 + place] = uint4( sid, x, y, t );
-				}					
+					if (place > 1023){
+						place = (place - 1024) * 2;
+					}
+					if (place > 1023){
+						place = (place - 1024) * 3;
+					}
+					if (place > 1023){
+						place = (place - 1024) * 5;
+					}
+					if (place > 1023){
+						place = (place - 1024) * 7;
+					}						
+					// debug movement:  
+						// int(x + cos(time.x)* 20.0), int(y + sin(time.x)*20.0)						
+					fragments[hash * 1024 + (place & 0x3ff)] = uint4( sid, x, y, t );
+					dbgColor.g += 0.2;
+				}
 			}
 			bits = cycle(bits);
 		}
 	}
+	return dbgColor;
 }

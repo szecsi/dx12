@@ -19,4 +19,5 @@ __declspec(align(16)) struct PerFrameCb {
 	Egg::Math::float4x4 lightViewProjTransform2;
 	Egg::Math::float4 billboardSize;
 	Egg::Math::float4 ahead;
+	Egg::Math::float4 time;
 };

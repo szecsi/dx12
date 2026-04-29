@@ -27,13 +27,13 @@ void cubicCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
     float4 t3_6   = designs[base + 3];
     float4 extrema = designs[base + 4];
 
-    if (t0_3.x < 16) {
-        cubics[globalStroke * 4 + 0] = float4(0, 0, 0, 0);
-        cubics[globalStroke * 4 + 1] = float4(0, 0, 0, 0);
-        cubics[globalStroke * 4 + 2] = float4(0, 0, 0, 0);
-        cubics[globalStroke * 4 + 3] = float4(0, 0, 0, 0);
-        return;
-    }
+//    if (t0_3.x < 16) {
+//        cubics[globalStroke * 4 + 0] = float4(0, 0, 0, 0);
+//        cubics[globalStroke * 4 + 1] = float4(0, 0, 0, 0);
+//        cubics[globalStroke * 4 + 2] = float4(0, 0, 0, 0);
+//        cubics[globalStroke * 4 + 3] = float4(0, 0, 0, 0);
+//        return;
+//    }
 
     float4x4 des = float4x4(
         float4(t0_3),
@@ -79,12 +79,12 @@ void cubicCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
             tx*tx.y - tn*tn.y,
             tx*tx.z - tn*tn.z
         );
-        des += /*t0_3.x *  */ (float4x4(
+        des += float4x4(
             float4(1.0,   1.0/2, 1.0/3, 1.0/4),
             float4(1.0/2, 1.0/3, 1.0/4, 1.0/5),
             float4(1.0/3, 1.0/4, 1.0/5, 1.0/6),
             float4(1.0/4, 1.0/5, 1.0/6, 1.0/7)
-        ) * tix);
+        ) * tix * float(t0_3.x);
         float4 r = t0_3, p = r;
         for (uint i = 0; i < 4; i++) {
             float4 apk  = mul(des, p);
@@ -100,5 +100,5 @@ void cubicCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
     cubics[globalStroke * 4 + 0] = cubicX;
     cubics[globalStroke * 4 + 1] = cubicY;
     cubics[globalStroke * 4 + 2] = cubicV;
-    cubics[globalStroke * 4 + 3] = float4(extrema.x, extrema.y, 0, confidence);
+    cubics[globalStroke * 4 + 3] = float4(1.0-extrema.y, extrema.x, t0_3.x, confidence);
 }

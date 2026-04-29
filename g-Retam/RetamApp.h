@@ -138,6 +138,8 @@ protected:
 
 	com_ptr<ID3D12Resource> collectDepthBuffer;
 	com_ptr<ID3D12DescriptorHeap> collectDsvHeap;
+	com_ptr<ID3D12Resource> collectColorBuffer;
+	com_ptr<ID3D12DescriptorHeap> collectRtvHeap;
 
 	com_ptr<ID3D12DescriptorHeap> uavHeap;
 	Egg::Compute::RawBuffer   fragmentCountsBuffer;
@@ -382,6 +384,30 @@ public:
 		collectDsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
 		collectDsvDesc.Flags = D3D12_DSV_FLAG_NONE;
 		device->CreateDepthStencilView(collectDepthBuffer.Get(), &collectDsvDesc, collectDsvHeap->GetCPUDescriptorHandleForHeapStart());
+
+		D3D12_DESCRIPTOR_HEAP_DESC collectRtvHeapDesc = {};
+		collectRtvHeapDesc.NumDescriptors = 1;
+		collectRtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+		collectRtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		DX_API("create collect RTV heap")
+			device->CreateDescriptorHeap(&collectRtvHeapDesc, IID_PPV_ARGS(collectRtvHeap.ReleaseAndGetAddressOf()));
+
+		D3D12_CLEAR_VALUE collectColorClearVal = {};
+		collectColorClearVal.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		DX_API("create collect color buffer")
+			device->CreateCommittedResource(
+				&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+				D3D12_HEAP_FLAG_NONE,
+				&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, 1024, 1024, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET),
+				D3D12_RESOURCE_STATE_RENDER_TARGET,
+				&collectColorClearVal,
+				IID_PPV_ARGS(collectColorBuffer.ReleaseAndGetAddressOf()));
+		collectColorBuffer->SetName(L"Collect Color Buffer");
+
+		D3D12_RENDER_TARGET_VIEW_DESC collectRtvDesc = {};
+		collectRtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		collectRtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+		device->CreateRenderTargetView(collectColorBuffer.Get(), &collectRtvDesc, collectRtvHeap->GetCPUDescriptorHandleForHeapStart());
 	}
 
 	void SceneUploadResources() {
@@ -411,7 +437,7 @@ public:
 
 		retamMaterialCb.CreateResources(device.Get());
 
-		retamMaterialCb.data.lineSize    = { 0.6f, 0.2f };
+		retamMaterialCb.data.lineSize    = { 0.6f, 0.01f };
 		retamMaterialCb.data.fading      = { 1.0f, 1.0f };
 		retamMaterialCb.data.texScale    = { 2.0f, 2.0f, 2.0f, 2.0f };
 		retamMaterialCb.data.crossAngle  = { 0.0f, 0.125f, 0.25f, 0.375f };
@@ -436,6 +462,13 @@ public:
 			collectIt->second->depthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 		}
 
+		auto reCollectIt = guiMaterials.find("retamReCollect");
+		if (reCollectIt != guiMaterials.end()) {
+			reCollectIt->second->SetConstantBuffer(retamMaterialCb);
+			reCollectIt->second->SetSrvHeap(3, uavHeap, 0);
+			reCollectIt->second->depthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+		}
+
 		auto depthIt = guiMaterials.find("layDownDepth");
 		//if (depthIt != guiMaterials.end())
 		//	depthIt->second->SetConstantBuffer(retamMaterialCb);
@@ -449,9 +482,14 @@ public:
 		cmd->SetDescriptorHeaps(_countof(pHeaps), pHeaps);
 		D3D12_GPU_DESCRIPTOR_HANDLE heap0 = uavHeap->GetGPUDescriptorHandleForHeapStart();
 
+		strokeCountsBuffer.upload(cmd);
+		strokeOffsetsBuffer.upload(cmd);
+
 		sortCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1024*16, 1, 1);
 		cmd->ResourceBarrier(1, &strokeCountsBuffer.uavBarrier());
+
+		//strokeCountsBuffer.copyBack(cmd);
 
 		prefixSumCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1, 1, 1);
@@ -459,7 +497,9 @@ public:
 			D3D12_RESOURCE_BARRIER b[] = { strokeOffsetsBuffer.uavBarrier(), designBuffer.uavBarrier() };
 			cmd->ResourceBarrier(2, b);
 		}
-		
+
+		//strokeOffsetsBuffer.copyBack(cmd);
+
 		compactCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1024*16, 1, 1);
 		
@@ -473,6 +513,9 @@ public:
 			D3D12_RESOURCE_BARRIER b[] = { strokeListBuffer.uavBarrier(), argsUAV };
 			cmd->ResourceBarrier(2, b);
 		}
+
+		//strokeListBuffer.copyBack(cmd);
+
 		{
 			D3D12_RESOURCE_BARRIER toIndirect = {};
 			toIndirect.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -499,6 +542,7 @@ public:
 			D3D12_RESOURCE_BARRIER b[] = { debugBuffer.uavBarrier(), cubicBuffer.uavBarrier() };
 			cmd->ResourceBarrier(2, b);
 		}
+		//cubicBuffer.copyBack(cmd);
 	}
 
 	virtual void PopulateCommandList() override {
@@ -512,6 +556,8 @@ public:
 
 		DX_API("close compute command list")
 			computeCommandLists[swapChainBackBufferIndex]->Close();
+
+		graphicsFenceChain.gpuWait(computeCommandQueue, swapChainBackBufferIndex);
 		{
 			ID3D12CommandList* ppCommandLists[] = { computeCommandLists[swapChainBackBufferIndex].Get() };
 			computeCommandQueue->ExecuteCommandLists(1, ppCommandLists);
@@ -523,11 +569,36 @@ public:
 
 		if (frameCount > 1) {
 			// check compute results
-/*			uint* fragmentsBufferData = (uint*)fragmentsBuffer.mapReadback();
-			uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();
-			uint* strokeCountsData = strokeCountsBuffer.mapReadback();
+			//uint* fragmentsBufferData = (uint*)fragmentsBuffer.mapReadback();
+			//uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();
+			//uint* strokeCountsData = strokeCountsBuffer.mapReadback();
+			//uint* strokeOffsetsData = strokeOffsetsBuffer.mapReadback();
+			//uint* strokeListData = strokeListBuffer.mapReadback();
+			//uint* debugData = debugBuffer.mapReadback();
+			//float* cubicData = (float*)cubicBuffer.mapReadback();
 
-			for (int si = 0; si < 1024 * 16; si++) {
+/* {
+				uint nValid = fragmentCountsData[142];
+				uint* page = fragmentsBufferData + 142 * 1024 * 4;
+				uint ids[1024];
+				for (uint i = 0; i < nValid; i++)
+					ids[i] = page[i * 4];
+				std::sort(ids, ids + nValid);
+				uint nUnique = 0;
+				char dbgBuf[128];
+				for (uint i = 0; i < nValid; ) {
+					uint j = i + 1;
+					while (j < nValid && ids[j] == ids[i]) j++;
+					nUnique++;
+					snprintf(dbgBuf, sizeof(dbgBuf), "  ID: %u  count: %u\n", ids[i], j - i);
+					OutputDebugStringA(dbgBuf);
+					i = j;
+				}
+				snprintf(dbgBuf, sizeof(dbgBuf), "Page 142: %u valid fragments, %u unique IDs\n", nValid, nUnique);
+				OutputDebugStringA(dbgBuf);
+			}
+			*/
+	/*		for (int si = 0; si < 1024 * 16; si++) {
 				uint count = fragmentCountsData[si];
 				if (count > 0) {
 					printf("Stroke %d: %d fragments\n", si, count);
@@ -543,11 +614,18 @@ public:
 				}
 			}*/
 
-			//uint* debugData = debugBuffer.mapReadback();
+			//for (int k = 0; k < 16382; k++) {
+			//	if(fragmentCountsData[k] > 1024)
+			//		bool kame = true;
+			//}
+
+			//cubicBuffer.unmapReadback();
 			//debugBuffer.unmapReadback();
-/*			strokeCountsBuffer.unmapReadback();
-			fragmentCountsBuffer.unmapReadback();
-			fragmentsBuffer.unmapReadback();*/
+			//strokeOffsetsData = strokeOffsetsBuffer.mapReadback();
+			//strokeListBuffer.unmapReadback();
+			//strokeCountsBuffer.unmapReadback();
+			//fragmentCountsBuffer.unmapReadback();
+			//fragmentsBuffer.unmapReadback();
 		}
 
 		// --- Graphics/render pass ---
@@ -565,17 +643,21 @@ public:
 
 		// Clear counts and lay down depth into 1024x1024 depth buffer
 		fragmentCountsBuffer.upload(commandList);
-		strokeCountsBuffer.upload(commandList);
 		commandList->OMSetRenderTargets(0, nullptr, FALSE, &collectDsvHandle);
 		commandList->ClearDepthStencilView(collectDsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 		for (int i = 0; i < (int)entities.size(); i++)
 			entities[i]->Draw(commandList.Get(), 2, i);
 
-		// Collect pass — depth test, no depth write, writes to UAV buffers
+		// Collect pass — depth test via earlydepthstencil, writes to UAV buffers and debug RT
+		CD3DX12_CPU_DESCRIPTOR_HANDLE collectRtvHandle(collectRtvHeap->GetCPUDescriptorHandleForHeapStart());
+		const float collectClearColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		commandList->ClearRenderTargetView(collectRtvHandle, collectClearColor, 0, nullptr);
+		commandList->OMSetRenderTargets(1, &collectRtvHandle, FALSE, &collectDsvHandle);
 		for (int i = 0; i < (int)entities.size(); i++)
 			entities[i]->Draw(commandList.Get(), 1, i);
 
-		//commandList->ResourceBarrier(1, &fragmentCountsBuffer.uavBarrier());
+		D3D12_RESOURCE_BARRIER b[] = { fragmentCountsBuffer.uavBarrier(), fragmentsBuffer.uavBarrier() };
+		commandList->ResourceBarrier(2, b);
 
 		//fragmentCountsBuffer.copyBack(commandList);
 		//fragmentsBuffer.copyBack(commandList);
@@ -612,7 +694,16 @@ public:
 			commandList->SetGraphicsRootDescriptorTable(0, cubicSrvGpu);
 			commandList->SetPipelineState(cubicExtrudePSO.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
-		//	commandList->ExecuteIndirect(drawCommandSignature.Get(), 1, dispatchArgsResource.Get(), 12, nullptr, 0);
+			commandList->OMSetRenderTargets(1, &rHandle, FALSE, &dsvHandle);
+
+			//const float clearColor[] = { 0.0f, 0.2f, 0.7f, 1.0f };
+			//commandList->ClearRenderTargetView(rHandle, clearColor, 0, nullptr);
+			//commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+			commandList->ExecuteIndirect(drawCommandSignature.Get(), 1, dispatchArgsResource.Get(), 12, nullptr, 0);
+
+			//for (int i = 0; i < (int)entities.size(); i++)
+			//	entities[i]->Draw(commandList.Get(), 3, i);
 		}
 		{
 			D3D12_RESOURCE_BARRIER barriers[] = {
@@ -657,6 +748,8 @@ public:
 	virtual void ReleaseSwapChainResources() override {
 		collectDepthBuffer.Reset();
 		collectDsvHeap.Reset();
+		collectColorBuffer.Reset();
+		collectRtvHeap.Reset();
 		__super::ReleaseSwapChainResources();
 	}
 

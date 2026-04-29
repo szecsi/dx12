@@ -193,6 +193,10 @@ namespace Egg {
 				}
 			}
 
+			void SetDepthCompLessEqual() {
+				depthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_EQUAL;
+			}
+
 			template<typename T>
 			void SetConstantBuffer(const T& resource, unsigned int perObjectByteStride = 0, const std::string& nameOverride = "") {
 				std::string name = (nameOverride != "") ? nameOverride.c_str() : typeid(T::Type).name();

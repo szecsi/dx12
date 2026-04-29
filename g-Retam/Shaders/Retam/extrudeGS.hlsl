@@ -86,12 +86,12 @@ void extrudeGS(point GsisDummy dummy[1], uint pid : SV_PrimitiveID, inout Triang
 			tx * tx.y - tn * tn.y,
 			tx * tx.z - tn * tn.z
 			);
-		des += /* t0_3.x * */ (float4x4 ( 
+		des +=  float4x4 ( 
 			float4(1.0,   1.0/2, 1.0/3, 1.0/4),
 			float4(1.0/2, 1.0/3, 1.0/4, 1.0/5),
 			float4(1.0/3, 1.0/4, 1.0/5, 1.0/6),
 			float4(1.0/4, 1.0/5, 1.0/6, 1.0/7)
-			) * tix ) ;
+			)  * tix * float(t0_3.x) ;
 		float4 r = t0_3;
 		float4 p = r;
 		for(uint i=0; i<4; i++)

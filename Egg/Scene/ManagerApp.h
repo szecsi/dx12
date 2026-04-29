@@ -141,6 +141,7 @@ namespace Egg {
 				perFrameCb->lightPowerDensity = float4(0, 0, 1000, 0);
 				perFrameCb->lightPos2 = float4(0, 20, 0.5, 1);
 				perFrameCb->lightPowerDensity2 = float4(1000, 1000, 0, 0);
+				perFrameCb->time = float4(T, dt, 0, 0);
 				perFrameCb.Upload();
 			}
 			virtual void LoadAssets() override {

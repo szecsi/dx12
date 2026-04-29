@@ -40,7 +40,8 @@ void Script::ScriptedApp::LoadAssets() {
 		class_<Mesh::Flip>("CFlip"),
 		class_<Mesh::Multi>("CMulti")
 			.def("getGeometry", &Mesh::Multi::GetGeometry),
-		class_<Mesh::Material>("CMaterial"),
+		class_<Mesh::Material>("CMaterial")
+			.def("setDepthCompLessEqual", &Mesh::Material::SetDepthCompLessEqual),
 		class_< Egg::Script::Shader >("CShader"),
 		class_<Scene::Entity>("CEntity"),
 		class_<Cam::FirstPerson>("CFPSC"),
@@ -146,7 +147,7 @@ Egg::Mesh::Material::P Script::ScriptedApp::CreateMaterial(luabind::object nil, 
 		auto hs = attributeTable.get<Egg::Script::Shader>("hs", Egg::Script::Shader::P());
 		auto ds = attributeTable.get<Egg::Script::Shader>("ds", Egg::Script::Shader::P());
 		auto ps = attributeTable.get<Egg::Script::Shader>("ps");
-		initializer(material);
+		
 		material->SetSrvHeap(srvDescriptorTableRootParameterIndex, srvHeap, srvStartIndex * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV));
 
 		if (wireframe) {
@@ -186,6 +187,8 @@ Egg::Mesh::Material::P Script::ScriptedApp::CreateMaterial(luabind::object nil, 
 		if(usePerObjectData)
 			material->SetConstantBuffer(perObjectCb, sizeof(Egg::Scene::PerObjectData));
 		material->SetConstantBuffer(perFrameCb);
+
+		initializer(material);
 
 		return material;
 	}

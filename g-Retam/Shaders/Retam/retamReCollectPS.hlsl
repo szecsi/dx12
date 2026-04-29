@@ -1,13 +1,13 @@
 #include "Retam.hlsli"
 #include "RetamCb.hlsli"
 
-Texture2D strokeTexture : register(t0);
-SamplerState sampl : register(s0);
+RWByteAddressBuffer counters : register(u0);
 
 cbuffer PerFrameCb : register(b1) {
 	float4x4 viewProjMat   : packoffset(c0);
 	float4   cameraPos     : packoffset(c8);
 	float4   ahead         : packoffset(c22);
+	float4   time          : packoffset(c23);
 }
 
 struct VSOutput {
@@ -34,9 +34,26 @@ uint4 cycle(uint4 i) {
 	return o;
 }
 
-[RootSignature(RootSigRetam)]
-float4 retam256PS(VSOutput input) : SV_Target
+uint4 cyclen(uint4 i, uint n)
 {
+	if(n & 0xffffffe0) {
+		i = i.yxwz;
+		n &= 0x1f;
+	}
+	if(n == 0)
+		return i;
+	uint4 o = i << n;
+	n = (~n & 0x1f) + 1;
+	o.y |= i.x >> n;
+	o.x |= i.y >> n;
+	o.w |= i.z >> n;
+	o.z |= i.w >> n;
+	return o;
+}
+
+[earlydepthstencil]
+[RootSignature(RootSigRetamCollect)]
+float4 retamReCollectPS(VSOutput input) : SV_Target{
 	float3 normal = normalize(input.worldNormal.xyz);
 	float3 bitangent = cross(normal, input.worldTangent.xyz);
 	float3 tangent = cross(bitangent, normal);
@@ -47,7 +64,7 @@ float4 retam256PS(VSOutput input) : SV_Target
 	float3 lightDir = normalize(float3(1, 1, 1));
 	float tone = clamp(dot(normal, lightDir), 0.0, 1.0) * 4.2;
 
-	float4 fragmentColor = float4(normal, 1);
+	uint maxCount = 0;
 
 	for (uint j = 4u; j > (uint)tone && j > 0u; j--) {
 		float2 tex = input.texCoord.xy / input.texCoord.w / texScale[j - 1u] * 0.5;
@@ -59,20 +76,25 @@ float4 retam256PS(VSOutput input) : SV_Target
 		float ilod = floor(lod + 1000.0) - 1000.0;
 		float flod = frac(lod + 1000.0);
 		float2 stex = tex / exp2(ilod);
+		uint level = uint(ilod);
 		uint4 bits = bitPatterns[j - 1u];
 		for (uint i = 0u; i < 256u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
+			float2 fromSeed = stex - seedUvPos + float2(2048.5, 2048.5);
+			uint2 quadId = uint2(fromSeed);
+			quadId <<= level;
+			uint4 bs = cyclen(bits, (level + 96) % 64);
+			quadId |= bs.xz & (0xffffffff >> (32 - level));
+			uint sid = ((quadId.x & 0x7fff) << 14)  | (quadId.y & 0x7fff);
+			sid |= j << 30;
 
-			float2 fromSeed = stex - seedUvPos + float2(100.5, 100.5);
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
 			uint2 quadrant = uint2(
 				(frac(fromSeed.x * 0.5) > 0.5) ? 1u : 0u,
 				(frac(fromSeed.y * 0.5) > 0.5) ? 1u : 0u
 			);
-			//fragmentColor = float4(quadrant.x, quadrant.y, 0.3, 1);
-			//return fragmentColor;
 
-            float alpha = 
+            float alpha =
                 smoothstep(
 					lerp(0.0, float(i) / 257.0, fading.x),
 					lerp(1.0, float(i + 1u) / 257.0, fading.x),
@@ -88,23 +110,43 @@ float4 retam256PS(VSOutput input) : SV_Target
 					sqrt(sqrt(flod))
 				);
 			}
-				
+
 			strokeTexPos = float2(
 				strokeTexPos.x * cos(rang) + strokeTexPos.y * sin(rang),
 				-strokeTexPos.x * sin(rang) + strokeTexPos.y * cos(rang));
 			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy / exp2(flod);
-			if (strokeTexPos.x > -0.5 &&
-				strokeTexPos.y > -0.5 &&
-				strokeTexPos.x <  0.5 &&
-				strokeTexPos.y <  0.5)
-			{
-				float4 c = float4(1, 1, 0.9, 1); //strokeTexture.Sample(sampl, strokeTexPos.yx + float2(0.5, 0.5));
-				c.a = 1.0 - c.b;
-				c.a *= alpha;
-				fragmentColor = fragmentColor * (1.0 - c.a) + c * c.a;
+			if (	strokeTexPos.x > -0.5 &&
+					strokeTexPos.y > -0.5 &&
+					strokeTexPos.x <  0.5 &&
+					strokeTexPos.y <  0.5) {
+				if(alpha > 0.05){
+					uint hash = (sid * 13) & 0x3fff;
+					uint count = counters.Load(hash << 2);
+					if (count > maxCount)
+						maxCount = count;
+				}
 			}
 			bits = cycle(bits);
 		}
 	}
-	return fragmentColor;
+
+	// heat map: black -> blue -> cyan -> green -> yellow -> red -> white
+	float t = saturate((float)maxCount / 1024.0);
+	float3 col;
+	if (maxCount == 0)
+		col = float3(0, 0, 0);
+	else if (t < 0.25)
+		col = lerp(float3(0, 0, 0.5), float3(0, 0.5, 1), t * 4.0);
+	else if (t < 0.5)
+		col = lerp(float3(0, 0.5, 1), float3(0, 1, 0), (t - 0.25) * 4.0);
+	else if (t < 0.75)
+		col = lerp(float3(0, 1, 0), float3(1, 1, 0), (t - 0.5) * 4.0);
+	else
+		col = lerp(float3(1, 1, 0), float3(1, 0, 0), (t - 0.75) * 4.0);
+
+	// white for overflow (>= 1024)
+	if (maxCount >= 1024)
+		col = float3(1, 1, 1);
+
+	return float4(col, 1);
 }
