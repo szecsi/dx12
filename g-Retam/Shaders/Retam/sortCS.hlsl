@@ -43,6 +43,14 @@ uint DecodeMin7(uint4 orResult) {
 
 groupshared uint s[rowSize * nRowsPerPage]; // sort step buffer, then sorted rows
 groupshared uint sat[nBuckets * nRowsPerPage];
+groupshared float4  xtpolyCarry;
+groupshared float4  ytpolyCarry;
+groupshared float4  design0Carry;
+groupshared float4  design1Carry;
+groupshared uint4   extremaCarry;
+groupshared uint    sidCarry;
+
+
 
 [RootSignature(SortSig)]
 [numthreads(rowSize * nRowsPerPage / groupDivisor, 1, 1)]
@@ -266,12 +274,12 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     {
     
     // we read fragments and sum designs here
-        float4 xtpolyCarry = float4(0, 0, 0, 0);
-        float4 ytpolyCarry = float4(0, 0, 0, 0);
-        float4 design0Carry = float4(0, 0, 0, 0);
-        float4 design1Carry = float4(0, 0, 0, 0);
-        uint4 extremaCarry = uint4(0, 0, 0, 0);
-        uint sidCarry = 0xffffffff;
+        xtpolyCarry = float4(0, 0, 0, 0);
+        ytpolyCarry = float4(0, 0, 0, 0);
+        design0Carry = float4(0, 0, 0, 0);
+        design1Carry = float4(0, 0, 0, 0);
+        extremaCarry = uint4(0, 0, 0, 0);
+        sidCarry = 0xffffffff;
     
         for (int row = 0; row < nRowsPerPage; row++)
         {
