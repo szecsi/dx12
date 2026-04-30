@@ -238,7 +238,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         
         serials[did] += sat[row+32];
         if(flatid == nValid-1){
-            strokeCounts.Store(gid.x << 2, serials[did]);
+            strokeCounts.Store(gid.x << 2, serials[did]+1);
         }
     }
   

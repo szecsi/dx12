@@ -3,6 +3,7 @@
 #include <Egg/Script/ScriptedApp.h>
 #include <d3d11on12.h>
 #include <algorithm>
+#include <unordered_map>
 
 #include "Egg/Compute/RawBuffer.h"
 #include "Egg/Compute/TypedBuffer.h"
@@ -485,11 +486,14 @@ public:
 		strokeCountsBuffer.upload(cmd);
 		strokeOffsetsBuffer.upload(cmd);
 
+		fragmentsBuffer.copyBack(cmd);
+		fragmentCountsBuffer.copyBack(cmd);
+
 		sortCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1024*16, 1, 1);
 		cmd->ResourceBarrier(1, &strokeCountsBuffer.uavBarrier());
 
-		//strokeCountsBuffer.copyBack(cmd);
+		strokeCountsBuffer.copyBack(cmd);
 
 		prefixSumCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1, 1, 1);
@@ -497,6 +501,7 @@ public:
 			D3D12_RESOURCE_BARRIER b[] = { strokeOffsetsBuffer.uavBarrier(), designBuffer.uavBarrier() };
 			cmd->ResourceBarrier(2, b);
 		}
+		designBuffer.copyBack(cmd);
 
 		//strokeOffsetsBuffer.copyBack(cmd);
 
@@ -576,6 +581,78 @@ public:
 			//uint* strokeListData = strokeListBuffer.mapReadback();
 			//uint* debugData = debugBuffer.mapReadback();
 			//float* cubicData = (float*)cubicBuffer.mapReadback();
+
+			if (frameCount == 2) {
+				uint* fragmentsData      = (uint*)fragmentsBuffer.mapReadback();
+				uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();
+				uint* strokeCountsData   = strokeCountsBuffer.mapReadback();
+				float* designData        = (float*)designBuffer.mapReadback();
+
+				constexpr uint pageSize         = 1024u;
+				constexpr uint nPages           = 16u * 1024u;
+				constexpr uint nStrokesPerPage  = 16u;
+				constexpr uint designFloat4Size = 5u;
+				constexpr uint designPagesInBuf = 8u * 5u * 1024u * 16u / (nStrokesPerPage * designFloat4Size);
+
+				uint strokeMismatches = 0, designMismatches = 0;
+				char buf[256];
+
+				for (uint p = 0; p < nPages; p++) {
+					uint nValid = std::min(fragmentCountsData[p], pageSize);
+					if (nValid == 0) continue;
+
+					const uint* page = fragmentsData + (size_t)p * pageSize * 4u;
+
+					// Aggregate fragment count per unique stroke ID
+					std::unordered_map<uint, uint> cpuCount;
+					for (uint i = 0; i < nValid; i++)
+						cpuCount[page[i * 4]]++;
+
+					// Verify strokeCounts
+					uint cpuUnique = (uint)cpuCount.size();
+					uint gpuUnique = strokeCountsData[p];
+					if (cpuUnique != gpuUnique) {
+						snprintf(buf, sizeof(buf),
+							"MISMATCH strokeCount p=%u cpu=%u gpu=%u nValid=%u\n",
+							p, cpuUnique, gpuUnique, nValid);
+						OutputDebugStringA(buf);
+						strokeMismatches++;
+					}
+
+					// Verify design0.x (fragment count per stroke) against designBuffer
+					// SIDs sorted ascending matches the GPU serial assignment order
+					if (p < designPagesInBuf) {
+						std::vector<uint> sortedSids;
+						sortedSids.reserve(cpuCount.size());
+						for (auto& kv : cpuCount) sortedSids.push_back(kv.first);
+						std::sort(sortedSids.begin(), sortedSids.end());
+
+						for (uint s = 0; s < (uint)sortedSids.size() && s < nStrokesPerPage; s++) {
+							float cpuFragCount = (float)cpuCount[sortedSids[s]];
+							// design0 is slot 2; x component = sum of 1 per fragment = fragment count
+							uint d0xIdx = ((p * nStrokesPerPage + s) * designFloat4Size + 2u) * 4u;
+							float gpuFragCount = designData[d0xIdx];
+							if (fabsf(gpuFragCount - cpuFragCount) > 0.5f) {
+								snprintf(buf, sizeof(buf),
+									"MISMATCH design0.x p=%u s=%u sid=%u cpu=%.0f gpu=%.2f\n",
+									p, s, sortedSids[s], cpuFragCount, gpuFragCount);
+								OutputDebugStringA(buf);
+								designMismatches++;
+							}
+						}
+					}
+				}
+
+				snprintf(buf, sizeof(buf),
+					"VERIFY: strokeMismatches=%u designMismatches=%u\n",
+					strokeMismatches, designMismatches);
+				OutputDebugStringA(buf);
+
+				designBuffer.unmapReadback();
+				strokeCountsBuffer.unmapReadback();
+				fragmentCountsBuffer.unmapReadback();
+				fragmentsBuffer.unmapReadback();
+			}
 
 /* {
 				uint nValid = fragmentCountsData[142];
