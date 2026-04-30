@@ -55,12 +55,14 @@ float4 retam256PS(VSOutput input) : SV_Target
 
 		float3 h = tangent * cos(rang) + bitangent * sin(rang);
 		float geom = length(cross(h, viewDir)) / dot(viewDiff, -ahead.xyz) * 10.0;
-		float lod = -log2(geom) - 3.0;
+		float lod = -log2(geom) - 4.0;
+		//fragmentColor += float4(lod-4.0, lod -5.0, lod  - 6.0, 0);
+			//return fragmentColor;
 		float ilod = floor(lod + 1000.0) - 1000.0;
 		float flod = frac(lod + 1000.0);
 		float2 stex = tex / exp2(ilod);
 		uint4 bits = bitPatterns[j - 1u];
-		for (uint i = 0u; i < 256u; i++) {
+		for (uint i = 0u; i < 64u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
 
 			float2 fromSeed = stex - seedUvPos + float2(100.5, 100.5);
@@ -74,8 +76,8 @@ float4 retam256PS(VSOutput input) : SV_Target
 
             float alpha = 
                 smoothstep(
-					lerp(0.0, float(i) / 257.0, fading.x),
-					lerp(1.0, float(i + 1u) / 257.0, fading.x),
+					lerp(0.0, float(i) / 64.0, fading.x),
+					lerp(1.0, float(i + 1u) / 64.0, fading.x),
 					float(j) - tone
 				);
 
@@ -83,8 +85,8 @@ float4 retam256PS(VSOutput input) : SV_Target
 				((bits.w & 1u) != quadrant.y)) {
                     alpha *=
                     1.0 - smoothstep(
-					lerp(0.0, float(i) / 257.0, fading.y),
-					lerp(1.0, float(i + 1u) / 257.0, fading.y),
+					lerp(0.0, float(i) / 64.0, fading.y),
+					lerp(1.0, float(i + 1u) / 64.0, fading.y),
 					sqrt(sqrt(flod))
 				);
 			}
@@ -98,7 +100,9 @@ float4 retam256PS(VSOutput input) : SV_Target
 				strokeTexPos.x <  0.5 &&
 				strokeTexPos.y <  0.5)
 			{
-				float4 c = float4(1, 1, 0.9, 1); //strokeTexture.Sample(sampl, strokeTexPos.yx + float2(0.5, 0.5));
+				float4 c = 
+						//float4(1, 1, 0.9, 1); 
+					strokeTexture.Sample(sampl, strokeTexPos.yx + float2(0.5, 0.5));
 				c.a = 1.0 - c.b;
 				c.a *= alpha;
 				fragmentColor = fragmentColor * (1.0 - c.a) + c * c.a;

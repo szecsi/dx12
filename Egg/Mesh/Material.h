@@ -194,7 +194,7 @@ namespace Egg {
 			}
 
 			void SetDepthCompLessEqual() {
-				depthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_EQUAL;
+				depthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 			}
 
 			template<typename T>

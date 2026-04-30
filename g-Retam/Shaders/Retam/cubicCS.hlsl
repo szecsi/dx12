@@ -27,13 +27,13 @@ void cubicCS(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
     float4 t3_6   = designs[base + 3];
     float4 extrema = designs[base + 4];
 
-//    if (t0_3.x < 16) {
-//        cubics[globalStroke * 4 + 0] = float4(0, 0, 0, 0);
-//        cubics[globalStroke * 4 + 1] = float4(0, 0, 0, 0);
-//        cubics[globalStroke * 4 + 2] = float4(0, 0, 0, 0);
-//        cubics[globalStroke * 4 + 3] = float4(0, 0, 0, 0);
-//        return;
-//    }
+    if (t0_3.x < 32) {
+        cubics[globalStroke * 4 + 0] = float4(0, 0, 0, 0);
+        cubics[globalStroke * 4 + 1] = float4(0, 0, 0, 0);
+        cubics[globalStroke * 4 + 2] = float4(0, 0, 0, 0);
+        cubics[globalStroke * 4 + 3] = float4(0, 0, 0, 0);
+        return;
+    }
 
     float4x4 des = float4x4(
         float4(t0_3),

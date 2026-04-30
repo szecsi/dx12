@@ -49,8 +49,7 @@ groupshared float4  design0Carry;
 groupshared float4  design1Carry;
 groupshared uint4   extremaCarry;
 groupshared uint    sidCarry;
-
-
+groupshared uint    serialCarry;
 
 [RootSignature(SortSig)]
 [numthreads(rowSize * nRowsPerPage / groupDivisor, 1, 1)]
@@ -226,9 +225,8 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     GroupMemoryBarrierWithGroupSync();
 
     if (tid.y == 0){
-        sat[tid.x+32] = WavePrefixSum(sat[tid.x]
-            + (tid.x ? countbits(oversteps << (32 - tid.x)) : 0)
-        );
+        sat[tid.x+32] = WavePrefixSum(sat[tid.x]) 
+            + (tid.x ? countbits(oversteps << (32 - tid.x)) : 0);
     }
     GroupMemoryBarrierWithGroupSync();
     
@@ -265,7 +263,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     for (int did = 0; did < groupDivisor; did++){
         uint rowst = (tid.y + did * nRowsPerPage / groupDivisor) << 5;
         uint flatid = rowst | tid.x;
-        s[flatid] = (localasses[did] & 0xffff0000) | ((serials[did]-1) & 0xffff);
+        s[flatid] = (localasses[did] & 0xffff0000) | (serials[did] & 0xffff);
     }
 
     GroupMemoryBarrierWithGroupSync();
@@ -280,6 +278,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         design1Carry = float4(0, 0, 0, 0);
         extremaCarry = uint4(0, 0, 0, 0);
         sidCarry = 0xffffffff;
+        serialCarry = 0xffffffff;
     
         for (int row = 0; row < nRowsPerPage; row++)
         {
@@ -309,7 +308,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
                     }
                     else if (sidCarry != 0xffffffff)
                     {
-                        designs[((reiser & 0xffff) - 1) * designFloat4Size + 0 + gid.x * nMaxStrokesPerPage * designFloat4Size] = xtpolyCarry;
+                        designs[serialCarry * designFloat4Size + 0 + gid.x * nMaxStrokesPerPage * designFloat4Size] = xtpolyCarry;
                     }
                 }
                 xtpolySum += xtpoly;
@@ -335,7 +334,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
                     }
                     else if (sidCarry != 0xffffffff)
                     {
-                        designs[((reiser & 0xffff) - 1) * designFloat4Size + 1 + gid.x * nMaxStrokesPerPage * designFloat4Size] = ytpolyCarry;
+                        designs[serialCarry * designFloat4Size + 1 + gid.x * nMaxStrokesPerPage * designFloat4Size] = ytpolyCarry;
                     }
                 }
                 ytpolySum += ytpoly;
@@ -360,7 +359,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
                     }
                     else if (sidCarry != 0xffffffff)
                     {
-                        designs[((reiser & 0xffff) - 1) * designFloat4Size + 2 + gid.x * nMaxStrokesPerPage * designFloat4Size] = design0Carry;
+                        designs[serialCarry * designFloat4Size + 2 + gid.x * nMaxStrokesPerPage * designFloat4Size] = design0Carry;
                     }
                 }
                 design0Sum += design0;
@@ -386,7 +385,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
                     }
                     else if (sidCarry != 0xffffffff)
                     {
-                        designs[((reiser & 0xffff) - 1) * designFloat4Size + 3 + gid.x * nMaxStrokesPerPage * designFloat4Size] = design1Carry;
+                        designs[serialCarry * designFloat4Size + 3 + gid.x * nMaxStrokesPerPage * designFloat4Size] = design1Carry;
                     }
                 }
                 design1Sum += design1;
@@ -417,9 +416,9 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
                     }
                     else if (sidCarry != 0xffffffff)
                     {
-                        designs[((reiser & 0xffff) - 1) * designFloat4Size + 4 + gid.x * nMaxStrokesPerPage * designFloat4Size] = float4(
-                        float(DecodeMax7(extremaCarry)) / 128.0, float(DecodeMin7(extremaCarry)) / 128.0, 888, 0
-                    );
+                        designs[serialCarry * designFloat4Size + 4 + gid.x * nMaxStrokesPerPage * designFloat4Size] = float4(
+                            float(DecodeMax7(extremaCarry)) / 128.0, float(DecodeMin7(extremaCarry)) / 128.0, 888, 0
+                        );
                     }
                 }
                 extremaMax = extrema | extremaMax;
@@ -436,12 +435,22 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
             }
             if (leader && closer)
             {
+                serialCarry = reiser & 0xffff;
                 sidCarry = fragment.x;
             }
         }
     //sum designs for identical sids, get maximum of extrema for identical sids, write out design and stroke count for each sid   
-
+        if(sidCarry != 0xffffffff){
+            designs[serialCarry * designFloat4Size + 0 + gid.x * nMaxStrokesPerPage * designFloat4Size] = xtpolyCarry;            
+            designs[serialCarry * designFloat4Size + 1 + gid.x * nMaxStrokesPerPage * designFloat4Size] = ytpolyCarry;
+            designs[serialCarry * designFloat4Size + 2 + gid.x * nMaxStrokesPerPage * designFloat4Size] = design0Carry;
+            designs[serialCarry * designFloat4Size + 3 + gid.x * nMaxStrokesPerPage * designFloat4Size] = design1Carry;
+            designs[serialCarry * designFloat4Size + 4 + gid.x * nMaxStrokesPerPage * designFloat4Size] = float4(
+                float(DecodeMax7(extremaCarry)) / 128.0, float(DecodeMin7(extremaCarry)) / 128.0, 888, 0
+            );            
+        }
     }
+
 // clear fragments, debug only    
 //    GroupMemoryBarrierWithGroupSync();    
 //    for (int did = 0; did < groupDivisor; did++){

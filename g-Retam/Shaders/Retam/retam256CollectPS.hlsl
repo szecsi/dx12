@@ -73,21 +73,22 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 
 		float3 h = tangent * cos(rang) + bitangent * sin(rang);
 		float geom = length(cross(h, viewDir)) / dot(viewDiff, -ahead.xyz) * 10.0;
-		float lod = -log2(geom) - 3.0;
+		float lod = -log2(geom) - 4.0;
 		float ilod = floor(lod + 1000.0) - 1000.0;
 		float flod = frac(lod + 1000.0);
 		float2 stex = tex / exp2(ilod);
-		uint level = uint(ilod);
+		uint level = uint(ilod + 12.0);
 		uint4 bits = bitPatterns[j - 1u];
-		for (uint i = 0u; i < 256u; i++) {
+		for (uint i = 0u; i < 64u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
 			float2 fromSeed = stex - seedUvPos + float2(2048.5, 2048.5);
 			uint2 quadId = uint2(fromSeed);
 			quadId <<= level;
 			uint4 bs = cyclen(bits, (level + 96) % 64);
 			quadId |= bs.xz & (0xffffffff >> (32 - level));
-			uint sid = ((quadId.x & 0x7fff) << 14)  | (quadId.y & 0x7fff);
-			sid |= j << 30;				
+			uint sid = ((quadId.x & 0x1fff80) << 7)  | ((quadId.y & 0x1fff80) >> 7);
+			sid |= j << 30;
+			uint hash = ((quadId.x & 0x7f) << 7)  | (quadId.y &  0x7f);
 				
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
 			uint2 quadrant = uint2(
@@ -99,8 +100,8 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 
             float alpha = 
                 smoothstep(
-					lerp(0.0, float(i) / 257.0, fading.x),
-					lerp(1.0, float(i + 1u) / 257.0, fading.x),
+					lerp(0.0, float(i) / 64.0, fading.x),
+					lerp(1.0, float(i + 1u) / 64.0, fading.x),
 					float(j) - tone
 				);
 
@@ -108,8 +109,8 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 				((bits.w & 1u) != quadrant.y)) {
                     alpha *=
                     1.0 - smoothstep(
-					lerp(0.0, float(i) / 257.0, fading.y),
-					lerp(1.0, float(i + 1u) / 257.0, fading.y),
+					lerp(0.0, float(i) / 64.0, fading.y),
+					lerp(1.0, float(i + 1u) / 64.0, fading.y),
 					sqrt(sqrt(flod))
 				);
 			}
@@ -117,7 +118,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 			strokeTexPos = float2(
 				strokeTexPos.x * cos(rang) + strokeTexPos.y * sin(rang),
 				-strokeTexPos.x * sin(rang) + strokeTexPos.y * cos(rang));
-			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy / exp2(flod);
+			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy / texScale[j - 1u] / exp2(flod);
 			if (	strokeTexPos.x > -0.5 &&
 					strokeTexPos.y > -0.5 &&
 					strokeTexPos.x <  0.5 &&
@@ -129,7 +130,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 					uint y = input.position.y;
                     //uint hash = (sid & 0x7f) | ((sid >> 7) & 0x3f80); //& 0x3fff;
                     //hash = hash & 0x3fff;
-					uint hash = (sid * 13) & 0x3fff;
+					//uint hash = (sid * 13) & 0x3fff;
 					uint place;
                     counters.InterlockedAdd(hash << 2, 1, place);
 					if (place > 1023){

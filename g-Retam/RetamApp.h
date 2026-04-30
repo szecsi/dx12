@@ -486,14 +486,14 @@ public:
 		strokeCountsBuffer.upload(cmd);
 		strokeOffsetsBuffer.upload(cmd);
 
-		fragmentsBuffer.copyBack(cmd);
-		fragmentCountsBuffer.copyBack(cmd);
+		//claudetest fragmentsBuffer.copyBack(cmd); //claudetest 
+		//claudetest fragmentCountsBuffer.copyBack(cmd); //claudetest 
 
 		sortCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1024*16, 1, 1);
 		cmd->ResourceBarrier(1, &strokeCountsBuffer.uavBarrier());
 
-		strokeCountsBuffer.copyBack(cmd);
+		//claudetest strokeCountsBuffer.copyBack(cmd); //claudetest 
 
 		prefixSumCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1, 1, 1);
@@ -501,7 +501,7 @@ public:
 			D3D12_RESOURCE_BARRIER b[] = { strokeOffsetsBuffer.uavBarrier(), designBuffer.uavBarrier() };
 			cmd->ResourceBarrier(2, b);
 		}
-		designBuffer.copyBack(cmd);
+		//claudetest designBuffer.copyBack(cmd); //claudetest 
 
 		//strokeOffsetsBuffer.copyBack(cmd);
 
@@ -582,7 +582,8 @@ public:
 			//uint* debugData = debugBuffer.mapReadback();
 			//float* cubicData = (float*)cubicBuffer.mapReadback();
 
-			if (frameCount == 2) {
+			/* claudetest
+			if (frameCount == 100) {
 				uint* fragmentsData      = (uint*)fragmentsBuffer.mapReadback();
 				uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();
 				uint* strokeCountsData   = strokeCountsBuffer.mapReadback();
@@ -653,7 +654,7 @@ public:
 				fragmentCountsBuffer.unmapReadback();
 				fragmentsBuffer.unmapReadback();
 			}
-
+			*/
 /* {
 				uint nValid = fragmentCountsData[142];
 				uint* page = fragmentsBufferData + 142 * 1024 * 4;
