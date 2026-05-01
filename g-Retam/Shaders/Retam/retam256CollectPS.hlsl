@@ -77,7 +77,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 		float ilod = floor(lod + 1000.0) - 1000.0;
 		float flod = frac(lod + 1000.0);
 		float2 stex = tex / exp2(ilod);
-		uint level = uint(ilod + 12.0);
+		uint level = uint(ilod + 19.0);
 		uint4 bits = bitPatterns[j - 1u];
 		for (uint i = 0u; i < 64u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
@@ -86,9 +86,9 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 			quadId <<= level;
 			uint4 bs = cyclen(bits, (level + 96) % 64);
 			quadId |= bs.xz & (0xffffffff >> (32 - level));
-			uint sid = ((quadId.x & 0x1fff80) << 7)  | ((quadId.y & 0x1fff80) >> 7);
-			sid |= j << 30;
-			uint hash = ((quadId.x & 0x7f) << 7)  | (quadId.y &  0x7f);
+            uint2 hash2 = quadId ^ (quadId >> 6) ^ (quadId >> 12);
+			uint sid = ((quadId.x & 0xffff) << 16)  | (quadId.y & 0xffff);
+			uint hash = ((3-j) << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);
 				
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
 			uint2 quadrant = uint2(

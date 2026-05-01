@@ -184,7 +184,7 @@ public:
 	RetamApp() : ScriptedApp(),
 		fragmentCountsBuffer(L"fragmentCounts", 16 * 1024),
 		fragmentsBuffer(L"fragments", 1024u * 1024u * 16u),
-		designBuffer(L"design", 8u * 5u * 1024u * 16u, DXGI_FORMAT_R32G32B32A32_FLOAT),
+		designBuffer(L"design", 16u * 5u * 1024u * 16u, DXGI_FORMAT_R32G32B32A32_FLOAT),
 		cubicBuffer(L"cubic", 1024u * 16u * 16u * 4u, DXGI_FORMAT_R32G32B32A32_FLOAT),
 		strokeCountsBuffer(L"strokeCounts", 1024u * 16u),
 		strokeOffsetsBuffer(L"strokeOffsets", 1024u * 16u),
@@ -487,13 +487,13 @@ public:
 		strokeOffsetsBuffer.upload(cmd);
 
 		//claudetest fragmentsBuffer.copyBack(cmd); //claudetest 
-		//claudetest fragmentCountsBuffer.copyBack(cmd); //claudetest 
+		fragmentCountsBuffer.copyBack(cmd); //claudetest //xex
 
 		sortCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1024*16, 1, 1);
 		cmd->ResourceBarrier(1, &strokeCountsBuffer.uavBarrier());
 
-		//claudetest strokeCountsBuffer.copyBack(cmd); //claudetest 
+		strokeCountsBuffer.copyBack(cmd); //claudetest 
 
 		prefixSumCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1, 1, 1);
@@ -501,9 +501,9 @@ public:
 			D3D12_RESOURCE_BARRIER b[] = { strokeOffsetsBuffer.uavBarrier(), designBuffer.uavBarrier() };
 			cmd->ResourceBarrier(2, b);
 		}
-		//claudetest designBuffer.copyBack(cmd); //claudetest 
+		designBuffer.copyBack(cmd); //claudetest 
 
-		//strokeOffsetsBuffer.copyBack(cmd);
+		strokeOffsetsBuffer.copyBack(cmd);
 
 		compactCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1024*16, 1, 1);
@@ -519,7 +519,7 @@ public:
 			cmd->ResourceBarrier(2, b);
 		}
 
-		//strokeListBuffer.copyBack(cmd);
+		strokeListBuffer.copyBack(cmd);
 
 		{
 			D3D12_RESOURCE_BARRIER toIndirect = {};
@@ -547,7 +547,7 @@ public:
 			D3D12_RESOURCE_BARRIER b[] = { debugBuffer.uavBarrier(), cubicBuffer.uavBarrier() };
 			cmd->ResourceBarrier(2, b);
 		}
-		//cubicBuffer.copyBack(cmd);
+		cubicBuffer.copyBack(cmd);
 	}
 
 	virtual void PopulateCommandList() override {
@@ -572,15 +572,16 @@ public:
 		// Wait for compute before graphics
 		computeFenceChain.gpuWait(commandQueue, swapChainBackBufferIndex);
 
-		if (frameCount > 1) {
+		if (frameCount > 300) {
 			// check compute results
-			//uint* fragmentsBufferData = (uint*)fragmentsBuffer.mapReadback();
-			//uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();
-			//uint* strokeCountsData = strokeCountsBuffer.mapReadback();
-			//uint* strokeOffsetsData = strokeOffsetsBuffer.mapReadback();
-			//uint* strokeListData = strokeListBuffer.mapReadback();
+			//uint* fragmentsData = (uint*)fragmentsBuffer.mapReadback(); //xex
+			uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();
+			uint* strokeCountsData = strokeCountsBuffer.mapReadback();
+			uint* strokeOffsetsData = strokeOffsetsBuffer.mapReadback();
+			uint* strokeListData = strokeListBuffer.mapReadback();
 			//uint* debugData = debugBuffer.mapReadback();
-			//float* cubicData = (float*)cubicBuffer.mapReadback();
+			float* cubicData = (float*)cubicBuffer.mapReadback();
+			float* designData = (float*)designBuffer.mapReadback();
 
 			/* claudetest
 			if (frameCount == 100) {
@@ -593,7 +594,7 @@ public:
 				constexpr uint nPages           = 16u * 1024u;
 				constexpr uint nStrokesPerPage  = 16u;
 				constexpr uint designFloat4Size = 5u;
-				constexpr uint designPagesInBuf = 8u * 5u * 1024u * 16u / (nStrokesPerPage * designFloat4Size);
+				constexpr uint designPagesInBuf = 16u * 5u * 1024u * 16u / (nStrokesPerPage * designFloat4Size);
 
 				uint strokeMismatches = 0, designMismatches = 0;
 				char buf[256];
@@ -697,12 +698,13 @@ public:
 			//		bool kame = true;
 			//}
 
-			//cubicBuffer.unmapReadback();
+			designBuffer.unmapReadback();
+			cubicBuffer.unmapReadback();
 			//debugBuffer.unmapReadback();
-			//strokeOffsetsData = strokeOffsetsBuffer.mapReadback();
-			//strokeListBuffer.unmapReadback();
-			//strokeCountsBuffer.unmapReadback();
-			//fragmentCountsBuffer.unmapReadback();
+			strokeOffsetsData = strokeOffsetsBuffer.mapReadback();
+			strokeListBuffer.unmapReadback();
+			strokeCountsBuffer.unmapReadback();
+			fragmentCountsBuffer.unmapReadback();
 			//fragmentsBuffer.unmapReadback();
 		}
 

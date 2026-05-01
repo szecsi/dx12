@@ -9,7 +9,7 @@ float4 extrudeCubicPS(GsosExtrude input) : SV_Target0
     float a = saturate(input.weight.x);
     
         
-    return float4(a, 0.62, input.weight.y, 1.0);
+   return float4(0, 0.0, input.weight.y, 1.0);
 
     
     return float4(0.05, 0.02, 0.0, a);

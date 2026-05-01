@@ -11,10 +11,10 @@ struct GsosExtrude {
 [maxvertexcount(32)]
 void extrudeCubicGS(point GsisDummy dummy[1], uint pid : SV_PrimitiveID, inout TriangleStream<GsosExtrude> stream)
 {
-    float4 cubicX = cubic[(pid + 10) * 4 + 0];
-    float4 cubicY = cubic[(pid + 10) * 4 + 1];
-    float4 cubicV = cubic[(pid + 10) * 4 + 2];
-    float4 meta   = cubic[(pid + 10) * 4 + 3];  // x=1-tMin, y=tMax, w=confidence
+    float4 cubicX = cubic[(pid + 0) * 4 + 0];
+    float4 cubicY = cubic[(pid + 0) * 4 + 1];
+    float4 cubicV = cubic[(pid + 0) * 4 + 2];
+    float4 meta   = cubic[(pid + 0) * 4 + 3];  // x=1-tMin, y=tMax, w=confidence
 
     float confidence = meta.w;
     //if (confidence == 0) return;
@@ -36,7 +36,7 @@ void extrudeCubicGS(point GsisDummy dummy[1], uint pid : SV_PrimitiveID, inout T
         float4 tPowers = float4(1, t, t*t, t*t*t);
 
         GsosExtrude output;
-        output.weight.x = float(pid) / 256.0;//confidence * dot(cubicV, tPowers);
+        output.weight.x = confidence * dot(cubicV, tPowers);
         output.weight.y = meta.z / 1024.0;//((pid * 0x2da78e85) >> 24) / 255.0;
         output.pos.xy = float2(dot(cubicX, tPowers), dot(cubicY, tPowers));
         //output.pos.y += 5.15;

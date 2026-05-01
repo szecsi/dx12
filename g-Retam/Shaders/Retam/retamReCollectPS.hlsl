@@ -76,17 +76,18 @@ float4 retamReCollectPS(VSOutput input) : SV_Target{
 		float ilod = floor(lod + 1000.0) - 1000.0;
 		float flod = frac(lod + 1000.0);
 		float2 stex = tex / exp2(ilod);
-		uint level = uint(ilod);
+		uint level = uint(ilod + 19.0);
 		uint4 bits = bitPatterns[j - 1u];
-		for (uint i = 0u; i < 256u; i++) {
+		for (uint i = 0u; i < 64u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
 			float2 fromSeed = stex - seedUvPos + float2(2048.5, 2048.5);
 			uint2 quadId = uint2(fromSeed);
 			quadId <<= level;
 			uint4 bs = cyclen(bits, (level + 96) % 64);
 			quadId |= bs.xz & (0xffffffff >> (32 - level));
-			uint sid = ((quadId.x & 0x7fff) << 14)  | (quadId.y & 0x7fff);
-			sid |= j << 30;
+            uint2 hash2 = quadId ^ (quadId >> 6) ^ (quadId >> 12);
+			uint sid = ((quadId.x & 0xffff) << 16)  | (quadId.y & 0xffff);
+			uint hash = (j << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);
 
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
 			uint2 quadrant = uint2(
@@ -120,7 +121,6 @@ float4 retamReCollectPS(VSOutput input) : SV_Target{
 					strokeTexPos.x <  0.5 &&
 					strokeTexPos.y <  0.5) {
 				if(alpha > 0.05){
-					uint hash = (sid * 13) & 0x3fff;
 					uint count = counters.Load(hash << 2);
 					if (count > maxCount)
 						maxCount = count;
