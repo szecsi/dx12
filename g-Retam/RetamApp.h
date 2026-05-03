@@ -21,6 +21,9 @@
 class RetamApp : public Egg::Script::ScriptedApp {
 
 	uint frameCount;
+	bool showStrokes;
+	bool showRetam;
+	bool showReCollect;
 
 	Egg::ConstantBuffer<RetamMaterialCb> retamMaterialCb;
 
@@ -196,6 +199,9 @@ public:
 		Egg::Script::ScriptedApp::CreateResources();
 
 		frameCount = 0;
+		showRetam = true;
+		showStrokes = true;
+		showReCollect = false;
 
 		uploadFence.createResources(device);
 
@@ -438,9 +444,9 @@ public:
 
 		retamMaterialCb.CreateResources(device.Get());
 
-		retamMaterialCb.data.lineSize    = { 0.6f, 0.01f };
+		retamMaterialCb.data.lineSize    = { 0.6f, 0.6f };
 		retamMaterialCb.data.fading      = { 1.0f, 1.0f };
-		retamMaterialCb.data.texScale    = { 2.0f, 2.0f, 2.0f, 2.0f };
+		retamMaterialCb.data.texScale    = { 1.0f, 1.0f, 1.0f, 1.0f };
 		retamMaterialCb.data.crossAngle  = { 0.0f, 0.125f, 0.25f, 0.375f };
 
 		RunScript("scene.lua");
@@ -584,7 +590,7 @@ public:
 			float* designData = (float*)designBuffer.mapReadback();
 
 			/* claudetest
-			if (frameCount == 100) {
+			if (frameCount == 400) {
 				uint* fragmentsData      = (uint*)fragmentsBuffer.mapReadback();
 				uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();
 				uint* strokeCountsData   = strokeCountsBuffer.mapReadback();
@@ -780,10 +786,15 @@ public:
 			//commandList->ClearRenderTargetView(rHandle, clearColor, 0, nullptr);
 			//commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-			commandList->ExecuteIndirect(drawCommandSignature.Get(), 1, dispatchArgsResource.Get(), 12, nullptr, 0);
+			if (showReCollect) {
+				for (int i = 0; i < (int)entities.size(); i++)
+					entities[i]->Draw(commandList.Get(), 3, i);
+			}
+			
+			if (showStrokes) {
+				commandList->ExecuteIndirect(drawCommandSignature.Get(), 1, dispatchArgsResource.Get(), 12, nullptr, 0);
+			}
 
-			//for (int i = 0; i < (int)entities.size(); i++)
-			//	entities[i]->Draw(commandList.Get(), 3, i);
 		}
 		{
 			D3D12_RESOURCE_BARRIER barriers[] = {
@@ -822,6 +833,18 @@ public:
 
 	virtual void ProcessMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) override {
 		if (!guiHwnd) createGui();
+		else if (uMsg == WM_KEYUP) {
+			if (wParam == 49) {
+				showRetam = !showRetam;
+			}
+			if (wParam == 50) {
+				showStrokes = !showStrokes;
+			}
+			if (wParam == 51) {
+				showReCollect = !showReCollect;
+			}
+		}
+
 		__super::ProcessMessage(hWnd, uMsg, wParam, lParam);
 	}
 

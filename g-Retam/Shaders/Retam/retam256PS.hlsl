@@ -50,11 +50,11 @@ float4 retam256PS(VSOutput input) : SV_Target
 	float4 fragmentColor = float4(normal, 1);
 
 	for (uint j = 4u; j > (uint)tone && j > 0u; j--) {
-		float2 tex = input.texCoord.xy / input.texCoord.w / texScale[j - 1u] * 0.5;
+		float2 tex = input.texCoord.xy / input.texCoord.w / texScale[j - 1u];
 		float rang = crossAngle[j - 1u] * 6.28;
 
 		float3 h = tangent * cos(rang) + bitangent * sin(rang);
-		float geom = length(cross(h, viewDir)) / dot(viewDiff, -ahead.xyz) * 10.0;
+		float geom = length(cross(h, viewDir)) / dot(viewDiff, -ahead.xyz) * 5.0 / texScale[j - 1u];
 		float lod = -log2(geom) - 4.0;
 		//fragmentColor += float4(lod-4.0, lod -5.0, lod  - 6.0, 0);
 			//return fragmentColor;
@@ -62,7 +62,7 @@ float4 retam256PS(VSOutput input) : SV_Target
 		float flod = frac(lod + 1000.0);
 		float2 stex = tex / exp2(ilod);
 		uint4 bits = bitPatterns[j - 1u];
-		for (uint i = 0u; i < 64u; i++) {
+		for (uint i = 0u; i < 1u /*64u*/; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
 
 			float2 fromSeed = stex - seedUvPos + float2(100.5, 100.5);
@@ -94,7 +94,7 @@ float4 retam256PS(VSOutput input) : SV_Target
 			strokeTexPos = float2(
 				strokeTexPos.x * cos(rang) + strokeTexPos.y * sin(rang),
 				-strokeTexPos.x * sin(rang) + strokeTexPos.y * cos(rang));
-			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy / exp2(flod);
+			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy * texScale[j - 1u] * texScale[j - 1u] / exp2(flod);
 			if (strokeTexPos.x > -0.5 &&
 				strokeTexPos.y > -0.5 &&
 				strokeTexPos.x <  0.5 &&

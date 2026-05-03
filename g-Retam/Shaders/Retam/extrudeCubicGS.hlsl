@@ -39,7 +39,8 @@ void extrudeCubicGS(point GsisDummy dummy[1], uint pid : SV_PrimitiveID, inout T
         output.weight.x = confidence * dot(cubicV, tPowers);
         output.weight.y = meta.z / 1024.0;//((pid * 0x2da78e85) >> 24) / 255.0;
         output.pos.xy = float2(dot(cubicX, tPowers), dot(cubicY, tPowers));
-        //output.pos.y += 5.15;
+//        output.pos.xy *= 1.08;
+        //output.pos.xy += float2(35.35, 35.35);
 
         float2 tangent = float2(dot(cubicX.yzw * float3(1, 2, 3), tPowers.xyz),
                                 dot(cubicY.yzw * float3(1, 2, 3), tPowers.xyz));
@@ -47,8 +48,9 @@ void extrudeCubicGS(point GsisDummy dummy[1], uint pid : SV_PrimitiveID, inout T
         float2 normal = tangent.yx;
 
         output.pos.xy /= 512.0;
-        output.pos.xy -= float2(1, 1) + normal * 0.005;// + sin(i) * output.weight.y * 0.02;
-        output.pos.y = -output.pos.y;
+        output.pos.xy -= float2(1, 1);
+        output.pos.y = -output.pos.y;        
+        output.pos.xy -= normal * 0.005;// + sin(i) * output.weight.y * 0.02;
         output.pos.z = 0.5;
         output.pos.w = 1;
 

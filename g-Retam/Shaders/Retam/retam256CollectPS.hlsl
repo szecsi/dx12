@@ -68,11 +68,11 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 	float4 dbgColor = float4(0.5, 0.0, 0.0, 1);
 
 	for (uint j = 4u; j > (uint)tone && j > 0u; j--) {
-		float2 tex = input.texCoord.xy / input.texCoord.w / texScale[j - 1u] * 0.5;
+		float2 tex = input.texCoord.xy / input.texCoord.w / texScale[j - 1u];
 		float rang = crossAngle[j - 1u] * 6.28;
 
 		float3 h = tangent * cos(rang) + bitangent * sin(rang);
-		float geom = length(cross(h, viewDir)) / dot(viewDiff, -ahead.xyz) * 10.0;
+		float geom = length(cross(h, viewDir)) / dot(viewDiff, -ahead.xyz) * 5.0 / texScale[j - 1u];
 		float lod = -log2(geom) - 4.0;
 		float ilod = floor(lod + 1000.0) - 1000.0;
 		float flod = frac(lod + 1000.0);
@@ -81,14 +81,14 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 		uint4 bits = bitPatterns[j - 1u];
 		for (uint i = 0u; i < 64u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
-			float2 fromSeed = stex - seedUvPos + float2(2048.5, 2048.5);
+			float2 fromSeed = stex - seedUvPos + float2( uint2(1, 1) << 15);
 			uint2 quadId = uint2(fromSeed);
 			quadId <<= level;
 			uint4 bs = cyclen(bits, (level + 96) % 64);
 			quadId |= bs.xz & (0xffffffff >> (32 - level));
-            uint2 hash2 = quadId ^ (quadId >> 6) ^ (quadId >> 12);
-			uint sid = ((quadId.x & 0xffff) << 16)  | (quadId.y & 0xffff);
-			uint hash = ((3-j) << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);
+            uint2 hash2 = quadId ^ (quadId >> 6) ^ (quadId >> 12) ^ (quadId >> 18) ^ (quadId >> 24);
+			uint sid = ((quadId.x & 0xffff0) << 12)  | ((quadId.y & 0xffff0) >> 4);
+			uint hash = (j << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);
 				
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
 			uint2 quadrant = uint2(
@@ -118,7 +118,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 			strokeTexPos = float2(
 				strokeTexPos.x * cos(rang) + strokeTexPos.y * sin(rang),
 				-strokeTexPos.x * sin(rang) + strokeTexPos.y * cos(rang));
-			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy / texScale[j - 1u] / exp2(flod);
+			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy * texScale[j - 1u] * texScale[j - 1u] / exp2(flod);
 			if (	strokeTexPos.x > -0.5 &&
 					strokeTexPos.y > -0.5 &&
 					strokeTexPos.x <  0.5 &&
