@@ -493,13 +493,13 @@ public:
 		strokeOffsetsBuffer.upload(cmd);
 
 		//claudetest fragmentsBuffer.copyBack(cmd); //claudetest 
-		fragmentCountsBuffer.copyBack(cmd); //claudetest //xex
+		//claudetest fragmentCountsBuffer.copyBack(cmd); //claudetest //xex
 
 		sortCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1024*16, 1, 1);
 		cmd->ResourceBarrier(1, &strokeCountsBuffer.uavBarrier());
 
-		strokeCountsBuffer.copyBack(cmd); //claudetest 
+		//claudetest strokeCountsBuffer.copyBack(cmd); //claudetest 
 
 		prefixSumCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1, 1, 1);
@@ -507,9 +507,9 @@ public:
 			D3D12_RESOURCE_BARRIER b[] = { strokeOffsetsBuffer.uavBarrier(), designBuffer.uavBarrier() };
 			cmd->ResourceBarrier(2, b);
 		}
-		designBuffer.copyBack(cmd); //claudetest 
+		//claudetest designBuffer.copyBack(cmd); //claudetest 
 
-		strokeOffsetsBuffer.copyBack(cmd);
+		//claudetest strokeOffsetsBuffer.copyBack(cmd);
 
 		compactCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(1024*16, 1, 1);
@@ -525,7 +525,7 @@ public:
 			cmd->ResourceBarrier(2, b);
 		}
 
-		strokeListBuffer.copyBack(cmd);
+		//claudetest strokeListBuffer.copyBack(cmd);
 
 		{
 			D3D12_RESOURCE_BARRIER toIndirect = {};
@@ -553,7 +553,7 @@ public:
 			D3D12_RESOURCE_BARRIER b[] = { debugBuffer.uavBarrier(), cubicBuffer.uavBarrier() };
 			cmd->ResourceBarrier(2, b);
 		}
-		cubicBuffer.copyBack(cmd);
+		//claudetest cubicBuffer.copyBack(cmd);
 	}
 
 	virtual void PopulateCommandList() override {
@@ -578,7 +578,7 @@ public:
 		// Wait for compute before graphics
 		computeFenceChain.gpuWait(commandQueue, swapChainBackBufferIndex);
 
-		if (frameCount > 300) {
+		if (false /*frameCount > 300*/) {
 			// check compute results
 			//uint* fragmentsData = (uint*)fragmentsBuffer.mapReadback(); //xex
 			uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();

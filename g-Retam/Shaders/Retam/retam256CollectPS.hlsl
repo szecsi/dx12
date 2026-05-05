@@ -73,6 +73,8 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 
 		float3 h = tangent * cos(rang) + bitangent * sin(rang);
 		float geom = length(cross(h, viewDir)) / dot(viewDiff, -ahead.xyz) * 5.0 / texScale[j - 1u];
+        if (geom < 0.001)
+            geom = 0.001;
 		float lod = -log2(geom) - 4.0;
 		float ilod = floor(lod + 1000.0) - 1000.0;
 		float flod = frac(lod + 1000.0);
@@ -81,7 +83,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 		uint4 bits = bitPatterns[j - 1u];
 		for (uint i = 0u; i < 64u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
-			float2 fromSeed = stex - seedUvPos + float2( uint2(1, 1) << 15);
+			float2 fromSeed = stex - seedUvPos + float2(0.5, 0.5) + float2( uint2(1, 1) << 15);
 			uint2 quadId = uint2(fromSeed);
 			quadId <<= level;
 			uint4 bs = cyclen(bits, (level + 96) % 64);
