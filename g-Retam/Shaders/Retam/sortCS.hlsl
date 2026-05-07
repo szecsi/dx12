@@ -287,7 +287,7 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
             uint elementIndex = (reiser >> 16) + gid.x * rowSize * nRowsPerPage;
             uint4 fragment = fragments.Load(elementIndex);
  
-            float t = (fragment.w & 0xffff) / 256.0 / 256.0;
+            float t = (fragment.w & 0xffff) / float(0xffff);
             uint mask = WaveMatch(fragment.x).x;
             bool leader = (firstbithigh(mask) == tid.x);
             bool starter = mask & 1;

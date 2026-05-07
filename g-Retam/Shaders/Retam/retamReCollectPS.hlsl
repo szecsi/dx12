@@ -72,22 +72,24 @@ float4 retamReCollectPS(VSOutput input) : SV_Target{
 
 		float3 h = tangent * cos(rang) + bitangent * sin(rang);
 		float geom = length(cross(h, viewDir)) / dot(viewDiff, -ahead.xyz) * 5.0 / texScale[j - 1u];
+        if (geom < 0.001)
+            geom = 0.001;			
 		float lod = -log2(geom) - 4.0;
 		float ilod = floor(lod + 1000.0) - 1000.0;
 		float flod = frac(lod + 1000.0);
 		float2 stex = tex / exp2(ilod);
 		uint level = uint(ilod + 19.0);
 		uint4 bits = bitPatterns[j - 1u];
-		for (uint i = 0u; i < 1u/*64u*/; i++) {
+		for (uint i = 0u; i < 64u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
-			float2 fromSeed = stex - seedUvPos;// + float2(2048.5, 2048.5);
+			float2 fromSeed = stex - seedUvPos + float2(0.5, 0.5) + float2( uint2(1, 1) << 15);
 			uint2 quadId = uint2(fromSeed);
 			quadId <<= level;
 			uint4 bs = cyclen(bits, (level + 96) % 64);
 			quadId |= bs.xz & (0xffffffff >> (32 - level));
             uint2 hash2 = quadId ^ (quadId >> 6) ^ (quadId >> 12) ^ (quadId >> 18) ^ (quadId >> 24);
-			uint sid = ((quadId.x & 0xffff) << 16)  | (quadId.y & 0xffff);
-			uint hash = (j << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);;
+			uint sid = ((quadId.x & 0xffff0) << 12)  | ((quadId.y & 0xffff0) >> 4);
+			uint hash = ((j-1u) << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);
 
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
 			uint2 quadrant = uint2(
@@ -97,8 +99,8 @@ float4 retamReCollectPS(VSOutput input) : SV_Target{
 
             float alpha =
                 smoothstep(
-					lerp(0.0, float(i) / 257.0, fading.x),
-					lerp(1.0, float(i + 1u) / 257.0, fading.x),
+					lerp(0.0, float(i) / 64.0, fading.x),
+					lerp(1.0, float(i + 1u) / 64.0, fading.x),
 					float(j) - tone
 				);
 
@@ -106,8 +108,8 @@ float4 retamReCollectPS(VSOutput input) : SV_Target{
 				((bits.w & 1u) != quadrant.y)) {
                     alpha *=
                     1.0 - smoothstep(
-					lerp(0.0, float(i) / 257.0, fading.y),
-					lerp(1.0, float(i + 1u) / 257.0, fading.y),
+					lerp(0.0, float(i) / 64.0, fading.y),
+					lerp(1.0, float(i + 1u) / 64.0, fading.y),
 					sqrt(sqrt(flod))
 				);
 			}

@@ -90,7 +90,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 			quadId |= bs.xz & (0xffffffff >> (32 - level));
             uint2 hash2 = quadId ^ (quadId >> 6) ^ (quadId >> 12) ^ (quadId >> 18) ^ (quadId >> 24);
 			uint sid = ((quadId.x & 0xffff0) << 12)  | ((quadId.y & 0xffff0) >> 4);
-			uint hash = (j << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);
+			uint hash = ((j-1u) << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);
 				
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
 			uint2 quadrant = uint2(
@@ -126,7 +126,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 					strokeTexPos.x <  0.5 &&
 					strokeTexPos.y <  0.5) {
 				if(alpha > 0.05){
-					uint t = (strokeTexPos.x + 0.5) * 256 * 256;
+					uint t = (strokeTexPos.x + 0.5) * 0xffff;
 					t |= (uint)(alpha * 256) << 16;
 					uint x = input.position.x;
 					uint y = input.position.y;
