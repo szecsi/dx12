@@ -18,6 +18,8 @@ RetamMaterialCb
 	float2 fading;
 	float4 texScale;
 	float4 crossAngle;
+	float  stripWidth;
+	float  overdraw;
 }
 #ifndef __HLSL_VERSION
 ;

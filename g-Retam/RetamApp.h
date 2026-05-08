@@ -1,6 +1,7 @@
 #pragma once
 #include "Egg/Common.h"
 #include <Egg/Script/ScriptedApp.h>
+#include "HipHopAnimation.h"
 #include <d3d11on12.h>
 #include <algorithm>
 #include <unordered_map>
@@ -24,6 +25,9 @@ class RetamApp : public Egg::Script::ScriptedApp {
 	bool showStrokes;
 	bool showRetam;
 	bool showReCollect;
+	bool showAnim;
+
+	HipHopAnimation hipHop;
 
 	Egg::ConstantBuffer<RetamMaterialCb> retamMaterialCb;
 
@@ -91,6 +95,8 @@ class RetamApp : public Egg::Script::ScriptedApp {
 			if (member.name == "fading")	 { minVal = 0.f; maxVal = 1.f; }
 			if (member.name == "texScale")   { minVal = 0.f; maxVal = 10.f; }
 			if (member.name == "crossAngle") { minVal = 0.f; maxVal = 6.2832f; }
+			if (member.name == "stripWidth") { minVal = 0.f; maxVal = 0.05f; }
+			if (member.name == "overdraw")   { minVal = 0.f; maxVal = 3.f; }
 
 			int wlen = MultiByteToWideChar(CP_ACP, 0, member.name.c_str(), -1, nullptr, 0);
 			std::wstring wname(wlen, 0);
@@ -208,7 +214,7 @@ public:
 		D3D12_DESCRIPTOR_HEAP_DESC dhd;
 		dhd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		dhd.NodeMask = 0;
-		dhd.NumDescriptors = 10;
+		dhd.NumDescriptors = 12;
 		dhd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
@@ -448,6 +454,8 @@ public:
 		retamMaterialCb.data.fading      = { 1.0f, 1.0f };
 		retamMaterialCb.data.texScale    = { 0.3f, 0.3f, 0.3f, 0.3f };
 		retamMaterialCb.data.crossAngle  = { 0.0f, 0.125f, 0.25f, 0.375f };
+		retamMaterialCb.data.stripWidth  = 0.005f;
+		retamMaterialCb.data.overdraw    = 1.0f;
 
 		RunScript("scene.lua");
 
@@ -456,6 +464,8 @@ public:
 			GG_MEMBER(fading)
 			GG_MEMBER(texScale)
 			GG_MEMBER(crossAngle)
+			GG_MEMBER(stripWidth)
+			GG_MEMBER(overdraw)
 		GG_ENDSTRUCT;
 
 		auto matIt = guiMaterials.find("RetamMaterialCb");
@@ -481,6 +491,11 @@ public:
 		//	depthIt->second->SetConstantBuffer(retamMaterialCb);
 
 		SceneUploadResources();
+
+		LoadTexture2D("textures/uvmask.png").CreateSRV(device.Get(), uavHeap.Get(), 10);
+		LoadTexture2D("carrot.jpg").CreateSRV(device.Get(), uavHeap.Get(), 11);
+
+		hipHop.createResources(device.Get(), (int)entities.size());
 	}
 
 	void recordComputeCommands() {
@@ -731,16 +746,37 @@ public:
 		fragmentCountsBuffer.upload(commandList);
 		commandList->OMSetRenderTargets(0, nullptr, FALSE, &collectDsvHandle);
 		commandList->ClearDepthStencilView(collectDsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-		for (int i = 0; i < (int)entities.size(); i++)
-			entities[i]->Draw(commandList.Get(), 2, i);
+		if (showAnim) {
+			hipHop.draw(commandList.Get(), 2, uavHeap.Get(),
+				device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV),
+				retamMaterialCb.GetGPUVirtualAddress(),
+				perFrameCb.GetGPUVirtualAddress(),
+				perObjectCb.GetGPUVirtualAddress());
+		}
+		else {
+			for (int i = 0; i < (int)entities.size(); i++)
+				entities[i]->Draw(commandList.Get(), 2, i);
+		}
 
 		// Collect pass — depth test via earlydepthstencil, writes to UAV buffers and debug RT
 		CD3DX12_CPU_DESCRIPTOR_HANDLE collectRtvHandle(collectRtvHeap->GetCPUDescriptorHandleForHeapStart());
 		const float collectClearColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		commandList->ClearRenderTargetView(collectRtvHandle, collectClearColor, 0, nullptr);
 		commandList->OMSetRenderTargets(1, &collectRtvHandle, FALSE, &collectDsvHandle);
-		for (int i = 0; i < (int)entities.size(); i++)
-			entities[i]->Draw(commandList.Get(), 1, i);
+		if (showStrokes) {
+			if (showAnim) {
+				hipHop.draw(commandList.Get(), 1, uavHeap.Get(),
+					device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV),
+					retamMaterialCb.GetGPUVirtualAddress(),
+					perFrameCb.GetGPUVirtualAddress(),
+					perObjectCb.GetGPUVirtualAddress());
+			}
+			else {
+				for (int i = 0; i < (int)entities.size(); i++)
+					entities[i]->Draw(commandList.Get(), 1, i);
+			}
+		}
+		
 
 		D3D12_RESOURCE_BARRIER b[] = { fragmentCountsBuffer.uavBarrier(), fragmentsBuffer.uavBarrier() };
 		commandList->ResourceBarrier(2, b);
@@ -760,9 +796,18 @@ public:
 		commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		if (showRetam) {
-			__super::PopulateCommandList();
+			if (showAnim) {
+				hipHop.draw(commandList.Get(), 0, uavHeap.Get(),
+					device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV),
+					retamMaterialCb.GetGPUVirtualAddress(),
+					perFrameCb.GetGPUVirtualAddress(),
+					perObjectCb.GetGPUVirtualAddress());
+			}
+			else {
+				__super::PopulateCommandList();
+			}
 		}
-		
+
 		{
 			D3D12_RESOURCE_BARRIER barriers[] = {
 				CD3DX12_RESOURCE_BARRIER::Transition(cubicBuffer.getResource(),
@@ -780,6 +825,9 @@ public:
 			commandList->SetDescriptorHeaps(1, heaps);
 			commandList->SetGraphicsRootSignature(cubicExtrudeRootSig.Get());
 			commandList->SetGraphicsRootDescriptorTable(0, cubicSrvGpu);
+			CD3DX12_GPU_DESCRIPTOR_HANDLE carrotSrvGpu(uavHeap->GetGPUDescriptorHandleForHeapStart(), 11, dhIncrSize);
+			commandList->SetGraphicsRootDescriptorTable(1, carrotSrvGpu);
+			commandList->SetGraphicsRootConstantBufferView(2, retamMaterialCb.GetGPUVirtualAddress());
 			commandList->SetPipelineState(cubicExtrudePSO.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
 			commandList->OMSetRenderTargets(1, &rHandle, FALSE, &dsvHandle);
@@ -789,8 +837,12 @@ public:
 			//commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 			if (showReCollect) {
-				for (int i = 0; i < (int)entities.size(); i++)
-					entities[i]->Draw(commandList.Get(), 3, i);
+				if (showAnim) {
+				}
+				else {
+					for (int i = 0; i < (int)entities.size(); i++)
+						entities[i]->Draw(commandList.Get(), 3, i);
+				}
 			}
 			
 			if (showStrokes) {
@@ -829,6 +881,7 @@ public:
 	}
 
 	virtual void Update(float dt, float T) override {
+		hipHop.update(T, &perObjectCb->objects[hipHop.getBaseObjectIndex()]);
 		__super::Update(dt, T);
 		retamMaterialCb.Upload();
 	}
@@ -845,6 +898,9 @@ public:
 			if (wParam == 51) {
 				showReCollect = !showReCollect;
 			}
+			if (wParam == 52) {
+				showAnim = !showAnim;
+			}
 		}
 
 		__super::ProcessMessage(hWnd, uMsg, wParam, lParam);
@@ -860,6 +916,7 @@ public:
 
 	virtual void ReleaseResources() override {
 		if (guiHwnd) { DestroyWindow(guiHwnd); guiHwnd = nullptr; }
+		hipHop.releaseResources();
 		retamMaterialCb.ReleaseResources();
 		fragmentCountsBuffer.releaseResources();
 		fragmentsBuffer.releaseResources();

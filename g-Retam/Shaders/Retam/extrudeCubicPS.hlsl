@@ -1,3 +1,6 @@
+Texture2D    carrotTex : register(t1);
+SamplerState sampl     : register(s0);
+
 struct GsosExtrude {
     float4 pos    : SV_Position;
     float2 tex    : TEXCOORD;
@@ -6,11 +9,7 @@ struct GsosExtrude {
 
 float4 extrudeCubicPS(GsosExtrude input) : SV_Target0
 {
-    float a = saturate(input.weight.x);
-    
-        
-//   return float4(0, 0.0, input.weight.y, 1.0);
-
-    
-    return float4(.5, .7, 0.2, a);
+    float4 c = carrotTex.SampleLevel(sampl, input.tex, 0);
+    c.a = (1.0 - c.b) * saturate(input.weight.x);
+    return c;//float4(c.rgb, 1);//float4(0, 0, input.weight.y, c.a);
 }

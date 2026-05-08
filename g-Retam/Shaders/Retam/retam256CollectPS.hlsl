@@ -89,7 +89,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 		uint4 bits = bitPatterns[j - 1u];
 		for (uint i = 0u; i < 64u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
-			float2 fromSeed = stex - seedUvPos + float2(0.5, 0.5) + float2( uint2(1, 1) << 15);
+			float2 fromSeed = stex - seedUvPos + float2(0.5, 0.5);// + float2( uint2(1, 1) << 15);
 			uint2 quadId = uint2(fromSeed);
 			quadId <<= level;
 			uint4 bs = cyclen(bits, (level + 96) % 64);
@@ -99,7 +99,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 			uint hash = ((j-1u) << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);
 				
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
-			if(strokeTexPos.x * strokeTexPos.x + strokeTexPos.y * strokeTexPos.y > safeDist * safeDist / 16000.0){
+			if(strokeTexPos.x * strokeTexPos.x + strokeTexPos.y * strokeTexPos.y > safeDist * safeDist / 1600.0){
 				bits = cycle(bits);
                 continue;
 			}
@@ -130,7 +130,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 			strokeTexPos = float2(
 				strokeTexPos.x * cos(rang) + strokeTexPos.y * sin(rang),
 				-strokeTexPos.x * sin(rang) + strokeTexPos.y * cos(rang));
-			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy * texScale[j - 1u] * texScale[j - 1u] / exp2(flod);
+			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy * texScale[j - 1u] * texScale[j - 1u] / exp2(flod) * 0.5;
 			if (	strokeTexPos.x > -0.5 &&
 					strokeTexPos.y > -0.5 &&
 					strokeTexPos.x <  0.5 &&
