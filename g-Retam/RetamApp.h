@@ -444,9 +444,9 @@ public:
 
 		retamMaterialCb.CreateResources(device.Get());
 
-		retamMaterialCb.data.lineSize    = { 0.6f, 0.6f };
+		retamMaterialCb.data.lineSize    = { 0.2f, 0.06f };
 		retamMaterialCb.data.fading      = { 1.0f, 1.0f };
-		retamMaterialCb.data.texScale    = { 1.0f, 1.0f, 1.0f, 1.0f };
+		retamMaterialCb.data.texScale    = { 0.3f, 0.3f, 0.3f, 0.3f };
 		retamMaterialCb.data.crossAngle  = { 0.0f, 0.125f, 0.25f, 0.375f };
 
 		RunScript("scene.lua");
@@ -759,7 +759,9 @@ public:
 		commandList->ClearRenderTargetView(rHandle, clearColor, 0, nullptr);
 		commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-		__super::PopulateCommandList();
+		if (showRetam) {
+			__super::PopulateCommandList();
+		}
 		
 		{
 			D3D12_RESOURCE_BARRIER barriers[] = {

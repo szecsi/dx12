@@ -25,7 +25,8 @@ materials.layDownDepth = O:Material(_, {rootParameterIndex=3, vs=shaders.retamVs
   O:setTexture2D(_, {file='carrot.jpg'})
 end )
 
-materials.retam256Collect = O:Material(_, {rootParameterIndex=3, vs=shaders.retamCollectVs, ps=shaders.retam256CollectPs, useDepthTest=true}, function(_)
+materials.retam256Collect = O:Material(_, {rootParameterIndex=4, vs=shaders.retamCollectVs, ps=shaders.retam256CollectPs, useDepthTest=true}, function(_)
+    O:setTexture2D(_, {file='textures/uvmask.png'})
     _:setDepthCompLessEqual()
 end )
 

@@ -2,7 +2,10 @@
 #include "RetamCb.hlsli"
 
 RWByteAddressBuffer counters : register(u0);
-RWBuffer<uint4> fragments : register(u1);	
+RWBuffer<uint4> fragments : register(u1);
+
+Texture2D uvMask : register(t0);
+SamplerState uvMaskSampler : register(s0);
 	
 cbuffer PerFrameCb : register(b1) {
 	float4x4 viewProjMat   : packoffset(c0);
@@ -64,6 +67,8 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 	float3 viewDir = normalize(viewDiff);
 	float3 lightDir = normalize(float3(1, 1, 1));
 	float tone = clamp(dot(normal, lightDir), 0.0, 1.0) * 4.2;
+		
+    float distToShore = uvMask.SampleLevel(uvMaskSampler, input.texCoord.xy / input.texCoord.w, 0).x;
 
 	float4 dbgColor = float4(0.5, 0.0, 0.0, 1);
 
@@ -79,6 +84,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 		float ilod = floor(lod + 1000.0) - 1000.0;
 		float flod = frac(lod + 1000.0);
 		float2 stex = tex / exp2(ilod);
+		float safeDist = distToShore / exp2(ilod);
 		uint level = uint(ilod + 19.0);
 		uint4 bits = bitPatterns[j - 1u];
 		for (uint i = 0u; i < 64u; i++) {
@@ -93,6 +99,10 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 			uint hash = ((j-1u) << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);
 				
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
+			if(strokeTexPos.x * strokeTexPos.x + strokeTexPos.y * strokeTexPos.y > safeDist * safeDist / 16000.0){
+				bits = cycle(bits);
+                continue;
+			}
 			uint2 quadrant = uint2(
 				(frac(fromSeed.x * 0.5) > 0.5) ? 1u : 0u,
 				(frac(fromSeed.y * 0.5) > 0.5) ? 1u : 0u

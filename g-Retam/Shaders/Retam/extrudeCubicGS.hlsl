@@ -29,11 +29,11 @@ void extrudeCubicGS(point GsisDummy dummy[1], uint pid : SV_PrimitiveID, inout T
 //    if (dx*dx + dy*dy > 5000) return;
 
     confidence *= saturate((exY - (1 - exX)) * 10);
-    float overdraw = 0.0;// + ((pid * 0x2da78e85) >> 24) / 255.0 * 0.2;
+    float overdraw = 1.0;// + ((pid * 0x2da78e85) >> 24) / 255.0 * 0.2;
 
     for (uint i = 0; i < 16; i++) {
-        //float t = 1 - exX + (exY - (1 - exX)) * (i / 15.0 * overdraw + (1.0 - overdraw) * 0.5);
-        float t = i/15.0;
+        float t = 1 - exX + (exY - (1 - exX)) * (i / 15.0 * overdraw + (1.0 - overdraw) * 0.5);
+        //float t = i/15.0;
         float4 tPowers = float4(1, t, t*t, t*t*t);
 
         GsosExtrude output;

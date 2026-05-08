@@ -116,6 +116,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "g-Retam", "g-Retam\g-Retam.
 		{CB50B522-876F-4B70-9EC4-5B0C735323D9} = {CB50B522-876F-4B70-9EC4-5B0C735323D9}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UVMask", "UVMask\UVMask.vcxproj", "{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -296,6 +301,13 @@ Global
 		{F4D9E2B1-6A3C-4F87-B5D1-8E2A3C1F0947}.Release|x64.Build.0 = Debug|x64
 		{F4D9E2B1-6A3C-4F87-B5D1-8E2A3C1F0947}.Release|x86.ActiveCfg = Debug|x64
 		{F4D9E2B1-6A3C-4F87-B5D1-8E2A3C1F0947}.Release|x86.Build.0 = Debug|x64
+		{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}.Debug|x64.ActiveCfg = Debug|x64
+		{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}.Debug|x64.Build.0 = Debug|x64
+		{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}.Debug|x86.ActiveCfg = Debug|x64
+		{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}.Release|x64.ActiveCfg = Debug|x64
+		{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}.Release|x64.Build.0 = Debug|x64
+		{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}.Release|x86.ActiveCfg = Debug|x64
+		{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}.Release|x86.Build.0 = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

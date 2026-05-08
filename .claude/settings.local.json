@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path C:\\\\Coding\\\\dx12 -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(dir C:Codingdx12Egg *)",
+      "Bash(Get-ChildItem -Path 'C:\\\\Coding\\\\dx12' -Recurse -Filter '*Retam*' -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(Format-List)",
+      "Bash(dir \"C:\\\\Coding\\\\dx12\\\\g-Retam\" /s /b)",
+      "Bash(findstr /E \"\\\\.hlsl|\\\\.hlsli|\\\\.cpp|\\\\.h|\\\\.lua|vcxproj\")"
+    ]
+  }
+}
