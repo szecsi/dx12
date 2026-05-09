@@ -28,7 +28,7 @@ void extrudeCubicGS(point GsisDummy dummy[1], uint pid : SV_PrimitiveID, inout T
     float4 tMinPow = float4(1, 1-exX, (1-exX)*(1-exX), (1-exX)*(1-exX)*(1-exX));
     float dx = dot(cubicX, tMaxPow) - dot(cubicX, tMinPow);
     float dy = dot(cubicY, tMaxPow) - dot(cubicY, tMinPow);
-    if (dx*dx + dy*dy > 5000) return;
+    if (dx*dx + dy*dy > 25000) return;
 
     confidence *= saturate((exY - (1 - exX)) * 10);
     //float overdraw = 1.0;// + ((pid * 0x2da78e85) >> 24) / 255.0 * 0.2;
