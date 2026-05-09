@@ -130,7 +130,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 			strokeTexPos = float2(
 				strokeTexPos.x * cos(rang) + strokeTexPos.y * sin(rang),
 				-strokeTexPos.x * sin(rang) + strokeTexPos.y * cos(rang));
-			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy * texScale[j - 1u] * texScale[j - 1u] / exp2(flod) * 0.5;
+			strokeTexPos *= float2(1.5, 20.0) / lineSize.xy * texScale[j - 1u] * texScale[j - 1u] / exp2(flod);
 			if (	strokeTexPos.x > -0.5 &&
 					strokeTexPos.y > -0.5 &&
 					strokeTexPos.x <  0.5 &&

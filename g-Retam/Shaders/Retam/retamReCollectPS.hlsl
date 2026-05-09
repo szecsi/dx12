@@ -82,7 +82,7 @@ float4 retamReCollectPS(VSOutput input) : SV_Target{
 		uint4 bits = bitPatterns[j - 1u];
 		for (uint i = 0u; i < 64u; i++) {
 			float2 seedUvPos = float2(bits.xz >> 0u) / float(0xffffffff);
-			float2 fromSeed = stex - seedUvPos + float2(0.5, 0.5) + float2( uint2(1, 1) << 15);
+			float2 fromSeed = stex - seedUvPos + float2(0.5, 0.5);
 			uint2 quadId = uint2(fromSeed);
 			quadId <<= level;
 			uint4 bs = cyclen(bits, (level + 96) % 64);
@@ -128,6 +128,8 @@ float4 retamReCollectPS(VSOutput input) : SV_Target{
 				//		return float4((level + 100) % 2, ((level + 100) % 3) * 0.5, ((level + 100) % 5) * 0.25, 1);
                 //    }
 				//hash = quadId >> 26;
+				if(alpha < 0.05)
+					return float4(1, 0, 0, 1);
 				if(any(quadId.xy == uint2(0, 0))){
 					return float4(1, 0, 1, 1);
 				}
