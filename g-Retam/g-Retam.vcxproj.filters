@@ -71,6 +71,9 @@
     <FxCompile Include="Shaders\Retam\extrudeCubicVS.hlsl" />
     <FxCompile Include="Shaders\Retam\extrudeCubicGS.hlsl" />
     <FxCompile Include="Shaders\Retam\extrudeCubicPS.hlsl" />
+    <FxCompile Include="Shaders\Retam\retamSkinnedVS.hlsl" />
+    <FxCompile Include="Shaders\Retam\retamSkinnedCollectVS.hlsl" />
+    <FxCompile Include="Shaders\Retam\retam256SkinnedCollectPS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -78,6 +81,7 @@
   <ItemGroup>
     <ClInclude Include="RetamApp.h" />
     <ClInclude Include="WaveSort.h" />
+    <ClInclude Include="HipHopAnimation.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\Billboard\billboard.hlsli">

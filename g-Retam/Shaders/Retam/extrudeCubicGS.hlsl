@@ -51,7 +51,7 @@ void extrudeCubicGS(point GsisDummy dummy[1], uint pid : SV_PrimitiveID, inout T
         output.pos.xy /= 512.0;
         output.pos.xy -= float2(1, 1);
         output.pos.y = -output.pos.y;        
-        output.pos.xy -= normal * stripWidth;// + sin(i) * output.weight.y * 0.02;
+        output.pos.xy -= normal * stripWidth + sin(i) * output.weight.y * 0.02;
         output.pos.z = 0.5;
         output.pos.w = 1;
 

@@ -205,12 +205,11 @@ public:
 
         // Load FBX
         Assimp::Importer importer;
-        const aiScene* scene = importer.ReadFile("../Media/hiphop.fbx",
+        const aiScene* scene = importer.ReadFile("../Media/kachu.fbx",
             aiProcess_Triangulate | aiProcess_LimitBoneWeights |
             aiProcess_JoinIdenticalVertices | aiProcess_SortByPType |
-            aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
-        ASSERT(scene && scene->mNumMeshes > 0, "HipHopAnimation: failed to load hiphop.fbx");
-
+            aiProcess_CalcTangentSpace);
+        ASSERT(scene && scene->mNumMeshes > 0, "HipHopAnimation: failed to load kachu.fbx");
         // Global inverse (cancels root transform so skinned verts stay in mesh space)
         XMStoreFloat4x4(&globalInvF,
             XMMatrixInverse(nullptr, aiToXM(scene->mRootNode->mTransformation)));
@@ -223,7 +222,7 @@ public:
         // Collect bones from first mesh
         const aiMesh* mesh = scene->mMeshes[0];
         nBones = (int)mesh->mNumBones;
-        ASSERT(nBones <= MAX_BONES, "hiphop.fbx exceeds MAX_BONES limit");
+        ASSERT(nBones <= MAX_BONES, "kachu.fbx exceeds MAX_BONES limit");
         boneInfos.resize(nBones);
 
         // Per-vertex weight accumulation
@@ -323,7 +322,7 @@ public:
         com_ptr<ID3DBlob> vsS  = Egg::Shader::LoadCso("Shaders/Retam/retamSkinnedVS.cso");
         com_ptr<ID3DBlob> vsC  = Egg::Shader::LoadCso("Shaders/Retam/retamSkinnedCollectVS.cso");
         com_ptr<ID3DBlob> ps0  = Egg::Shader::LoadCso("Shaders/Retam/retam256PS.cso");
-        com_ptr<ID3DBlob> ps1  = Egg::Shader::LoadCso("Shaders/Retam/retam256CollectPS.cso");
+        com_ptr<ID3DBlob> ps1  = Egg::Shader::LoadCso("Shaders/Retam/retam256SkinnedCollectPS.cso");
         com_ptr<ID3DBlob> ps2  = Egg::Shader::LoadCso("Shaders/Retam/layDownDepthPS.cso");
         com_ptr<ID3DBlob> ps3  = Egg::Shader::LoadCso("Shaders/Retam/retamReCollectPS.cso");
 

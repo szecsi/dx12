@@ -18,11 +18,11 @@ geometries.torus = O:IndexedGeometryWithTangentSpace(_, {file="kachu.fbx"})
 --geometries.chassis = multiMeshes.pod:getGeometry(0, 0)
 
 materials.retam256 = O:Material(_, {rootParameterIndex=3, vs=shaders.retamVs, ps=shaders.retam256Ps}, function(_)
-  O:setTexture2D(_, {file='carrot.jpg'})
+  O:setTexture2D(_, {file='gayline.png'})
 end )
 
 materials.layDownDepth = O:Material(_, {rootParameterIndex=3, vs=shaders.retamVs, ps=shaders.layDownDepthPs}, function(_)
-  O:setTexture2D(_, {file='carrot.jpg'})
+  O:setTexture2D(_, {file='gayline.png'})
 end )
 
 materials.retam256Collect = O:Material(_, {rootParameterIndex=4, vs=shaders.retamCollectVs, ps=shaders.retam256CollectPs, useDepthTest=true}, function(_)

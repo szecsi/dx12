@@ -491,10 +491,10 @@ public:
 		//if (depthIt != guiMaterials.end())
 		//	depthIt->second->SetConstantBuffer(retamMaterialCb);
 
-		SceneUploadResources();
-
 		LoadTexture2D("textures/uvmask.png").CreateSRV(device.Get(), uavHeap.Get(), 10);
-		LoadTexture2D("carrot.jpg").CreateSRV(device.Get(), uavHeap.Get(), 11);
+		LoadTexture2D("gayline.png").CreateSRV(device.Get(), uavHeap.Get(), 11);
+
+		SceneUploadResources();
 
 		hipHop.createResources(device.Get(), (int)entities.size());
 	}
@@ -792,7 +792,7 @@ public:
 		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
 		commandList->OMSetRenderTargets(1, &rHandle, FALSE, &dsvHandle);
 
-		const float clearColor[] = { 0.5f, 0.2f, 0.4f, 1.0f };
+		const float clearColor[] = { 0.9f, 0.9f, 0.6f, 1.0f };
 		commandList->ClearRenderTargetView(rHandle, clearColor, 0, nullptr);
 		commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 

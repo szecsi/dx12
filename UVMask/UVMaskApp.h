@@ -245,6 +245,10 @@ public:
         material->SetRootSignature(rootSig);
         material->SetVertexShader(vs);
         material->SetPixelShader(ps);
+
+        D3D12_RASTERIZER_DESC rasterDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        rasterDesc.CullMode = D3D12_CULL_MODE_NONE;
+        material->SetRasterizerState(rasterDesc);
         // Depth testing disabled by default in Material ctor
 
         Egg::Mesh::Geometry::P geometry = Egg::Importer::ImportSimpleObj(device.Get(), "kachu.fbx");

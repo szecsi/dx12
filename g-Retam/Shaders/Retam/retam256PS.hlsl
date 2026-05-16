@@ -37,6 +37,7 @@ uint4 cycle(uint4 i) {
 [RootSignature(RootSigRetam)]
 float4 retam256PS(VSOutput input) : SV_Target
 {
+		
 	float3 normal = normalize(input.worldNormal.xyz);
 	float3 bitangent = cross(normal, input.worldTangent.xyz);
 	float3 tangent = cross(bitangent, normal);
@@ -47,7 +48,7 @@ float4 retam256PS(VSOutput input) : SV_Target
 	float3 lightDir = normalize(float3(1, 1, 1));
 	float tone = clamp(dot(normal, lightDir), 0.0, 1.0) * 4.2;
 
-	float4 fragmentColor = float4(normal, 1);
+	float4 fragmentColor = float4(0.9, 0.9, 0.6, 1);
 
 	for (uint j = 4u; j > (uint)tone && j > 0u; j--) {
 		float2 tex = input.texCoord.xy / input.texCoord.w / texScale[j - 1u];
@@ -81,7 +82,7 @@ float4 retam256PS(VSOutput input) : SV_Target
 					lerp(0.0, float(i) / 64.0, fading.x),
 					lerp(1.0, float(i + 1u) / 64.0, fading.x),
 					float(j) - tone
-				);
+				) * 0.2;
 
 			if (((bits.y & 1u) != quadrant.x) ||
 				((bits.w & 1u) != quadrant.y)) {
@@ -104,8 +105,8 @@ float4 retam256PS(VSOutput input) : SV_Target
 			{
 				float4 c = 
 						//float4(1, 1, 0.9, 1); 
-					strokeTexture.Sample(sampl, strokeTexPos.y + float2(0.5, 0.5));
-				c.a = 1.0 - c.b;
+					strokeTexture.Sample(sampl, strokeTexPos.xy + float2(0.5, 0.5));
+				//c.a = 1.0 - c.b;
 				c.a *= alpha;
 				fragmentColor = fragmentColor * (1.0 - c.a) + c * c.a;
 			}
@@ -113,4 +114,5 @@ float4 retam256PS(VSOutput input) : SV_Target
 		}
 	}
 	return fragmentColor;
+;
 }

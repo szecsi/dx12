@@ -56,8 +56,8 @@ uint4 cyclen(uint4 i, uint n)
 }
 	
 [earlydepthstencil]
-[RootSignature(RootSigRetamCollect)]
-float4 retam256CollectPS(VSOutput input) : SV_Target{
+[RootSignature(RootSigRetamSkinnedCollect)]
+float4 retam256SkinnedCollectPS(VSOutput input) : SV_Target{
 	float3 normal = normalize(input.worldNormal.xyz);
 	float3 bitangent = cross(normal, input.worldTangent.xyz);
 	float3 tangent = cross(bitangent, normal);
@@ -68,8 +68,8 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 	float3 lightDir = normalize(float3(1, 1, 1));
 	float tone = clamp(dot(normal, lightDir), 0.0, 1.0) * 4.2;
 		
-    float distToShore = uvMask.SampleLevel(uvMaskSampler, input.texCoord.xy / input.texCoord.w, 0 ).x;
-//	if(distToShore < 0.00001) return float4(0, 0, 0, 1);
+    float distToShore = uvMask.SampleLevel(uvMaskSampler, input.texCoord.xy / input.texCoord.w, 0).x;
+	//if(distToShore < 0.00001) return float4(0, 0, 0, 1);
 
 	float4 dbgColor = float4(0.5, 0.0, 0.0, 1);
 
@@ -101,7 +101,7 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 				
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
 			if(strokeTexPos.x * strokeTexPos.x + strokeTexPos.y * strokeTexPos.y 
-					> safeDist * safeDist / 1600.0){
+					> safeDist * safeDist / 1600.0 ){
 				bits = cycle(bits);
                 continue;
 			}
