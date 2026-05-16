@@ -231,6 +231,8 @@ namespace Egg {
 				return b;
 			}
 
+			ID3D12Resource* getResource() const { return buffer.Get(); }
+
 		};
 	}
 }
