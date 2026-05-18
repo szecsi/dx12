@@ -7,6 +7,7 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+#include <algorithm>
 #include <system_error>
 
 #include <DirectXTex/DirectXTex.h>
@@ -182,6 +183,85 @@ namespace Egg {
 			geometry->AddInputElement({ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
 			geometry->AddInputElement({ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
 			geometry->AddInputElement({ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+
+			return geometry;
+		}
+
+		Egg::Mesh::Geometry::P ImportWithTangentSpaceAndRigging(ID3D12Device * device, const std::string & filePath) {
+			std::string path = "../Media/" + filePath;
+
+			Assimp::Importer importer;
+
+			const aiScene * scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_CalcTangentSpace | aiProcess_GenUVCoords);
+
+			ASSERT(scene != nullptr, "Failed to load file: '%s'. Assimp error message: '%s'", path.c_str(), importer.GetErrorString());
+			ASSERT(scene->HasMeshes(), "File: '%s' does not contain a mesh.", path.c_str());
+
+			const aiMesh * mesh = scene->mMeshes[0];
+
+			// build per-vertex blend data from assimp bone list
+			struct BoneInfluence { unsigned int index; float weight; };
+			std::vector<std::vector<BoneInfluence>> perVertex(mesh->mNumVertices);
+			if (mesh->HasBones()) {
+				for (unsigned int b = 0; b < mesh->mNumBones; ++b) {
+					const aiBone* bone = mesh->mBones[b];
+					for (unsigned int w = 0; w < bone->mNumWeights; ++w) {
+						unsigned int vi = bone->mWeights[w].mVertexId;
+						if (perVertex[vi].size() < 3)
+							perVertex[vi].push_back({ b, bone->mWeights[w].mWeight });
+					}
+				}
+			}
+
+			std::vector<unsigned int> indices;
+			std::vector<PNTTB_RI_Vertex> vertices;
+			indices.reserve(mesh->mNumFaces * 3);
+			vertices.reserve(mesh->mNumVertices);
+
+			for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
+				PNTTB_RI_Vertex v;
+				v.position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
+				v.normal   = { mesh->mNormals[i].x,  mesh->mNormals[i].y,  mesh->mNormals[i].z };
+				v.tangent  = { mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z };
+				v.tex      = { mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y };
+
+				auto& infl = perVertex[i];
+				v.blendIndices = { 0u, 0u, 0u, 0u };
+				v.blendWeights = { 0.0f, 0.0f, 0.0f, 0.0f };
+				for (auto& affe : infl) {
+					v.blendWeights[affe.index] = affe.weight;
+				}
+				/*std::sort(infl.begin(), infl.end(), [](const BoneInfluence& a, const BoneInfluence& b) {
+					return a.index < b.index;
+				});
+				if (!infl.empty()) {
+					v.blendIndices.x = infl.size() > 0 ? infl[0].index : 0u;
+					v.blendIndices.y = infl.size() > 1 ? infl[1].index : 0u;
+					v.blendIndices.z = infl.size() > 2 ? infl[2].index : 0u;
+					v.blendWeights.x = infl.size() > 0 ? infl[0].weight : 1.0f;
+					v.blendWeights.y = infl.size() > 1 ? infl[1].weight : 0.0f;
+					v.blendWeights.z = infl.size() > 2 ? infl[2].weight : 0.0f;
+				}*/
+				vertices.emplace_back(v);
+			}
+
+			for (unsigned int i = 0; i < mesh->mNumFaces; ++i) {
+				aiFace face = mesh->mFaces[i];
+				indices.emplace_back(face.mIndices[0]);
+				indices.emplace_back(face.mIndices[1]);
+				indices.emplace_back(face.mIndices[2]);
+			}
+
+			Egg::Mesh::Geometry::P geometry = Egg::Mesh::IndexedGeometry::Create(device,
+				&(vertices.at(0)), (unsigned int)(vertices.size() * sizeof(PNTTB_RI_Vertex)), (unsigned int)sizeof(PNTTB_RI_Vertex),
+				&(indices.at(0)),  (unsigned int)(indices.size() * 4), DXGI_FORMAT_R32_UINT);
+
+			geometry->AddInputElement({ "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0,  0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+			geometry->AddInputElement({ "NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+			geometry->AddInputElement({ "TANGENT",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+			geometry->AddInputElement({ "TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,       0, 36, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+			geometry->AddInputElement({ "BLENDINDICES", 0, DXGI_FORMAT_R32G32B32A32_UINT,  0, 44, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
+			geometry->AddInputElement({ "BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 60, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 });
 
 			return geometry;
 		}

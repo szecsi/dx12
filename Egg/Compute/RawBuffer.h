@@ -76,6 +76,16 @@ namespace Egg {
 				device->CreateUnorderedAccessView(buffer.Get(), nullptr, &uavDesc, handle);
 			}
 
+			void createSrv(com_ptr<ID3D12Device> device, const D3D12_CPU_DESCRIPTOR_HANDLE& handle) {
+				D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+				srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+				srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+				srvDesc.Buffer.NumElements = bufferUintSize;
+				srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+				device->CreateShaderResourceView(buffer.Get(), &srvDesc, handle);
+			}
+
 			void releaseResources() {
 				buffer.Reset();
 				uploadBuffer.Reset();

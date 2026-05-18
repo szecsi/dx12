@@ -1,7 +1,6 @@
 #pragma once
 #include "Egg/Common.h"
 #include <Egg/Script/ScriptedApp.h>
-#include <d3d11on12.h>
 #include <algorithm>
 #include <unordered_map>
 
@@ -151,7 +150,7 @@ protected:
 	*
 	* 32*27=864 different tree models
 	* piece counts from 33 to 255 step 1/3
-	* 124k pieces per single instace set of models
+	* 124k pieces per single instance set of models
 	* 9M pieces total
 	* model consists of
 	*	bone trafos
@@ -199,17 +198,20 @@ protected:
 	static const unsigned int nBranchTypes = 1; // TODO: 3
 	static const unsigned int nTreeModels = 32 * 27;
 	static const unsigned int nInstancesPerTreeModel = 8 * 9;
-	static const unsigned int nAveragePieces = (16+128) / 2;
+	static const unsigned int nMinPiecesPerTree = 33;
+	static const unsigned int nMaxPiecesPerTree = 127;
+	static const unsigned int nAveragePieces = (nMinPiecesPerTree + nMaxPiecesPerTree) / 2;
 
 	com_ptr<ID3D12DescriptorHeap> uavHeap;
 	Egg::Compute::RawBuffer   instanceBuffers[nLevels * nBranchTypes];
 	Egg::Compute::TypedBuffer bonesBuffer;
+	Egg::Compute::RawBuffer   twistsBuffer;
 
 	com_ptr<ID3D12Resource>          dispatchArgsResource;
 	com_ptr<ID3D12CommandSignature>  dispatchCommandSignature;
 
 	Egg::Compute::ComputeShader growCS;
-	Egg::Compute::ComputeShader treeherdCS;
+	//Egg::Compute::ComputeShader treeherdCS;
 
 	com_ptr<ID3D12CommandSignature>  drawCommandSignature;
 
@@ -219,7 +221,8 @@ public:
 			Egg::Compute::RawBuffer(L"y2",
 				nTreeModels * nAveragePieces * 3u)
 		},
-		bonesBuffer(L"bones", nTreeModels * nAveragePieces * 2u/*nChildren*/ * 2u/*dq*/, DXGI_FORMAT_R32G32B32A32_FLOAT)
+		bonesBuffer(L"bones", nTreeModels * nAveragePieces * 2u/*nChildren*/ * 4u/*rows*/, DXGI_FORMAT_R32G32B32A32_FLOAT),
+		twistsBuffer(L"twists", nTreeModels * nAveragePieces)
 	{}
 
 	virtual void CreateResources() override {
@@ -243,9 +246,11 @@ public:
 		instanceBuffers[0].createResources(device, CountsHandle);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE fragmentsHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 1, dhIncrSize);
 		bonesBuffer.createResources(device, fragmentsHandle);
+		CD3DX12_CPU_DESCRIPTOR_HANDLE twistsHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 2, dhIncrSize);
+		twistsBuffer.createResources(device, twistsHandle);
 
-		growCS.createResources(device, "Shaders/growCS.cso");
-		treeherdCS.createResources(device, "Shaders/treeherdCS.cso");
+		growCS.createResources(device, "growCS.cso");
+		//treeherdCS.createResources(device, "treeherdCS.cso");
 
 		D3D12_COMMAND_QUEUE_DESC descCommandQueue = { D3D12_COMMAND_LIST_TYPE_COMPUTE, 0, D3D12_COMMAND_QUEUE_FLAG_NONE };
 		DX_API("create compute command queue.")
@@ -316,14 +321,47 @@ public:
 		__super::ReleaseUploadResources();
 	}
 
+	void LuaAddTreeBuffers() {
+		uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		instanceBuffers[0].createSrv(device, CD3DX12_CPU_DESCRIPTOR_HANDLE(srvHeap->GetCPUDescriptorHandleForHeapStart(), srvCount, dhIncrSize));
+		srvCount++;
+		bonesBuffer.createSrv(device, CD3DX12_CPU_DESCRIPTOR_HANDLE(srvHeap->GetCPUDescriptorHandleForHeapStart(), srvCount, dhIncrSize));
+		srvCount++;
+		twistsBuffer.createSrv(device, CD3DX12_CPU_DESCRIPTOR_HANDLE(srvHeap->GetCPUDescriptorHandleForHeapStart(), srvCount, dhIncrSize));
+		srvCount++;
+	}
+
 	virtual void LoadAssets() override {
 		using namespace Egg::Scene;
 		using namespace Egg::Mesh;
 
 		__super::LoadAssets();
 
+		lua_pushlightuserdata(luaState, (void*)this);
+		lua_pushcclosure(luaState, [](lua_State* L) -> int {
+			((TreeApp*)lua_touserdata(L, lua_upvalueindex(1)))->LuaAddTreeBuffers();
+			return 0;
+		}, 1);
+		lua_setglobal(luaState, "addTreeBuffers");
+
 		treeMaterialCb.CreateResources(device.Get());
 
+		treeMaterialCb.data.rigging[0] = float4x4::Identity;
+		treeMaterialCb.data.rigging[1] = (
+			float4x4::Scaling(float3(0.707, 0.707, 0.707))
+			*
+			float4x4::Rotation(float3(0, 1, 0), 0.785)
+			*
+			float4x4::Translation(float3(1.5, 0, 3))
+			).Transpose().Invert();
+
+		treeMaterialCb.data.rigging[2] = (
+			float4x4::Scaling(float3(0.707, 0.707, 0.707))
+			*
+			float4x4::Rotation(float3(0, 1, 0), -0.785)
+			*
+			float4x4::Translation(float3(-1.5, 0, 3))
+			).Transpose().Invert();
 		//treeMaterialCb.data.lineSize    = { 0.2f, 0.06f };
 		//treeMaterialCb.data.fading      = { 1.0f, 1.0f };
 		//treeMaterialCb.data.texScale    = { 0.3f, 0.3f, 0.3f, 0.3f };
@@ -346,8 +384,6 @@ public:
 		if (matIt != guiMaterials.end())
 			matIt->second->SetConstantBuffer(treeMaterialCb);
 
-		LoadTexture2D("tree/bark-alpha-tiling.png").CreateSRV(device.Get(), uavHeap.Get(), 3);
-
 		SceneUploadResources();
 
 	}
@@ -361,12 +397,16 @@ public:
 
 		growCS.setup(cmd, heap0, 0);
 		cmd->Dispatch(nTreeModels, 1, 1);
-		cmd->ResourceBarrier(1, &instanceBuffers[0].uavBarrier());
+		D3D12_RESOURCE_BARRIER uavBarriers[] = {
+			instanceBuffers[0].uavBarrier(),
+			bonesBuffer.uavBarrier(),
+			twistsBuffer.uavBarrier()
+		};
+		cmd->ResourceBarrier(_countof(uavBarriers), uavBarriers);
 
 	}
 
-	virtual void PopulateCommandList() override {
-
+	virtual void Render() override {
 		// --- Compute pass ---
 		computeAllocators[swapChainBackBufferIndex]->Reset();
 		auto& computeCommandList = computeCommandLists[swapChainBackBufferIndex];
@@ -388,6 +428,22 @@ public:
 		computeFenceChain.gpuWait(commandQueue, swapChainBackBufferIndex);
 
 		// --- Graphics/render pass ---
+		PopulateCommandList();
+
+		ID3D12CommandList* cLists[] = { commandList.Get() };
+		commandQueue->ExecuteCommandLists(_countof(cLists), cLists);
+
+		graphicsFenceChain.signal(commandQueue, swapChainBackBufferIndex);
+
+		DX_API("Failed to present swap chain")
+			swapChain->Present(1, 0);
+
+		WaitForPreviousFrame();
+
+		frameCount++;
+	}
+
+	virtual void PopulateCommandList() override {
 		commandAllocator->Reset();
 		commandList->Reset(commandAllocator.Get(), nullptr);
 
@@ -399,12 +455,22 @@ public:
 				CD3DX12_RESOURCE_BARRIER::Transition(bonesBuffer.getResource(),
 					D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 					D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+				CD3DX12_RESOURCE_BARRIER::Transition(twistsBuffer.getResource(),
+					D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+					D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+				CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(),
+					D3D12_RESOURCE_STATE_PRESENT,
+					D3D12_RESOURCE_STATE_RENDER_TARGET),
 			};
-			commandList->ResourceBarrier(2, barriers);
+			commandList->ResourceBarrier(4, barriers);
 		}
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE rHandle(rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), swapChainBackBufferIndex, rtvDescriptorHandleIncrementSize);
 		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(dsvHeap->GetCPUDescriptorHandleForHeapStart());
+
+		commandList->RSSetViewports(1, &viewPort);
+		commandList->RSSetScissorRects(1, &scissorRect);
+		commandList->OMSetRenderTargets(1, &rHandle, FALSE, &dsvHandle);
 
 		const float clearColor[] = { 0.5f, 0.6f, 0.9f, 1.0f };
 		commandList->ClearRenderTargetView(rHandle, clearColor, 0, nullptr);
@@ -416,29 +482,21 @@ public:
 			D3D12_RESOURCE_BARRIER barriers[] = {
 				CD3DX12_RESOURCE_BARRIER::Transition(instanceBuffers[0].getResource(),
 					D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-					D3D12_RESOURCE_STATE_UNORDERED_ACCESS
-					),
+					D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
 				CD3DX12_RESOURCE_BARRIER::Transition(bonesBuffer.getResource(),
 					D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-					D3D12_RESOURCE_STATE_UNORDERED_ACCESS
-					),
+					D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+				CD3DX12_RESOURCE_BARRIER::Transition(twistsBuffer.getResource(),
+					D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+					D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
 			};
-			commandList->ResourceBarrier(2, barriers);
+			commandList->ResourceBarrier(3, barriers);
 		}
-		
+
 		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
 		DX_API("close graphics command list")
 			commandList->Close();
-
-		ID3D12CommandList* cLists[] = { commandList.Get() };
-		commandQueue->ExecuteCommandLists(_countof(cLists), cLists);
-
-		graphicsFenceChain.signal(commandQueue, swapChainBackBufferIndex);
-
-		WaitForPreviousFrame();
-
-		frameCount++;
 	}
 
 	virtual void Resize(int width, int height) override {
@@ -446,25 +504,20 @@ public:
 	}
 
 	virtual void Update(float dt, float T) override {
-		hipHop.update(T, &perObjectCb->objects[hipHop.getBaseObjectIndex()]);
 		__super::Update(dt, T);
-		retamMaterialCb.Upload();
+		treeMaterialCb.Upload();
 	}
 
 	virtual void ProcessMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) override {
 		if (!guiHwnd) createGui();
 		else if (uMsg == WM_KEYUP) {
 			if (wParam == 49) {
-				showRetam = !showRetam;
 			}
 			if (wParam == 50) {
-				showStrokes = !showStrokes;
 			}
 			if (wParam == 51) {
-				showReCollect = !showReCollect;
 			}
 			if (wParam == 52) {
-				showAnim = !showAnim;
 			}
 		}
 
@@ -472,26 +525,15 @@ public:
 	}
 
 	virtual void ReleaseSwapChainResources() override {
-		collectDepthBuffer.Reset();
-		collectDsvHeap.Reset();
-		collectColorBuffer.Reset();
-		collectRtvHeap.Reset();
 		__super::ReleaseSwapChainResources();
 	}
 
 	virtual void ReleaseResources() override {
 		if (guiHwnd) { DestroyWindow(guiHwnd); guiHwnd = nullptr; }
-		hipHop.releaseResources();
-		retamMaterialCb.ReleaseResources();
-		fragmentCountsBuffer.releaseResources();
-		fragmentsBuffer.releaseResources();
-		designBuffer.releaseResources();
-		strokeListBuffer.releaseResources();
+		treeMaterialCb.ReleaseResources();
 		dispatchArgsResource.Reset();
 		dispatchCommandSignature.Reset();
 		drawCommandSignature.Reset();
-		cubicExtrudePSO.Reset();
-		cubicExtrudeRootSig.Reset();
 		uavHeap.Reset();
 		Egg::Script::ScriptedApp::ReleaseResources();
 	}

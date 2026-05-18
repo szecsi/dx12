@@ -69,6 +69,9 @@ namespace Egg {
             float2 & operator=(const float2 & rhs) noexcept;
 float2 & operator=(float rhs) noexcept;
 
+            float& operator[](int i) noexcept { return (&x)[i]; }
+            const float& operator[](int i) const noexcept { return (&x)[i]; }
+
             float2 & operator+=(const float2 & rhs) noexcept;
 float2 & operator+=(float rhs) noexcept;
 

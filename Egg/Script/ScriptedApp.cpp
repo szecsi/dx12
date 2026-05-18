@@ -50,6 +50,7 @@ void Script::ScriptedApp::LoadAssets() {
 		class_<Script::ScriptedApp>("ScriptedApp")
 		.def("IndexedGeometry", &Script::ScriptedApp::CreateIndexedGeometry)
 		.def("IndexedGeometryWithTangentSpace", &Script::ScriptedApp::CreateIndexedGeometryWithTangentSpace)
+		.def("IndexedGeometryWithTangentSpaceAndRigging", &Script::ScriptedApp::CreateIndexedGeometryWithTangentSpaceAndRigging)
 		.def("Shader", &Script::ScriptedApp::CreateShader)
 		.def("Material", &Script::ScriptedApp::CreateMaterial)
 		.def("setTexture2D", &Script::ScriptedApp::AddTexture2DToMaterial)
@@ -125,6 +126,21 @@ Egg::Mesh::Geometry::P Script::ScriptedApp::CreateIndexedGeometryWithTangentSpac
 		std::string fileName = attributeTable.getString("file");
 		Egg::Mesh::IndexedGeometry::P indexedGeometry = std::dynamic_pointer_cast<Egg::Mesh::IndexedGeometry>(
 			Egg::Importer::ImportWithTangentSpace(device.Get(), fileName));
+		indexedGeometry->instanceCount = attributeTable.getInt("instanceCount", 1);
+		return indexedGeometry;
+	}
+	catch (std::exception exception) { ExitWithErrorMessage(exception); }
+}
+
+Egg::Mesh::Geometry::P Script::ScriptedApp::CreateIndexedGeometryWithTangentSpaceAndRigging(luabind::object nil, luabind::object attributes)
+{
+	LuaTable attributeTable(attributes, "IndexedGeometryWithTangentSpaceAndRigging");
+	try
+	{
+		std::string fileName = attributeTable.getString("file");
+		Egg::Mesh::IndexedGeometry::P indexedGeometry = std::dynamic_pointer_cast<Egg::Mesh::IndexedGeometry>(
+			Egg::Importer::ImportWithTangentSpaceAndRigging(device.Get(), fileName));
+		indexedGeometry->instanceCount = attributeTable.getInt("instanceCount", 1);
 		return indexedGeometry;
 	}
 	catch (std::exception exception) { ExitWithErrorMessage(exception); }

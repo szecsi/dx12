@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.8.34330.188
+# Visual Studio Version 18
+VisualStudioVersion = 18.6.11806.211 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ggl001-HelloTriangle", "ggl001-HelloTriangle\ggl001-HelloTriangle.vcxproj", "{226FA8CD-44EA-46B9-83A4-79EECED4CF3D}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -120,6 +120,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UVMask", "UVMask\UVMask.vcx
 	ProjectSection(ProjectDependencies) = postProject
 		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
 	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "g-Tree", "g-Tree\g-Tree.vcxproj", "{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -308,6 +310,14 @@ Global
 		{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}.Release|x64.Build.0 = Debug|x64
 		{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}.Release|x86.ActiveCfg = Debug|x64
 		{D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F80}.Release|x86.Build.0 = Debug|x64
+		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Debug|x64.ActiveCfg = Debug|x64
+		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Debug|x64.Build.0 = Debug|x64
+		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Debug|x86.ActiveCfg = Debug|x64
+		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Debug|x86.Build.0 = Debug|x64
+		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Release|x64.ActiveCfg = Debug|x64
+		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Release|x64.Build.0 = Debug|x64
+		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Release|x86.ActiveCfg = Debug|x64
+		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Release|x86.Build.0 = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

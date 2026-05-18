@@ -61,6 +61,9 @@ namespace Egg {
             bool2 & operator=(const bool2 & rhs) noexcept;
 bool2 & operator=(bool rhs) noexcept;
 
+            bool& operator[](int i) noexcept { return (&x)[i]; }
+            const bool& operator[](int i) const noexcept { return (&x)[i]; }
+
             bool2 operator||(const bool2 & rhs) const noexcept;
 
             bool2 operator&&(const bool2 & rhs) const noexcept;

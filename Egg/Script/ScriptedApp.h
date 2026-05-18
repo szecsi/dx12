@@ -32,6 +32,7 @@ namespace Egg {
 			Egg::Script::Shader::P CreateShader(luabind::object nil, luabind::object attributes);
 			Egg::Mesh::Geometry::P CreateIndexedGeometry(luabind::object nil, luabind::object attributes);
 			Egg::Mesh::Geometry::P CreateIndexedGeometryWithTangentSpace(luabind::object nil, luabind::object attributes);
+			Egg::Mesh::Geometry::P CreateIndexedGeometryWithTangentSpaceAndRigging(luabind::object nil, luabind::object attributes);
 			Egg::Mesh::Material::P CreateMaterial(luabind::object nil, luabind::object attributes, luabind::object initalizer);
 			void AddTexture2DToMaterial(Egg::Mesh::Material::P material, luabind::object attributes);
 			void AddTextureCubeToMaterial(Egg::Mesh::Material::P material, luabind::object attributes);

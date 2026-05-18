@@ -8,7 +8,7 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{F4D9E2B1-6A3C-4F87-B5D1-8E2A3C1F0947}</ProjectGuid>
+    <ProjectGuid>{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}</ProjectGuid>
     <RootNamespace>gRetam</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
@@ -64,95 +64,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="HipHopAnimation.h" />
-    <ClInclude Include="RetamApp.h" />
-    <ClInclude Include="WaveSort.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <FxCompile Include="Shaders\Billboard\gsBillboard.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Geometry</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Billboard\vsBillboard.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Billboard\psFire.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\RadixSort\csLocalSortAlpha.hlsl" />
-    <FxCompile Include="Shaders\RadixSort\csLocalSortBeta.hlsl" />
-    <FxCompile Include="Shaders\RadixSort\csLocalSortGamma.hlsl" />
-    <FxCompile Include="Shaders\RadixSort\csPackAlpha.hlsl" />
-    <FxCompile Include="Shaders\RadixSort\csPackBeta.hlsl" />
-    <FxCompile Include="Shaders\RadixSort\csPackGamma.hlsl" />
-    <FxCompile Include="Shaders\RadixSort\csScan.hlsl" />
-    <FxCompile Include="Shaders\Retam\extrudeGS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Geometry</ShaderType>
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">4.0</ShaderModel>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\extrudePS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\qid256PS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retam256CollectPS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retam256SkinnedCollectPS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retamReCollectPS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retam256PS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retamVS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retamCollectVS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retamSkinnedVS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retamSkinnedCollectVS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\layDownDepthPS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\sortCS.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\prefixSumCS.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\compactCS.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\argsCS.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\cubicCS.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\extrudeVS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\extrudeCubicVS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\extrudeCubicGS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Geometry</ShaderType>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\extrudeCubicPS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-    </FxCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Shaders\Billboard\billboard.hlsli" />
-    <None Include="Shaders\Retam\Retam.hlsli" />
-    <None Include="Shaders\Retam\RetamCb.hlsli" />
+    <ClInclude Include="TreeApp.h" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="Lua\scene.lua">
@@ -165,6 +77,28 @@
       <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
       <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</TreatOutputAsContent>
     </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\matrix.hlsli" />
+    <None Include="Shaders\tree.hlsli" />
+    <None Include="Shaders\treeCB.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="growCS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
+    </FxCompile>
+    <FxCompile Include="treePS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="treeVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Egg\Egg.vcxproj">
+      <Project>{c235bd63-6e30-4f13-a0ff-c5d5fca38558}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

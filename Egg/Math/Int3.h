@@ -156,6 +156,9 @@ namespace Egg {
             int3 & operator=(const int3 & rhs) noexcept;
 int3 & operator=(int rhs) noexcept;
 
+            int& operator[](int i) noexcept { return (&x)[i]; }
+            const int& operator[](int i) const noexcept { return (&x)[i]; }
+
             int3 & operator+=(const int3 & rhs) noexcept;
 int3 & operator+=(int rhs) noexcept;
 

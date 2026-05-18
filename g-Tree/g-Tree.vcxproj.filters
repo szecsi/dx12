@@ -1,119 +1,45 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <FxCompile Include="Shaders\RadixSort\csLocalSortAlpha.hlsl">
-      <Filter>Shaders\RadixSort</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\RadixSort\csLocalSortBeta.hlsl">
-      <Filter>Shaders\RadixSort</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\RadixSort\csLocalSortGamma.hlsl">
-      <Filter>Shaders\RadixSort</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\RadixSort\csPackAlpha.hlsl">
-      <Filter>Shaders\RadixSort</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\RadixSort\csPackBeta.hlsl">
-      <Filter>Shaders\RadixSort</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\RadixSort\csPackGamma.hlsl">
-      <Filter>Shaders\RadixSort</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\RadixSort\csScan.hlsl">
-      <Filter>Shaders\RadixSort</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Billboard\gsBillboard.hlsl">
-      <Filter>Shaders\Billboard</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Billboard\vsBillboard.hlsl">
-      <Filter>Shaders\Billboard</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Billboard\psFire.hlsl">
-      <Filter>Shaders\Billboard</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retam256PS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retamVS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\qid256PS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retam256CollectPS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retamReCollectPS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\retamCollectVS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\layDownDepthPS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\sortCS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\extrudeGS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\extrudePS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\extrudeVS.hlsl">
-      <Filter>Shaders\Retam</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Retam\prefixSumCS.hlsl" />
-    <FxCompile Include="Shaders\Retam\compactCS.hlsl" />
-    <FxCompile Include="Shaders\Retam\argsCS.hlsl" />
-    <FxCompile Include="Shaders\Retam\cubicCS.hlsl" />
-    <FxCompile Include="Shaders\Retam\extrudeCubicVS.hlsl" />
-    <FxCompile Include="Shaders\Retam\extrudeCubicGS.hlsl" />
-    <FxCompile Include="Shaders\Retam\extrudeCubicPS.hlsl" />
-    <FxCompile Include="Shaders\Retam\retamSkinnedVS.hlsl" />
-    <FxCompile Include="Shaders\Retam\retamSkinnedCollectVS.hlsl" />
-    <FxCompile Include="Shaders\Retam\retam256SkinnedCollectPS.hlsl" />
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="RetamApp.h" />
-    <ClInclude Include="WaveSort.h" />
+    <ClInclude Include="TreeApp.h" />
     <ClInclude Include="HipHopAnimation.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Shaders\Billboard\billboard.hlsli">
-      <Filter>Shaders\Billboard</Filter>
-    </None>
-    <None Include="Shaders\Retam\Retam.hlsli">
-      <Filter>Shaders\Retam</Filter>
-    </None>
-    <None Include="Shaders\Retam\RetamCb.hlsli">
-      <Filter>Shaders\Retam</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Shaders">
       <UniqueIdentifier>{767eeaa0-ed69-4ebc-ba1d-2eb4237a0f3e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Shaders\RadixSort">
-      <UniqueIdentifier>{5294e7fa-8644-4003-97b3-ae2178513a60}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Shaders\Billboard">
-      <UniqueIdentifier>{4a43b445-6cca-4a78-9764-6353b0c60920}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Lua">
       <UniqueIdentifier>{7735a2c3-61b3-48b5-aac4-0a23792ca05d}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Shaders\Retam">
-      <UniqueIdentifier>{75e63ddd-6424-4053-9aed-d4f3210e6c18}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="Lua\scene.lua">
       <Filter>Lua</Filter>
     </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\treeCB.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\matrix.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\tree.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="growCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="treeVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="treePS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

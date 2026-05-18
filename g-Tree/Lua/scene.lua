@@ -1,51 +1,36 @@
+nLevels = 1
+nBranchTypes = 1
+nTreeModels = 32 * 27
+nInstancesPerTreeModel = 8 * 9
+nMinPiecesPerTree = 33
+nMaxPiecesPerTree = 127
+nAveragePiecesPerTree = (nMinPiecesPerTree + nMaxPiecesPerTree) / 2
+
 multiMeshes = {}
 geometries = {}
 entities = {}
 materials = {}
 shaders = {}
 
-shaders.retamVs = O:Shader(_, {file="Shaders/Retam/retamVS.cso"})
-shaders.retamCollectVs = O:Shader(_, {file="Shaders/Retam/retamCollectVS.cso"})
-shaders.retam256Ps = O:Shader(_, {file="Shaders/Retam/retam256PS.cso"})
-shaders.retam256CollectPs = O:Shader(_, {file="Shaders/Retam/retam256CollectPS.cso"})
-shaders.retamReCollectPs = O:Shader(_, {file="Shaders/Retam/retamReCollectPS.cso"})
-shaders.layDownDepthPs = O:Shader(_, {file="Shaders/Retam/layDownDepthPS.cso"})
+shaders.treeVS = O:Shader(_, {file="treeVS.cso"})
+shaders.treePS = O:Shader(_, {file="treePS.cso"})
 
---geometries.torus = O:IndexedGeometryWithTangentSpace(_, {file="torusNiceUV.obj"})
-geometries.torus = O:IndexedGeometryWithTangentSpace(_, {file="kachu.fbx"})
+geometries.y2 = O:IndexedGeometryWithTangentSpaceAndRigging(_, {file="tree/y0.fbx",
+    instanceCount= 95000
+    --nTreeModels*nInstancesPerTreeModel*nAveragePiecesPerTree
+    })
 
---multiMeshes.pod = O:MultiMeshFromFile(_, {file='torusNiceUV.obj'})
---geometries.chassis = multiMeshes.pod:getGeometry(0, 0)
-
-materials.retam256 = O:Material(_, {rootParameterIndex=3, vs=shaders.retamVs, ps=shaders.retam256Ps}, function(_)
-  O:setTexture2D(_, {file='gayline.png'})
+materials.tree = O:Material(_, {rootParameterIndex=3, vs=shaders.treeVS, ps=shaders.treePS}, function(_)
+  addTreeBuffers()
+  O:setTexture2D(_, {file='tree/bark-alpha-tiling.png'})
 end )
 
-materials.layDownDepth = O:Material(_, {rootParameterIndex=3, vs=shaders.retamVs, ps=shaders.layDownDepthPs}, function(_)
-  O:setTexture2D(_, {file='gayline.png'})
-end )
+O:addGuiMaterial("TreeMaterialCb", materials.tree)
 
-materials.retam256Collect = O:Material(_, {rootParameterIndex=4, vs=shaders.retamCollectVs, ps=shaders.retam256CollectPs, useDepthTest=true}, function(_)
-    O:setTexture2D(_, {file='textures/uvmask.png'})
-    _:setDepthCompLessEqual()
-end )
-
-materials.retamReCollect = O:Material(_, {rootParameterIndex=3, vs=shaders.retamCollectVs, ps=shaders.retamReCollectPs, useDepthTest=true}, function(_)
-    _:setDepthCompLessEqual()
-end )
-
-O:addGuiMaterial("RetamMaterialCb", materials.retam256)
-O:addGuiMaterial("retam256Collect", materials.retam256Collect)
-O:addGuiMaterial("layDownDepth", materials.layDownDepth)
-O:addGuiMaterial("retamReCollect", materials.retamReCollect)
-
-multiMeshes.podRetam256 = O:MultiMesh(_, {}, function(_)
+multiMeshes.tree = O:MultiMesh(_, {}, function(_)
   O:FlipMesh(_, {}, function(_)
-    O:ShadedMesh(_, {mien=0, geometry=geometries.torus, material=materials.retam256})
-    O:ShadedMesh(_, {mien=1, geometry=geometries.torus, material=materials.retam256Collect, renderTargets=1})
-    O:ShadedMesh(_, {mien=2, geometry=geometries.torus, material=materials.layDownDepth, renderTargets=0})
-    O:ShadedMesh(_, {mien=3, geometry=geometries.torus, material=materials.retamReCollect, renderTargets=1})
+    O:ShadedMesh(_, {mien=0, geometry=geometries.y2, material=materials.tree})
   end )
 end )
 
-entities.podRetam256 = O:StaticEntity(_, {multiMesh=multiMeshes.podRetam256, position = { x=20, y=-10, z=0} } )
+entities.forest = O:StaticEntity(_, {multiMesh=multiMeshes.tree, position = { x=0, y=0, z=0} } )

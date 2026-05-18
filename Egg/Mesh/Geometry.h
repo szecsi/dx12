@@ -120,7 +120,9 @@ namespace Egg {
 			D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
 			D3D12_INDEX_BUFFER_VIEW indexBufferView;
 			unsigned int indexCount;
+			
 		public:
+			unsigned int instanceCount;
 
 			IndexedGeometry(ID3D12Device * device, void * data, unsigned int sizeInBytes, unsigned int stride,
 												   void * indexData, unsigned int indexDataSizeInBytes, DXGI_FORMAT indexFormat = DXGI_FORMAT_R32_UINT) {
@@ -179,13 +181,14 @@ namespace Egg {
 				ASSERT(indexDataSizeInBytes % formatSize == 0, "index buffer size must be divisible by its format size");
 
 				indexCount = (indexDataSizeInBytes / formatSize);
+				instanceCount = 1;
 			}
 
 			virtual void Draw(ID3D12GraphicsCommandList * commandList) override {
 				commandList->IASetPrimitiveTopology(topology);
 				commandList->IASetIndexBuffer(&indexBufferView);
 				commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-				commandList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+				commandList->DrawIndexedInstanced(indexCount, instanceCount, 0, 0, 0);
 			}
 
 		GG_ENDCLASS

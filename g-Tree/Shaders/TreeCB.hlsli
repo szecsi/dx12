@@ -14,12 +14,11 @@ TreeMaterialCb
 : register(b0) 
 #endif
 {
-	float2 lineSize;
-	float2 fading;
-	float4 texScale;
-	float4 crossAngle;
+	float4x4 rigging[12];
 	float  stripWidth;
-	float  overdraw;
+	float  p1;
+	float  p2;
+	float  p3;
 }
 #ifndef __HLSL_VERSION
 ;
