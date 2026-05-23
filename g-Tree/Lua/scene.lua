@@ -16,7 +16,7 @@ shaders.treeVS = O:Shader(_, {file="treeVS.cso"})
 shaders.treePS = O:Shader(_, {file="treePS.cso"})
 
 geometries.y2 = O:IndexedGeometryWithTangentSpaceAndRigging(_, {file="tree/y0.fbx",
-    instanceCount= 95000
+    instanceCount= 32*27*256
     --nTreeModels*nInstancesPerTreeModel*nAveragePiecesPerTree
     })
 

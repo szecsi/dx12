@@ -35,21 +35,41 @@ struct VSOutput {
 
 [RootSignature(RootSigTree)]
 VSOutput treeVS(IAOutput iao, uint instanceId : SV_InstanceID) {
-	static const float B = 6.0f * nMinPiecesPerTree - 1.0f;
+/*	static const float B = 6.0f * nMinPiecesPerTree - 1.0f;
 	uint modelIndex = (uint)((-B + sqrt(B * B + 24.0f * (float)instanceId)) * 0.5f);
 	if (((modelIndex + 1u) * (2u * nMinPiecesPerTree + modelIndex / 3u)) / 2u <= instanceId)
 		modelIndex++;
-    //uint modelIndex = instanceId / nMinPiecesPerTree;
+		
     uint modelOffset =
         (
         modelIndex * 
         (2 * nMinPiecesPerTree + (modelIndex - 1) / 3 )
     ) / 2;
-	uint boneOffset = modelOffset * 2 + modelIndex;
-//        (
-//        modelIndex * 
-//        (2 * nMinPiecesPerTree + (modelIndex - 1) / 3 )
-//    ) / 2;
+	while(instanceId < modelOffset){
+        modelIndex--;
+		modelOffset =
+			(
+			modelIndex * 
+			(2 * nMinPiecesPerTree + (modelIndex - 1) / 3 )
+			) / 2;			
+    }
+    uint nextModelOffset =
+        (
+        (modelIndex + 1) * 
+        (2 * nMinPiecesPerTree + modelIndex / 3 )
+    ) / 2;		
+	while(instanceId >= nextModelOffset){
+        modelIndex++;
+		nextModelOffset =
+			(
+			(modelIndex + 1) * 
+			(2 * nMinPiecesPerTree + modelIndex / 3 )
+		) / 2;		
+    }	*/
+
+	uint modelIndex = instanceId / 256;
+    uint modelOffset = modelIndex * 256;
+	uint boneOffset = modelOffset * 2;
 
     float twist = twists.Load(instanceId << 2) * 1.0471975511965977461542144610932;//(6.28318530718 / 6.0);
 		
@@ -98,12 +118,16 @@ VSOutput treeVS(IAOutput iao, uint instanceId : SV_InstanceID) {
 	[loop] while (hn > 0u) { hf /= 3.0f;  haltonZ += (hn % 3u) * hf; hn /= 3u; }
 
 	float4 skinnedPos  = mul(float4(iao.position, 1.0f), skinMat);
-	skinnedPos.x += (haltonX - 0.5f) * 200.0;
-	skinnedPos.y += (haltonZ - 0.5f) * 200.0;
+	skinnedPos.xyz *= (modelIndex % 5) + 1;
+	skinnedPos.x += (haltonX - 0.5f) * 1000.0;
+	skinnedPos.y += (haltonZ - 0.5f) * 1000.0;
 	float4 skinnedNorm = mul(float4(iao.normal,   0.0f), skinMat);
 //		skinnedNorm = float4(iao.normal,   0.0f);
 	float4 skinnedTang = mul(float4(iao.tangent,  0.0f), skinMat);
 
+//	if(instanceId > 8262)
+//			skinnedPos.xyz *= 10.0;
+		
 	VSOutput vso;
 	vso.worldPosition = mul(modelMat,    skinnedPos.yzxw);
 	vso.position      = mul(viewProjMat, vso.worldPosition);
@@ -114,7 +138,8 @@ VSOutput treeVS(IAOutput iao, uint instanceId : SV_InstanceID) {
 				//iao.blendWeights[iao.blendIndices.x],
 				//iao.blendWeights[iao.blendIndices.y],
 				//iao.blendWeights[iao.blendIndices.z],
-				1.0f);
+		1);
+	if(instanceId % 256 == 255) vso.position.w = 0.0;
 	return vso;
 }
 

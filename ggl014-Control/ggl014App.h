@@ -63,7 +63,7 @@ public:
 
 		__super::LoadAssets();
 
-		RunScript("Lua/scene.lua");
+		RunScript("scene.lua");
 
 		UploadResources();
 	}

@@ -123,6 +123,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UVMask", "UVMask\UVMask.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "g-Tree", "g-Tree\g-Tree.vcxproj", "{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "m-PhongTessellation", "m-PhongTessellation\m-PhongTessellation.vcxproj", "{9F8E7D6C-5B4A-3F2E-1D0C-ABCDEF012345}"
+	ProjectSection(ProjectDependencies) = postProject
+		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -318,6 +323,12 @@ Global
 		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Release|x64.Build.0 = Debug|x64
 		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Release|x86.ActiveCfg = Debug|x64
 		{D79483A2-4FB7-4B4B-8E03-CE1AD3789D5A}.Release|x86.Build.0 = Debug|x64
+		{9F8E7D6C-5B4A-3F2E-1D0C-ABCDEF012345}.Debug|x64.ActiveCfg = Debug|x64
+		{9F8E7D6C-5B4A-3F2E-1D0C-ABCDEF012345}.Debug|x64.Build.0 = Debug|x64
+		{9F8E7D6C-5B4A-3F2E-1D0C-ABCDEF012345}.Debug|x86.ActiveCfg = Debug|x64
+		{9F8E7D6C-5B4A-3F2E-1D0C-ABCDEF012345}.Release|x64.ActiveCfg = Debug|x64
+		{9F8E7D6C-5B4A-3F2E-1D0C-ABCDEF012345}.Release|x64.Build.0 = Debug|x64
+		{9F8E7D6C-5B4A-3F2E-1D0C-ABCDEF012345}.Release|x86.ActiveCfg = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

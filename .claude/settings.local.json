@@ -13,7 +13,11 @@
       "Bash(Select-Object -ExpandProperty FullName)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Coding\\\\dx12\\\\g-Retam\" -Recurse -File | Where-Object {$_.Extension -in @\\('.h', '.cpp', '.hlsl', '.hlsli', '.lua', '.vcxproj'\\)} | Select-Object FullName | Sort-Object FullName)",
       "PowerShell(Test-Path \"C:\\\\Coding\\\\dx12\\\\g-Retam\"; if \\(\\(Test-Path \"C:\\\\Coding\\\\dx12\\\\g-Retam\"\\)\\) { Get-ChildItem \"C:\\\\Coding\\\\dx12\\\\g-Retam\" -Recurse | Select-Object FullName })",
-      "Bash(Find C:\\\\Coding\\\\dx12\\\\Egg\\\\Script *)"
+      "Bash(Find C:\\\\Coding\\\\dx12\\\\Egg\\\\Script *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Coding\\\\dx12\" -Directory)",
+      "Bash(xargs grep -l \"Material\\\\|Shader\")",
+      "Bash(mkdir \"C:\\\\Coding\\\\dx12\\\\m-PhongTessellation\")",
+      "Bash(mkdir \"C:\\\\Coding\\\\dx12\\\\m-PhongTessellation\\\\Shaders\")"
     ]
   }
 }

@@ -219,10 +219,10 @@ public:
 	TreeApp() : ScriptedApp(),
 		instanceBuffers {
 			Egg::Compute::RawBuffer(L"y2",
-				nTreeModels * nAveragePieces * 3u)
+				nTreeModels * 256 * 3u)
 		},
-		bonesBuffer(L"bones", nTreeModels * nAveragePieces * 2u/*nChildren*/ * 4u/*rows*/, DXGI_FORMAT_R32G32B32A32_FLOAT),
-		twistsBuffer(L"twists", nTreeModels * nAveragePieces)
+		bonesBuffer(L"bones", nTreeModels * 256 * 2u/*nChildren*/ * 4u/*rows*/, DXGI_FORMAT_R32G32B32A32_FLOAT),
+		twistsBuffer(L"twists", nTreeModels * 256)
 	{}
 
 	virtual void CreateResources() override {
