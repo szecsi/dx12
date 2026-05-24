@@ -125,8 +125,8 @@ VSOutput treeVS(IAOutput iao, uint instanceId : SV_InstanceID) {
 //		skinnedNorm = float4(iao.normal,   0.0f);
 	float4 skinnedTang = mul(float4(iao.tangent,  0.0f), skinMat);
 
-//	if(instanceId > 8262)
-//			skinnedPos.xyz *= 10.0;
+	//if(instanceId == 165888)
+	//	skinnedPos.z -= 100.0;
 		
 	VSOutput vso;
 	vso.worldPosition = mul(modelMat,    skinnedPos.yzxw);
