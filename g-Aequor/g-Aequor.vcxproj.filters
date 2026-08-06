@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="..\Common\imgui\imgui.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\imgui\imgui_draw.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\imgui\imgui_impl_dx12.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\imgui\imgui_impl_win32.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\imgui\imgui_tables.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\imgui\imgui_widgets.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AequorApp.h" />
+    <ClInclude Include="AequorParticleTypes.h" />
+    <ClInclude Include="Common\GpuBuffer.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\DescriptorAllocator.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\DoubleBufferGpuBuffer.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\ComputeShader.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\SpatialGrid.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="Shaders\clearGridCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\countGridCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\sortCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\prefixSumPass1_2CS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\prefixSumPass3CS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\prefixSumPass4_5CS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\permutateCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\rasterLabelCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\occSeedCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\occStepCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\occFinalizeCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\clearParticlesCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\spawnCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\surfaceConstraintCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\quadricConsistencyCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\spacingLambdaCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\spacingDeltaCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\anchorBarrierCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\commitPositionCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\commitTensorCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\copyParticlesCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\quadricPatchBuildCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\quadricPatchLineVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\quadricPatchLinePS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\raymarchVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\raymarchPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\particlePointVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\particlePointPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\AequorConfig.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\PatchSegment.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\AequorCb.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\AequorFrameCb.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\GridUtils.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\OccurrenceField.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\QuadricMath.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\SphKernels.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\AnalyticShape.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\TorusListCb.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\TorusSdf.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{3a7c1e4b-9d5f-4a2e-8c6b-1f0d3e9a7b52}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common">
+      <UniqueIdentifier>{6b8d2f5c-1a4e-4d9b-a3c7-2e5f0b8d4a63}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty">
+      <UniqueIdentifier>{7c9e3a6d-2b5f-4e0c-b4d8-3f6a1c9e5b74}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty\imgui">
+      <UniqueIdentifier>{8d0f4b7e-3c6a-4f1d-c5e9-4a7b2d0f6c85}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

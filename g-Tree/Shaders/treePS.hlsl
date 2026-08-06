@@ -1,5 +1,5 @@
-#include "Shaders/treeCB.hlsli"
-#include "Shaders/tree.hlsli"
+#include "treeCB.hlsli"
+#include "tree.hlsli"
 
 struct VSOutput {
 	float4 position      : SV_Position;

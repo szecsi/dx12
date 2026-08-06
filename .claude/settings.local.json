@@ -17,7 +17,8 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Coding\\\\dx12\" -Directory)",
       "Bash(xargs grep -l \"Material\\\\|Shader\")",
       "Bash(mkdir \"C:\\\\Coding\\\\dx12\\\\m-PhongTessellation\")",
-      "Bash(mkdir \"C:\\\\Coding\\\\dx12\\\\m-PhongTessellation\\\\Shaders\")"
+      "Bash(mkdir \"C:\\\\Coding\\\\dx12\\\\m-PhongTessellation\\\\Shaders\")",
+      "Bash(xargs grep -l \"class App\")"
     ]
   }
 }

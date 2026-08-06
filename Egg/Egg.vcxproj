@@ -39,6 +39,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>false</ConformanceMode>
+      <AdditionalIncludeDirectories>$(SolutionDir)Common\OpenXR\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Lib />
     <FxCompile>
@@ -51,6 +52,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="App.h" />
+    <ClInclude Include="OpenXR\OpenXRApp.h" />
     <ClInclude Include="Cam\Base.h" />
     <ClInclude Include="Cam\FirstPerson.h" />
     <ClInclude Include="Cam\Fixed.h" />
@@ -133,6 +135,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Cam\FirstPerson.cpp" />
+    <ClCompile Include="OpenXR\OpenXRApp.cpp" />
     <ClCompile Include="Cam\Fixed.cpp" />
     <ClCompile Include="Control\ControlApp.cpp" />
     <ClCompile Include="DDS\DDSTextureLoader.cpp" />

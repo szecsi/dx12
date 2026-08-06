@@ -12,11 +12,11 @@ entities = {}
 materials = {}
 shaders = {}
 
-shaders.treeVS = O:Shader(_, {file="treeVS.cso"})
-shaders.treePS = O:Shader(_, {file="treePS.cso"})
+shaders.treeVS = O:Shader(_, {file="Shaders/treeVS.cso"})
+shaders.treePS = O:Shader(_, {file="Shaders/treePS.cso"})
 
 geometries.y2 = O:IndexedGeometryWithTangentSpaceAndRigging(_, {file="tree/y0.fbx",
-    instanceCount= 32*27*256
+    instanceCount= 256*32*27
     --nTreeModels*nInstancesPerTreeModel*nAveragePiecesPerTree
     })
 

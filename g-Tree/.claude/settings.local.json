@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs cat)"
+      "Bash(xargs cat)",
+      "Bash(where msbuild *)",
+      "Read(//c/Program Files/Microsoft Visual Studio/**)",
+      "Read(//c/Program Files \\\\\\(x86\\\\\\)/Microsoft Visual Studio/**)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe\" g-Tree/g-Tree.vcxproj /p:Configuration=Debug /p:Platform=x64 /m /v:minimal)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\18\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\amd64\\\\MSBuild.exe\" \"C:\\\\Coding\\\\dx12\\\\g-Tree\\\\g-Tree.vcxproj\" /p:Configuration=Debug /p:Platform=x64 /m /v:minimal 2>&1 | Select-Object -Last 250)"
     ]
   }
 }

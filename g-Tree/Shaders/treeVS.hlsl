@@ -1,6 +1,6 @@
-#include "Shaders/tree.hlsli"
-#include "Shaders/treeCB.hlsli"
-#include "Shaders/matrix.hlsli"
+#include "tree.hlsli"
+#include "treeCB.hlsli"
+#include "matrix.hlsli"
 
 ByteAddressBuffer pieces  : register(t0);
 Buffer<float4>    bones   : register(t1);
@@ -67,7 +67,8 @@ VSOutput treeVS(IAOutput iao, uint instanceId : SV_InstanceID) {
 		) / 2;		
     }	*/
 
-	uint modelIndex = instanceId / 256;
+	uint treeIndex = instanceId / 256;
+	uint modelIndex = treeIndex%(32*27);
     uint modelOffset = modelIndex * 256;
 	uint boneOffset = modelOffset * 2;
 
@@ -111,14 +112,14 @@ VSOutput treeVS(IAOutput iao, uint instanceId : SV_InstanceID) {
 		iao.blendWeights.z * bbz;
 
 	float haltonX = 0.0f, haltonZ = 0.0f;
-	uint hn = modelIndex + 1u;
+	uint hn = treeIndex + 1u;
 	float hf = 1.0f;
 	[loop] while (hn > 0u) { hf *= 0.5f;  haltonX += (hn & 1u) ? hf : 0.0f; hn >>= 1u; }
-	hn = modelIndex + 1u; hf = 1.0f;
+	hn = treeIndex + 1u; hf = 1.0f;
 	[loop] while (hn > 0u) { hf /= 3.0f;  haltonZ += (hn % 3u) * hf; hn /= 3u; }
 
 	float4 skinnedPos  = mul(float4(iao.position, 1.0f), skinMat);
-	skinnedPos.xyz *= (modelIndex % 5) + 1;
+	skinnedPos.xyz *= (treeIndex % 5) + 1;
 	skinnedPos.x += (haltonX - 0.5f) * 1000.0;
 	skinnedPos.y += (haltonZ - 0.5f) * 1000.0;
 	float4 skinnedNorm = mul(float4(iao.normal,   0.0f), skinMat);

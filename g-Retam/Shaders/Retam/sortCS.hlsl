@@ -77,6 +77,8 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
             localasses[did] = 0xffffffff;
         }
     }
+
+    //TODO: if(iMaxStroke != iMinStroke) skip sorting, just aggregate
         
     for (uint j = 0; j < 32; j += 4)
     {
@@ -186,16 +188,16 @@ void sortCS(uint3 ltid : SV_GroupThreadID, uint3 gid : SV_GroupID)
         }
     }
     
-    GroupMemoryBarrierWithGroupSync();
-    // now it is sorted
-        ////  verify sorting    
-            for (int did = 0; did < groupDivisor; did++){
-                uint rowst = (tid.y + did * nRowsPerPage / groupDivisor) << 5;
-                uint flatid = rowst | tid.x;
-                debugBuffer.Store( (gid.x * nRowsPerPage * rowSize + flatid) << 2, 
-                    s[flatid]);
-            }
- //        return;
+//    GroupMemoryBarrierWithGroupSync();
+//    // now it is sorted
+//        ////  verify sorting    
+//            for (int did = 0; did < groupDivisor; did++){
+//                uint rowst = (tid.y + did * nRowsPerPage / groupDivisor) << 5;
+//                uint flatid = rowst | tid.x;
+//                debugBuffer.Store( (gid.x * nRowsPerPage * rowSize + flatid) << 2, 
+//                    s[flatid]);
+//            }
+// //        return;
     
     //let's number the strokes for each sid, we can do this by looking at the localasses values, since they are sorted by sid. We can write out the stroke counts to a RWBuffer<int> using atomic adds, and we can write out the designs to a RWBuffer<float4> using the fragment data. We just need to make sure to only write out one design per sid, which we can do by checking if the next localasses value has a different sid or if we are at the end of the group.
     GroupMemoryBarrierWithGroupSync();

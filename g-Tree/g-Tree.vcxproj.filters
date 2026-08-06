@@ -24,6 +24,9 @@
     <None Include="Shaders\treeCB.hlsli">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="Shaders\billboardTree.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
     <None Include="Shaders\matrix.hlsli">
       <Filter>Shaders</Filter>
     </None>
@@ -32,13 +35,25 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="growCS.hlsl">
+    <FxCompile Include="Shaders\spawnCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="treeVS.hlsl">
+    <FxCompile Include="Shaders\growCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="treePS.hlsl">
+    <FxCompile Include="Shaders\treePS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\treeVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\billboardBakeVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\billboardTreeVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\billboardTreePS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
   </ItemGroup>

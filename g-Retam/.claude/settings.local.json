@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(xargs grep *)",
-      "Bash(xargs wc *)"
+      "Bash(xargs wc *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Coding\\\\dx12\\\\Egg\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)"
     ]
   }
 }

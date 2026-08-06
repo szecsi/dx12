@@ -16,7 +16,7 @@ TreeMaterialCb
 {
 	float4x4 rigging[12];
 	float  stripWidth;
-	float  p1;
+	float  time;
 	float  p2;
 	float  p3;
 }
