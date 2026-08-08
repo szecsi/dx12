@@ -16,10 +16,15 @@
 // partners under its new label, and its old same-label neighbors still
 // think they're due to receive diffusion contributions from it. Per the
 // user-confirmed design: rather than a full historical ledger, instantly
-// redistribute F's CURRENT MTV (unchanged in value) in equal shares
-// subtracted from its old-label neighbors and added to its new-label
-// neighbors -- self-heals over subsequent rounds if imprecise, since
-// diffusion runs every round regardless.
+// redistribute F's CURRENT MTV (unchanged in value, F itself is never
+// touched by this mechanism) in equal shares added to its OLD-label
+// neighbors (the group F is leaving absorbs back what F had accumulated as
+// a member, so that group's total doesn't shrink just because a member
+// departed) and subtracted from its NEW-label neighbors (a small
+// compensating draw, since F arrives already carrying its own value) --
+// self-heals over subsequent rounds if imprecise, since diffusion runs
+// every round regardless. mtvDiffuseCS.hlsl applies the actual +/-; this
+// file only computes the per-neighbor share magnitudes (MTV[F]/count).
 #define MtvFlipDetectSig "RootFlags(0)," \
     "UAV(u0)," \
     "UAV(u1)," \

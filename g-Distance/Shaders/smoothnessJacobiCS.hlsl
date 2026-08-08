@@ -17,6 +17,10 @@
 // ||gradA-gradB||^2 where grad = (grad phi_i - grad phi_j) is the tet's
 // constant (affine-interpolation) gradient.
 //
+// Also records NodeSmoothPressure (this term's own Newton step in
+// isolation, for mtvDiffuseCS.hlsl's SmoothPressureRate term -- see
+// AccumulatePair's smoothGrad/smoothDiag shadow accumulators below).
+//
 // Gathered per node via NodeIncidentTets: for each tet touching this node,
 // all 4 of its face-neighbors (fanNext, fanPrev, and the 2 cross-neighbors)
 // are candidate pairs. Each candidate pair (tetX,P) is processed by exactly
@@ -57,7 +61,8 @@
     "UAV(u6)," \
     "UAV(u7)," \
     "UAV(u8)," \
-    "UAV(u9)"
+    "UAV(u9)," \
+    "UAV(u10)"
 
 RWStructuredBuffer<uint4>  Tets : register(u0);
 RWStructuredBuffer<uint2>  TetInterfacePair : register(u1);
@@ -72,6 +77,11 @@ RWStructuredBuffer<float>  NodeMTV : register(u8);
 // written every sweep -- mtvDiffuseCS.hlsl reads the round's last-written
 // value for the volume-pushback term (VolumePushbackRate, DistanceCb.hlsli).
 RWStructuredBuffer<float>  NodeCurrentVolume : register(u9);
+// This node's own winning-label Term-1-ONLY Newton step ( -smoothGrad/
+// smoothDiag, clamped to +-MaxPotentialStep), written every sweep --
+// mtvDiffuseCS.hlsl reads it for the SmoothPressureRate term, a more direct
+// (leading, not lagging) alternative to NodeCurrentVolume above.
+RWStructuredBuffer<float>  NodeSmoothPressure : register(u10);
 
 int FindSlot(uint node, uint label)
 {
@@ -107,8 +117,12 @@ float3 TetFieldGrad(uint4 tetNodes, float3 w[4], uint label)
 
 // Accumulates node's gradient/diagonal contribution from the smoothness
 // term of exactly one tet-pair (tetA,tetB) -- called at most once per pair
-// per node (see the dedup rule in the caller).
-void AccumulatePair(uint node, uint tetA, uint tetB, inout float grad[8], inout float diag[8])
+// per node (see the dedup rule in the caller). Dual-writes the SAME values
+// into smoothGrad/smoothDiag, a Term-1-only shadow of grad/diag, so the
+// caller can isolate "how hard is smoothness alone pulling this node" from
+// the combined total (see NodeSmoothPressure below).
+void AccumulatePair(uint node, uint tetA, uint tetB, inout float grad[8], inout float diag[8],
+    inout float smoothGrad[8], inout float smoothDiag[8])
 {
     uint2 pairA = TetInterfacePair[tetA];
     uint2 pairB = TetInterfacePair[tetB];
@@ -153,10 +167,14 @@ void AccumulatePair(uint node, uint tetA, uint tetB, inout float grad[8], inout 
     if (si >= 0) {
         grad[si] += 2.0 * SmoothnessWeight * dK;
         diag[si] += 2.0 * SmoothnessWeight * kk;
+        smoothGrad[si] += 2.0 * SmoothnessWeight * dK;
+        smoothDiag[si] += 2.0 * SmoothnessWeight * kk;
     }
     if (sj >= 0) {
         grad[sj] += -2.0 * SmoothnessWeight * dK;
         diag[sj] += 2.0 * SmoothnessWeight * kk;
+        smoothGrad[sj] += -2.0 * SmoothnessWeight * dK;
+        smoothDiag[sj] += 2.0 * SmoothnessWeight * kk;
     }
 }
 
@@ -178,6 +196,8 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     float diag[8] = { 0,0,0,0,0,0,0,0 };
     float volSum[8] = { 0,0,0,0,0,0,0,0 };
     float kSum[8] = { 0,0,0,0,0,0,0,0 };
+    float smoothGrad[8] = { 0,0,0,0,0,0,0,0 };
+    float smoothDiag[8] = { 0,0,0,0,0,0,0,0 };
 
     // Term 3: sum-to-0 regularizer -- pushes the SUM of this node's valid
     // candidate potentials toward 0, instead of shrinking each slot toward
@@ -220,32 +240,54 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
         uint tetX = NodeIncidentTets[node * MAX_INCIDENT_TETS + e];
 
         // Term 4 gather: this tet's contribution to node's reconstructed
-        // volume, if it currently has an active interface. Runs once per
-        // incident tet (not deduped/paired like term 1 -- each tet's own
-        // volume belongs to it alone, no shared-pair bookkeeping needed).
+        // volume. Runs once per incident tet (not deduped/paired like term 1
+        // -- each tet's own volume belongs to it alone, no shared-pair
+        // bookkeeping needed). Two cases:
+        //  - Active interface (pr.x != pr.y): the tet's positive/negative
+        //    split is computed via TetPositiveSideVolume, and each side's
+        //    volume is divided among its corners proportionally by
+        //    potential (myShare = VSide*phi/sumSide) -- equivalent to
+        //    finding, for each pair of same-side corners, the zero-crossing
+        //    of a virtual field where one corner's potential is sign-
+        //    flipped (t* = phiA/(phiA+phiB) for two corners A,B, which is
+        //    exactly what this proportional formula reduces to).
+        //  - Uniform tet (pr.x == pr.y, assignInterfacePairsCS.hlsl's
+        //    "labelI==labelJ" no-active-interface sentinel): all 4 corners
+        //    currently agree on one label, so there's no crossing to find --
+        //    the WHOLE tet belongs to that shared label, and gets split
+        //    among its 4 corners via the SAME proportional formula (VSide
+        //    is simply the full Vtet here). Without this case, a uniform
+        //    tet contributed NOTHING to any of its corners' CurrentVolume,
+        //    so a node deep inside (or otherwise surrounded by) a
+        //    well-agreed same-label region could read CurrentVolume==0 even
+        //    though it legitimately owns real volume -- silently starving
+        //    VolumePushbackRate's target for exactly the nodes that should
+        //    have the LEAST reason to shrink.
         {
             uint2 pr = TetInterfacePair[tetX];
-            if (pr.x != pr.y) {
-                uint li = pr.x, lj = pr.y;
-                uint4 tX = Tets[tetX];
-                uint vertsX[4] = { tX.x, tX.y, tX.z, tX.w };
+            uint4 tX = Tets[tetX];
+            uint vertsX[4] = { tX.x, tX.y, tX.z, tX.w };
+            int myCorner = -1;
+            for (uint c0 = 0; c0 < 4; c0++) if (vertsX[c0] == node) myCorner = (int)c0;
+
+            if (myCorner >= 0) {
                 float3 PX[4] = {
                     NodeWorldPos(vertsX[0]), NodeWorldPos(vertsX[1]),
                     NodeWorldPos(vertsX[2]), NodeWorldPos(vertsX[3])
                 };
-                float phiLi[4], phiLj[4], g[4];
-                int myCorner = -1;
-                for (uint c = 0; c < 4; c++) {
-                    phiLi[c] = GetPotBySlot(vertsX[c], FindSlot(vertsX[c], li));
-                    phiLj[c] = GetPotBySlot(vertsX[c], FindSlot(vertsX[c], lj));
-                    g[c] = phiLi[c] - phiLj[c];
-                    if (vertsX[c] == node) myCorner = (int)c;
-                }
-                if (myCorner >= 0) {
+                const float epsFloor = 1.0e-4;
+
+                if (pr.x != pr.y) {
+                    uint li = pr.x, lj = pr.y;
+                    float phiLi[4], phiLj[4], g[4];
+                    for (uint c = 0; c < 4; c++) {
+                        phiLi[c] = GetPotBySlot(vertsX[c], FindSlot(vertsX[c], li));
+                        phiLj[c] = GetPotBySlot(vertsX[c], FindSlot(vertsX[c], lj));
+                        g[c] = phiLi[c] - phiLj[c];
+                    }
                     bool posSideX[4]; uint countPosX; float Vtet, VPos;
                     TetPositiveSideVolume(PX, g, posSideX, countPosX, Vtet, VPos);
 
-                    const float epsFloor = 1.0e-4;
                     bool mySide = posSideX[myCorner];
                     float VSide = mySide ? VPos : (Vtet - VPos);
                     uint sideLabel = mySide ? li : lj;
@@ -263,6 +305,25 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
                         float K = VSide / sumSide;
                         volSum[mySlot] += myShare;
                         kSum[mySlot] += K;
+                    }
+                } else {
+                    uint sharedLabel = pr.x;
+                    float phiShared[4];
+                    for (uint c3 = 0; c3 < 4; c3++) {
+                        phiShared[c3] = GetPotBySlot(vertsX[c3], FindSlot(vertsX[c3], sharedLabel));
+                    }
+                    float3 e1 = PX[1] - PX[0], e2 = PX[2] - PX[0], e3 = PX[3] - PX[0];
+                    float Vtet = abs(dot(e1, cross(e2, e3))) / 6.0;
+
+                    float sumAll = 0.0;
+                    for (uint c4 = 0; c4 < 4; c4++) sumAll += max(phiShared[c4], epsFloor);
+
+                    int mySlot2 = FindSlot(node, sharedLabel);
+                    if (mySlot2 >= 0 && sumAll > epsFloor) {
+                        float myShare2 = Vtet * max(phiShared[myCorner], epsFloor) / sumAll;
+                        float K2 = Vtet / sumAll;
+                        volSum[mySlot2] += myShare2;
+                        kSum[mySlot2] += K2;
                     }
                 }
             }
@@ -284,7 +345,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             if (P == SENTINEL_LABEL) continue;
 
             if (tetX < P) {
-                AccumulatePair(node, tetX, P, grad, diag);
+                AccumulatePair(node, tetX, P, grad, diag, smoothGrad, smoothDiag);
             } else if (tetX > P) {
                 // Only process here if P's own forward pass won't already
                 // cover this pair -- i.e. P is not also one of my own
@@ -292,7 +353,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
                 // this same loop from a node that had P first, or already
                 // was, via P<tetX there).
                 if (!IsInMyIncidentList(node, incCount, P)) {
-                    AccumulatePair(node, P, tetX, grad, diag);
+                    AccumulatePair(node, P, tetX, grad, diag, smoothGrad, smoothDiag);
                 }
             }
         }
@@ -316,7 +377,11 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     // volume-pushback term. "Own winning label" here means the same argmax
     // TopLabelOf uses elsewhere -- not necessarily an active-interface slot,
     // so volSum for that slot may legitimately be 0 (no active pair touched
-    // it this sweep).
+    // it this sweep). Also records NodeSmoothPressure: the Newton step Term
+    // 1 ALONE would take on that same slot -- clamped to +-MaxPotentialStep
+    // so it lands in the same scale as a real potential update instead of
+    // smoothness's naturally huge raw gradient magnitude (the same scale
+    // mismatch that made a small VolumeWeight a no-op, see project memory).
     {
         int ownSlot = -1;
         float ownPot = -1.0e30;
@@ -326,6 +391,10 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             if (p > ownPot) { ownPot = p; ownSlot = (int)s5; }
         }
         NodeCurrentVolume[node] = (ownSlot >= 0) ? volSum[ownSlot] : 0.0;
+        float rawPressure = (ownSlot >= 0)
+            ? (-smoothGrad[ownSlot] / (smoothDiag[ownSlot] + JacobiDiagEpsilon))
+            : 0.0;
+        NodeSmoothPressure[node] = clamp(rawPressure, -MaxPotentialStep, MaxPotentialStep);
     }
 
     // Term 2: margin hinge. A-nodes: own/input label (slot 0) must stay

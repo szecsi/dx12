@@ -57,7 +57,18 @@ DistanceCb
     // non-uniform) smoothness-driven distribution instead of fighting to
     // match a flat diffused average everywhere.
     float VolumePushbackRate;
-    float _pad2b;
+    // mtvDiffuseCS.hlsl: a more DIRECT alternative/complement to
+    // VolumePushbackRate -- instead of reacting to CurrentVolume (a lagging
+    // outcome of last round's fully-resolved solve, one round stale), this
+    // reads NodeSmoothPressure (written by smoothnessJacobiCS.hlsl: the
+    // Newton step Term 1 ALONE would take on this node's own winning label
+    // this sweep, clamped to +-MaxPotentialStep so it's already in the same
+    // scale as a real potential update instead of smoothness's naturally
+    // huge raw gradient magnitude) and nudges MTV to go WITH whatever
+    // direction smoothness is currently pulling, rather than waiting a full
+    // round to see where the tug-of-war ended up. Same diffCount>0 gate, so
+    // still fully inert for an isolated node.
+    float SmoothPressureRate;
 }
 #ifndef __HLSL_VERSION
 ;

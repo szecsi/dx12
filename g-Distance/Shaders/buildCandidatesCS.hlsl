@@ -25,14 +25,15 @@
 // BCount -- unused slots are written as SENTINEL_LABEL, masked out by every
 // consumer (FindSlot-style helpers never match SENTINEL_LABEL).
 #define BuildCandidatesSig "RootFlags(0)," \
-    "RootConstants(num32BitConstants=1, b1)," \
+    "RootConstants(num32BitConstants=2, b1)," \
     "CBV(b0)," \
     "UAV(u0)," \
     "UAV(u1)," \
     "UAV(u2)"
 
 cbuffer ModeConsts : register(b1) {
-    uint Mode; // 0 = A-nodes, 1 = B-nodes
+    uint Mode;          // 0 = A-nodes, 1 = B-nodes
+    uint NeutralBSeed;  // 1 = B-nodes get pure jitter (no majority-vote seed slot), see GUI checkbox
 };
 
 RWStructuredBuffer<uint>  RasterLabel : register(u0);
@@ -102,18 +103,38 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
             }
         }
 
-        // B has no ground truth to fix as slot 0, but it still needs a
-        // decisive starting point, same reasoning as A's OwnLabelSeed:
-        // starting every candidate near a jittered 0 meant the margin hinge
-        // (smoothnessJacobiCS.hlsl term 2) had to separate them from
-        // scratch using only MaxPotentialStep-clamped steps -- far too slow
-        // to reach MarginTarget within a practical iteration count (this
-        // was confirmed directly: a debug readback found EVERY multi-
-        // candidate B-node still sitting at a near-zero gap after a full
-        // Reinitialize run). Seed the majority-vote label among the node's
-        // 8 A-corners instead -- a well-informed guess the optimization is
-        // still fully free to overturn later, exactly like A's seed.
-        for (uint s = 1; s < count; s++) if (freq[s] > freq[seedSlot]) seedSlot = s;
+        // B has no ground truth to fix as slot 0. Two seeding strategies,
+        // toggled by NeutralBSeed (GUI checkbox, default ON):
+        //   - Majority-vote seed (NeutralBSeed=0, the original strategy):
+        //     give the majority-vote label among the node's up-to-8
+        //     A-corners an OwnLabelSeed-strength start, same reasoning as
+        //     A's OwnLabelSeed -- starting every candidate near a jittered 0
+        //     meant the margin hinge (smoothnessJacobiCS.hlsl term 2) had to
+        //     separate them from scratch using only MaxPotentialStep-
+        //     clamped steps -- far too slow to reach MarginTarget within a
+        //     practical iteration count (confirmed directly: a debug
+        //     readback found EVERY multi-candidate B-node still sitting at
+        //     a near-zero gap after a full Reinitialize run). Well-informed,
+        //     but strongly confident in whichever label locally dominates --
+        //     including immediately AGAINST an isolated single-voxel
+        //     feature, since 7 of 8 corners of any cube touching it are
+        //     background. Confirmed via direct derivation this is why an
+        //     isolated point's CurrentVolume never reaches its geometric
+        //     ceiling (1 full unit under symmetric, unforced conditions) --
+        //     B's confident opposition cuts the crossing back before
+        //     VolumeWeight ever gets a chance to push it there.
+        //   - Neutral seed (NeutralBSeed=1, default): every B candidate
+        //     gets pure jitter, no majority-vote boost at all -- slower to
+        //     separate via the margin hinge (the original problem this was
+        //     built to avoid), but lets an isolated feature's B-neighbors
+        //     actually start near the "B ~ 0 weight" condition its natural
+        //     volume ceiling assumes, instead of starting pre-committed
+        //     against it.
+        if (NeutralBSeed == 0) {
+            for (uint s = 1; s < count; s++) if (freq[s] > freq[seedSlot]) seedSlot = s;
+        } else {
+            seedSlot = 8; // no valid slot index -- isSeed below never matches
+        }
     }
 
     for (uint s = 0; s < 8; s++) {

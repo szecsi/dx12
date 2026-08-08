@@ -140,6 +140,12 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "g-Aequor", "g-Aequor\g-Aequ
 		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "g-Distance", "g-Distance\g-Distance.vcxproj", "{B2C3D4E5-6F7A-4B89-ACDE-F01234567890}"
+	ProjectSection(ProjectDependencies) = postProject
+		{371B9FA9-4C90-4AC6-A123-ACED756D6C77} = {371B9FA9-4C90-4AC6-A123-ACED756D6C77}
+		{C235BD63-6E30-4F13-A0FF-C5D5FCA38558} = {C235BD63-6E30-4F13-A0FF-C5D5FCA38558}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -355,6 +361,13 @@ Global
 		{A1B2C3D4-5E6F-4A78-9ABC-DEF012345678}.Release|x64.Build.0 = Debug|x64
 		{A1B2C3D4-5E6F-4A78-9ABC-DEF012345678}.Release|x86.ActiveCfg = Debug|x64
 		{A1B2C3D4-5E6F-4A78-9ABC-DEF012345678}.Release|x86.Build.0 = Debug|x64
+		{B2C3D4E5-6F7A-4B89-ACDE-F01234567890}.Debug|x64.ActiveCfg = Debug|x64
+		{B2C3D4E5-6F7A-4B89-ACDE-F01234567890}.Debug|x64.Build.0 = Debug|x64
+		{B2C3D4E5-6F7A-4B89-ACDE-F01234567890}.Debug|x86.ActiveCfg = Debug|x64
+		{B2C3D4E5-6F7A-4B89-ACDE-F01234567890}.Release|x64.ActiveCfg = Debug|x64
+		{B2C3D4E5-6F7A-4B89-ACDE-F01234567890}.Release|x64.Build.0 = Debug|x64
+		{B2C3D4E5-6F7A-4B89-ACDE-F01234567890}.Release|x86.ActiveCfg = Debug|x64
+		{B2C3D4E5-6F7A-4B89-ACDE-F01234567890}.Release|x86.Build.0 = Debug|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
