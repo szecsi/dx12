@@ -73,6 +73,7 @@
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\rasterLabelCS.hlsl" />
+    <FxCompile Include="Shaders\computeConnectingNodesCS.hlsl" />
     <FxCompile Include="Shaders\buildTetsCS.hlsl" />
     <FxCompile Include="Shaders\clearIncidentCS.hlsl" />
     <FxCompile Include="Shaders\buildIncidentCS.hlsl" />
@@ -82,10 +83,6 @@
     <FxCompile Include="Shaders\smoothnessJacobiCS.hlsl" />
     <FxCompile Include="Shaders\commitPotentialCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl" />
-    <FxCompile Include="Shaders\mtvSeedCS.hlsl" />
-    <FxCompile Include="Shaders\mtvFlipDetectCS.hlsl" />
-    <FxCompile Include="Shaders\mtvDiffuseCS.hlsl" />
-    <FxCompile Include="Shaders\mtvCommitCS.hlsl" />
     <FxCompile Include="Shaders\raymarchVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>

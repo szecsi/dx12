@@ -44,31 +44,15 @@ DistanceCb
     // smoothnessJacobiCS.hlsl.
     float MaxPotentialStep;
 
-    // Row 2 -- volume conservation (MTV = Momentary Target Volume)
-    float VolumeWeight;         // energy term 4 weight: pushes each node's reconstructed volume toward its MTV
-    float MTVDiffusionRate;     // mtvDiffuseCS.hlsl: how fast MTV equalizes between same-label neighbors each round
-    // mtvDiffuseCS.hlsl: lets a node's ACTUAL reconstructed volume
-    // (NodeCurrentVolume, written by smoothnessJacobiCS's Term 4 every
-    // sweep) pull its own MTV target toward whatever it's already
-    // achieving, gated by the same diffCount>0 condition as the plain
-    // equalization term above -- so it has NO effect on an isolated node
-    // (nothing to diffuse with, full protection preserved), but lets a
-    // well-connected region's target relax toward its natural (possibly
-    // non-uniform) smoothness-driven distribution instead of fighting to
-    // match a flat diffused average everywhere.
-    float VolumePushbackRate;
-    // mtvDiffuseCS.hlsl: a more DIRECT alternative/complement to
-    // VolumePushbackRate -- instead of reacting to CurrentVolume (a lagging
-    // outcome of last round's fully-resolved solve, one round stale), this
-    // reads NodeSmoothPressure (written by smoothnessJacobiCS.hlsl: the
-    // Newton step Term 1 ALONE would take on this node's own winning label
-    // this sweep, clamped to +-MaxPotentialStep so it's already in the same
-    // scale as a real potential update instead of smoothness's naturally
-    // huge raw gradient magnitude) and nudges MTV to go WITH whatever
-    // direction smoothness is currently pulling, rather than waiting a full
-    // round to see where the tug-of-war ended up. Same diffCount>0 gate, so
-    // still fully inert for an isolated node.
-    float SmoothPressureRate;
+    // Row 2 -- volume floor (energy term 4, connecting nodes only -- see
+    // smoothnessJacobiCS.hlsl). Supersedes the earlier MTV-diffusion system
+    // (removed entirely: it did nothing measurable for the torus and was
+    // fully subsumed, for the cases it actually mattered, by connecting-
+    // node pinning).
+    float VolumeWeight;  // term 4 weight: how hard to push a connecting node's volume back up when it dips below VolumeFloor
+    float VolumeFloor;   // the floor itself, in tet-volume units (default 1 -- see the isolated-point geometric derivation in project memory)
+    float _pad2a;
+    float _pad2b;
 }
 #ifndef __HLSL_VERSION
 ;

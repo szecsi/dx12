@@ -17,10 +17,6 @@
 // ||gradA-gradB||^2 where grad = (grad phi_i - grad phi_j) is the tet's
 // constant (affine-interpolation) gradient.
 //
-// Also records NodeSmoothPressure (this term's own Newton step in
-// isolation, for mtvDiffuseCS.hlsl's SmoothPressureRate term -- see
-// AccumulatePair's smoothGrad/smoothDiag shadow accumulators below).
-//
 // Gathered per node via NodeIncidentTets: for each tet touching this node,
 // all 4 of its face-neighbors (fanNext, fanPrev, and the 2 cross-neighbors)
 // are candidate pairs. Each candidate pair (tetX,P) is processed by exactly
@@ -42,14 +38,11 @@
 // potentials toward 0 (not each slot independently) -- see its own comment
 // below for why. Also bounds dynamic range for the eventual (deferred)
 // 8-bit quantization.
-// Term 4 (volume conservation): pushes this node's reconstructed volume --
-// summed, per incident tet, as a proportional share of that tet's winning-
-// side sub-volume (TetPositiveSideVolume, DistanceLattice.hlsli) -- toward
-// its Momentary Target Volume (NodeMTV, mtvSeedCS/mtvDiffuseCS/mtvCommitCS).
-// Per-tet VPos and the same-side potential sum are frozen at this sweep's
-// snapshot (same Gauss-Newton-style linearization as every other term
-// here), giving a linear local model for the total volume in terms of this
-// node's own unknowns.
+// Term 4 (volume floor, connecting nodes only): see the term's own comment
+// below -- a one-sided hinge, not a target, replacing the earlier
+// MTV-diffusion system entirely (removed: mtvSeedCS/mtvFlipDetectCS/
+// mtvDiffuseCS/mtvCommitCS, NodeMTV, NodeSmoothPressure -- superseded by
+// connecting-node pinning, which is what actually mattered).
 #define SmoothnessSig "RootFlags(0)," \
     "CBV(b0)," \
     "UAV(u0)," \
@@ -61,8 +54,7 @@
     "UAV(u6)," \
     "UAV(u7)," \
     "UAV(u8)," \
-    "UAV(u9)," \
-    "UAV(u10)"
+    "UAV(u9)"
 
 RWStructuredBuffer<uint4>  Tets : register(u0);
 RWStructuredBuffer<uint2>  TetInterfacePair : register(u1);
@@ -72,16 +64,13 @@ RWStructuredBuffer<float>  NodePotentialScratch : register(u4);
 RWStructuredBuffer<uint>   NodeIncidentCount : register(u5);
 RWStructuredBuffer<uint>   NodeIncidentTets : register(u6);
 RWStructuredBuffer<uint2>  TetFaceNeighbors : register(u7);
-RWStructuredBuffer<float>  NodeMTV : register(u8);
 // This node's own winning-label reconstructed volume (volSum[ownSlot]),
-// written every sweep -- mtvDiffuseCS.hlsl reads the round's last-written
-// value for the volume-pushback term (VolumePushbackRate, DistanceCb.hlsli).
-RWStructuredBuffer<float>  NodeCurrentVolume : register(u9);
-// This node's own winning-label Term-1-ONLY Newton step ( -smoothGrad/
-// smoothDiag, clamped to +-MaxPotentialStep), written every sweep --
-// mtvDiffuseCS.hlsl reads it for the SmoothPressureRate term, a more direct
-// (leading, not lagging) alternative to NodeCurrentVolume above.
-RWStructuredBuffer<float>  NodeSmoothPressure : register(u10);
+// written every sweep -- read by the Picked Tet debug panel and by Term 4's
+// own floor check below.
+RWStructuredBuffer<float>  NodeCurrentVolume : register(u8);
+// ACount-sized (computeConnectingNodesCS.hlsl) -- only ever index with
+// node<ACount.
+RWStructuredBuffer<uint>   NodeIsConnecting : register(u9);
 
 int FindSlot(uint node, uint label)
 {
@@ -117,12 +106,8 @@ float3 TetFieldGrad(uint4 tetNodes, float3 w[4], uint label)
 
 // Accumulates node's gradient/diagonal contribution from the smoothness
 // term of exactly one tet-pair (tetA,tetB) -- called at most once per pair
-// per node (see the dedup rule in the caller). Dual-writes the SAME values
-// into smoothGrad/smoothDiag, a Term-1-only shadow of grad/diag, so the
-// caller can isolate "how hard is smoothness alone pulling this node" from
-// the combined total (see NodeSmoothPressure below).
-void AccumulatePair(uint node, uint tetA, uint tetB, inout float grad[8], inout float diag[8],
-    inout float smoothGrad[8], inout float smoothDiag[8])
+// per node (see the dedup rule in the caller).
+void AccumulatePair(uint node, uint tetA, uint tetB, inout float grad[8], inout float diag[8])
 {
     uint2 pairA = TetInterfacePair[tetA];
     uint2 pairB = TetInterfacePair[tetB];
@@ -167,14 +152,10 @@ void AccumulatePair(uint node, uint tetA, uint tetB, inout float grad[8], inout 
     if (si >= 0) {
         grad[si] += 2.0 * SmoothnessWeight * dK;
         diag[si] += 2.0 * SmoothnessWeight * kk;
-        smoothGrad[si] += 2.0 * SmoothnessWeight * dK;
-        smoothDiag[si] += 2.0 * SmoothnessWeight * kk;
     }
     if (sj >= 0) {
         grad[sj] += -2.0 * SmoothnessWeight * dK;
         diag[sj] += 2.0 * SmoothnessWeight * kk;
-        smoothGrad[sj] += -2.0 * SmoothnessWeight * dK;
-        smoothDiag[sj] += 2.0 * SmoothnessWeight * kk;
     }
 }
 
@@ -196,8 +177,6 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     float diag[8] = { 0,0,0,0,0,0,0,0 };
     float volSum[8] = { 0,0,0,0,0,0,0,0 };
     float kSum[8] = { 0,0,0,0,0,0,0,0 };
-    float smoothGrad[8] = { 0,0,0,0,0,0,0,0 };
-    float smoothDiag[8] = { 0,0,0,0,0,0,0,0 };
 
     // Term 3: sum-to-0 regularizer -- pushes the SUM of this node's valid
     // candidate potentials toward 0, instead of shrinking each slot toward
@@ -234,7 +213,9 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     }
 
     // Term 1: smoothness, gathered over this node's incident tets and all 4
-    // of each one's face-neighbors (2 fan + 2 cross-orientation).
+    // of each one's face-neighbors (2 fan + 2 cross-orientation). Also
+    // gathers Term 4's per-tet volume contribution (see below) in the same
+    // pass, since both need the same incident-tet list.
     uint incCount = min(NodeIncidentCount[node], MAX_INCIDENT_TETS);
     for (uint e = 0; e < incCount; e++) {
         uint tetX = NodeIncidentTets[node * MAX_INCIDENT_TETS + e];
@@ -257,12 +238,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
         //    the WHOLE tet belongs to that shared label, and gets split
         //    among its 4 corners via the SAME proportional formula (VSide
         //    is simply the full Vtet here). Without this case, a uniform
-        //    tet contributed NOTHING to any of its corners' CurrentVolume,
-        //    so a node deep inside (or otherwise surrounded by) a
-        //    well-agreed same-label region could read CurrentVolume==0 even
-        //    though it legitimately owns real volume -- silently starving
-        //    VolumePushbackRate's target for exactly the nodes that should
-        //    have the LEAST reason to shrink.
+        //    tet contributed NOTHING to any of its corners' CurrentVolume.
         {
             uint2 pr = TetInterfacePair[tetX];
             uint4 tX = Tets[tetX];
@@ -345,7 +321,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             if (P == SENTINEL_LABEL) continue;
 
             if (tetX < P) {
-                AccumulatePair(node, tetX, P, grad, diag, smoothGrad, smoothDiag);
+                AccumulatePair(node, tetX, P, grad, diag);
             } else if (tetX > P) {
                 // Only process here if P's own forward pass won't already
                 // cover this pair -- i.e. P is not also one of my own
@@ -353,48 +329,57 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
                 // this same loop from a node that had P first, or already
                 // was, via P<tetX there).
                 if (!IsInMyIncidentList(node, incCount, P)) {
-                    AccumulatePair(node, P, tetX, grad, diag, smoothGrad, smoothDiag);
+                    AccumulatePair(node, P, tetX, grad, diag);
                 }
             }
         }
     }
 
-    // Term 4: apply the volume-conservation gradient accumulated during the
-    // gather above. volSum[s]/kSum[s] are this node's TOTAL reconstructed
-    // volume/sensitivity for candidate label s, summed across every
-    // incident tet where s was the winning side -- linear in phi(node,s)
-    // under this sweep's frozen-VPos/frozen-sumSide approximation, so the
-    // (volSum-MTV)^2 loss contributes exactly like every other quadratic
-    // term in this file.
-    for (uint s4 = 0; s4 < 8; s4++) {
-        if (kSum[s4] == 0.0) continue;
-        float residual = volSum[s4] - NodeMTV[node];
-        grad[s4] += 2.0 * VolumeWeight * residual * kSum[s4];
-        diag[s4] += 2.0 * VolumeWeight * kSum[s4] * kSum[s4];
-    }
-
-    // Record this node's own current winning-label volume for mtvDiffuseCS's
-    // volume-pushback term. "Own winning label" here means the same argmax
-    // TopLabelOf uses elsewhere -- not necessarily an active-interface slot,
-    // so volSum for that slot may legitimately be 0 (no active pair touched
-    // it this sweep). Also records NodeSmoothPressure: the Newton step Term
-    // 1 ALONE would take on that same slot -- clamped to +-MaxPotentialStep
-    // so it lands in the same scale as a real potential update instead of
-    // smoothness's naturally huge raw gradient magnitude (the same scale
-    // mismatch that made a small VolumeWeight a no-op, see project memory).
+    // Determine this node's own current winning slot (same argmax
+    // TopLabelOf uses elsewhere) once, for both recording NodeCurrentVolume
+    // and (if this is a connecting node) applying the volume floor below.
+    int ownSlot = -1;
     {
-        int ownSlot = -1;
         float ownPot = -1.0e30;
         for (uint s5 = 0; s5 < 8; s5++) {
             if (NodeCandidateLabel[node * 8 + s5] == SENTINEL_LABEL) continue;
             float p = NodePotential[node * 8 + s5];
             if (p > ownPot) { ownPot = p; ownSlot = (int)s5; }
         }
-        NodeCurrentVolume[node] = (ownSlot >= 0) ? volSum[ownSlot] : 0.0;
-        float rawPressure = (ownSlot >= 0)
-            ? (-smoothGrad[ownSlot] / (smoothDiag[ownSlot] + JacobiDiagEpsilon))
-            : 0.0;
-        NodeSmoothPressure[node] = clamp(rawPressure, -MaxPotentialStep, MaxPotentialStep);
+    }
+    float myCurrentVolume = (ownSlot >= 0) ? volSum[ownSlot] : 0.0;
+    NodeCurrentVolume[node] = myCurrentVolume;
+
+    // Term 4 (volume floor): ONLY for nodes flagged NodeIsConnecting
+    // (computeConnectingNodesCS.hlsl -- the sole local connector of their
+    // same-label neighborhood; without one, a thin feature like the Line
+    // test shape pinches apart into separate blobs under smoothness's
+    // perpetual, never-converging push at any topologically point- or
+    // line-like feature). This is a FLOOR, not a target: a one-sided hinge
+    // that only activates when this node's own reconstructed volume dips
+    // below VolumeFloor (default 1 unit, DistanceCb.hlsli) -- if it's
+    // already at or above the floor, there is NO penalty at all, so
+    // smoothness stays completely free to let it (or a same-label
+    // neighbor, e.g. a newly recruited B-node) grow further without any
+    // resistance from this term. Reuses the SAME kSum sensitivity the
+    // gather above already computed (K = d(volSum)/d(phi), same
+    // Gauss-Newton-style frozen-this-sweep linearization as every other
+    // term in this file).
+    //
+    // Supersedes the earlier MTV-diffusion system entirely (removed:
+    // mtvSeedCS.hlsl, mtvFlipDetectCS.hlsl, mtvDiffuseCS.hlsl,
+    // mtvCommitCS.hlsl, NodeMTV, NodeSmoothPressure, and the
+    // VolumeWeight-vs-dynamically-redistributed-target design) -- that
+    // whole apparatus did nothing measurable for the torus (needed 60+
+    // rounds even before its own mass-conservation fix slowed it further)
+    // and is fully subsumed, for the cases it actually mattered (Line and
+    // similar thin features), by connecting-node pinning.
+    if (ownSlot >= 0 && node < ACount && NodeIsConnecting[node] != 0) {
+        float violation = VolumeFloor - myCurrentVolume;
+        if (violation > 0.0 && kSum[ownSlot] != 0.0) {
+            grad[ownSlot] += -2.0 * VolumeWeight * violation * kSum[ownSlot];
+            diag[ownSlot] += 2.0 * VolumeWeight * kSum[ownSlot] * kSum[ownSlot];
+        }
     }
 
     // Term 2: margin hinge. A-nodes: own/input label (slot 0) must stay

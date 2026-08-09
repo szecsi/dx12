@@ -7,10 +7,10 @@
 //
 // ShapeKind 0/1 (Torus/Ellipsoid): same last-shape-wins analytic-SDF rule as
 // g-BCC's torusInitCS.hlsl.
-// ShapeKind 2-5: discrete grid-index patterns, no SDF at all -- deliberately
+// ShapeKind 2-6: discrete grid-index patterns, no SDF at all -- deliberately
 // pathological "ambiguous cube" stress tests (DistanceApp.h's
 // DistanceTestShape enum). All centered at the grid midpoint, +-
-// PatternHalfLen along the pattern's axis/diagonal:
+// PatternHalfLen along the pattern's axis/diagonal/plane:
 //   2 SinglePoint:     one lone A-node, label 1.
 //   3 Line:            a straight axis-aligned run of A-nodes.
 //   4 DiagonalLine2D:  A-nodes touching only along a cube's FACE diagonal
@@ -20,6 +20,14 @@
 //   5 DiagonalLine3D:  A-nodes touching only along a cube's BODY diagonal
 //                      (opposite corners of the whole cube) -- the classic
 //                      ambiguous-cube case.
+//   6 Slab:            a one-voxel-thick, axis-aligned square sheet (thin
+//                      along Z, extending in X and Y) -- the 2D/sheet-like
+//                      counterpart to Line's 1D/curve-like stress test.
+//                      Interior nodes have up to 8 same-label same-sublattice
+//                      neighbors (full in-plane Moore neighborhood) instead
+//                      of Line's at most 2, stress-testing the connecting-
+//                      node topology test and volume floor against a
+//                      genuinely higher-connectivity thin feature.
 #define RasterSig "RootFlags(0)," \
     "CBV(b1)," \
     "UAV(u0)"
@@ -54,6 +62,8 @@ void rasterLabelCS(uint3 tid : SV_DispatchThreadID)
             hit = (d.z == 0 && d.x == d.y && abs(d.x) <= PatternHalfLen);
         } else if (ShapeKind == 5) {
             hit = (d.x == d.y && d.y == d.z && abs(d.x) <= PatternHalfLen);
+        } else if (ShapeKind == 6) {
+            hit = (d.z == 0 && abs(d.x) <= PatternHalfLen && abs(d.y) <= PatternHalfLen);
         }
         if (hit) label = 1;
     }

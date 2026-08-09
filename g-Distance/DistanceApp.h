@@ -24,13 +24,14 @@
 
 // Must match TorusListCb.ShapeKind's convention and rasterLabelCS.hlsl's
 // branch on it. 0/1 (Torus/Ellipsoid) are analytic-SDF shapes, resolved via
-// TorusSdf.hlsli as before. 2-5 are discrete grid-index patterns with no
+// TorusSdf.hlsli as before. 2-6 are discrete grid-index patterns with no
 // analytic SDF at all -- deliberately pathological "ambiguous cube" stress
 // tests (a lone voxel; a straight line; two label-1 voxels touching only
-// along a cube's face diagonal; touching only along a cube's body diagonal)
-// -- rasterLabelCS.hlsl sets their labels directly from tid, bypassing
-// ShapeSd/torii entirely. No meaningful raymarch reference exists for these
-// (torii stays empty), so the background stays visible behind them.
+// along a cube's face diagonal; touching only along a cube's body diagonal;
+// a one-voxel-thick square slab) -- rasterLabelCS.hlsl sets their labels
+// directly from tid, bypassing ShapeSd/torii entirely. No meaningful
+// raymarch reference exists for these (torii stays empty), so the
+// background stays visible behind them.
 enum DistanceTestShape {
 	TestShape_Torus = 0,
 	TestShape_Ellipsoid = 1,
@@ -38,6 +39,7 @@ enum DistanceTestShape {
 	TestShape_Line = 3,
 	TestShape_DiagonalLine2D = 4,
 	TestShape_DiagonalLine3D = 5,
+	TestShape_Slab = 6,
 };
 
 // g-Distance: replaces g-Aequor's particle relaxation with a direct scalar
@@ -96,6 +98,7 @@ protected:
 	com_ptr<ID3D12Resource> nodeIncidentCountBuffer;    // NodeCount uint: reverse-adjacency degree
 	com_ptr<ID3D12Resource> nodeIncidentTetsBuffer;     // NodeCount*MaxIncidentTets uint: reverse adjacency
 	com_ptr<ID3D12Resource> tetFaceNeighborsBuffer;     // TetCount uint2: cross-orientation neighbor tets (SENTINEL_LABEL = none)
+	com_ptr<ID3D12Resource> nodeIsConnectingBuffer;     // ACount uint (0/1): sole local connector of its same-label neighborhood, see computeConnectingNodesCS.hlsl
 
 	// -- per-node candidate/potential state, (re)seeded at init, evolved by the outer loop --
 	com_ptr<ID3D12Resource> nodeCandidateLabelBuffer;   // NodeCount*8 uint (SENTINEL_LABEL = unused slot)
@@ -104,18 +107,11 @@ protected:
 	com_ptr<ID3D12Resource> tetInterfacePairBuffer;     // TetCount uint2: current active (labelI,labelJ) per tet
 	com_ptr<ID3D12Resource> surfaceVertexBuffer;        // TetCount*6 SurfaceVertex (pos+normal), render-only
 
-	// -- volume conservation (MTV = Momentary Target Volume) --
-	com_ptr<ID3D12Resource> nodeMTVBuffer;              // NodeCount float, "current" (mtv read buffer)
-	com_ptr<ID3D12Resource> nodeMTVScratchBuffer;       // NodeCount float, diffusion+flip-adjustment output
-	com_ptr<ID3D12Resource> nodePrevLabelBuffer;        // NodeCount uint: winning label as of the previous round (flip-detection baseline)
-	com_ptr<ID3D12Resource> nodePrevLabelScratchBuffer; // NodeCount uint, next round's baseline
-	com_ptr<ID3D12Resource> nodeFlipFlagBuffer;         // NodeCount uint (0/1), recomputed fresh every round
-	com_ptr<ID3D12Resource> nodeFlipShareOldBuffer;     // NodeCount float: MTV/countOld, only meaningful where flagged
-	com_ptr<ID3D12Resource> nodeFlipShareNewBuffer;     // NodeCount float: MTV/countNew, only meaningful where flagged
-	com_ptr<ID3D12Resource> nodeCurrentVolumeBuffer;    // NodeCount float: node's own winning-label reconstructed volume, written by smoothnessJacobiCS every sweep, read by mtvDiffuseCS's pushback term
-	com_ptr<ID3D12Resource> nodeSmoothPressureBuffer;   // NodeCount float: node's own Term-1-only Newton step, clamped, written by smoothnessJacobiCS every sweep, read by mtvDiffuseCS's smooth-pressure term
+	// -- volume floor (connecting nodes only, see smoothnessJacobiCS.hlsl) --
+	com_ptr<ID3D12Resource> nodeCurrentVolumeBuffer;    // NodeCount float: node's own winning-label reconstructed volume, written by smoothnessJacobiCS every sweep
 
 	Egg::Compute::ComputeShader rasterLabelCS;
+	Egg::Compute::ComputeShader computeConnectingNodesCS;
 	Egg::Compute::ComputeShader buildTetsCS;
 	Egg::Compute::ComputeShader clearIncidentCS;
 	Egg::Compute::ComputeShader buildIncidentCS;
@@ -125,10 +121,6 @@ protected:
 	Egg::Compute::ComputeShader smoothnessJacobiCS;
 	Egg::Compute::ComputeShader commitPotentialCS;
 	Egg::Compute::ComputeShader extractSurfaceCS;
-	Egg::Compute::ComputeShader mtvSeedCS;
-	Egg::Compute::ComputeShader mtvFlipDetectCS;
-	Egg::Compute::ComputeShader mtvDiffuseCS;
-	Egg::Compute::ComputeShader mtvCommitCS;
 
 	com_ptr<ID3D12RootSignature> raymarchRootSig;
 	com_ptr<ID3D12PipelineState> raymarchPso;
@@ -146,7 +138,7 @@ protected:
 
 	com_ptr<ID3D12DescriptorHeap> imguiSrvHeap;
 
-	int testShapeKind = TestShape_Torus; // driven by the ImGui combo, applied on Reinitialize only (BuildShapeList)
+	int testShapeKind = TestShape_Torus;
 	bool needsReinit = false;
 	bool needsContinue = false;
 	bool dataValid = false; // true once a Reinit/Continue has actually produced node data
@@ -163,11 +155,10 @@ protected:
 	float seedJitter = 0.05f;
 	float ownLabelSeed = 1.0f;
 	bool neutralBSeed = true; // B-nodes seed with pure jitter instead of a majority-vote confidence boost, see buildCandidatesCS.hlsl
+	bool edgeConnectivityOnly = true; // 18-connectivity (vs 26-connectivity) for computeConnectingNodesCS.hlsl's local flood-fill
 	float maxPotentialStep = 0.002f; // hard per-sweep step clamp, see DistanceCb.hlsli -- user-confirmed stable value; 0.1 was not, likely because the all-edges connectivity change couples each unknown to more neighbors than the original fan-only gather did
 	float volumeWeight = 5000.0f; // energy term 4 weight, see DistanceCb.hlsli -- needs to be this large (not ~1 like the other weights) to actually outweigh smoothness's gradient at a topologically point-like feature; see "Volume Weight" slider comment
-	float mtvDiffusionRate = 0.25f;  // MTV diffusion rate per round, see DistanceCb.hlsli
-	float volumePushbackRate = 0.25f; // lets a node's own current volume pull its MTV target toward reality, see DistanceCb.hlsli
-	float smoothPressureRate = 1.0f;  // more direct/leading alternative to volumePushbackRate, see DistanceCb.hlsli
+	float volumeFloor = 1.0f; // the floor itself for connecting nodes, see DistanceCb.hlsli
 	float pointRadiusPx = 3.0f;
 	float potentialSizeScale = 1.0f; // winning-potential reference value that maps to full-size sprites, see nodePointVS.hlsl
 	float nodeFadeExponent = 1.0f;      // exponential depth-fade rate for distant nodes, see nodePointVS.hlsl
@@ -183,13 +174,8 @@ protected:
 	uint pickedInterfaceLabelI = 0, pickedInterfaceLabelJ = 0;
 	uint pickedCornerLabels[4][8] = {};
 	float pickedCornerPots[4][8] = {};
-	float pickedCornerMTV[4] = {};             // NodeMTV, see mtvSeedCS/mtvDiffuseCS/mtvCommitCS
 	float pickedCornerCurrentVolume[4] = {};   // NodeCurrentVolume, written by smoothnessJacobiCS's Term 4
-	float pickedCornerSmoothPressure[4] = {};  // NodeSmoothPressure, written by smoothnessJacobiCS's Term 1 shadow accumulators
-	uint pickedCornerPrevLabel[4] = {};        // NodePrevLabel, flip-detection baseline
-	uint pickedCornerFlipFlag[4] = {};         // NodeFlipFlag, set by mtvFlipDetectCS this round
-	float pickedCornerFlipShareOld[4] = {};    // NodeFlipShareOld, only meaningful if FlipFlag set
-	float pickedCornerFlipShareNew[4] = {};    // NodeFlipShareNew, only meaningful if FlipFlag set
+	uint pickedCornerIsConnecting[4] = {};     // NodeIsConnecting (A-nodes only; 0 for B corners), computeConnectingNodesCS
 
 	bool showNodes = true;
 	bool showSurface = true;
@@ -219,8 +205,8 @@ protected:
 		if (testShapeKind >= TestShape_SinglePoint) {
 			// No analytic SDF -- rasterLabelCS.hlsl sets these labels
 			// directly from grid index (ShapeKind >= 2 branch), torii stays
-			// empty (no raymarch reference makes sense for a lone voxel or
-			// a 1-voxel-wide diagonal line anyway).
+			// empty (no raymarch reference makes sense for a lone voxel, a
+			// 1-voxel-wide diagonal line, or a 1-voxel-thick slab anyway).
 			torusCb.data.nTorii = 0;
 			return;
 		}
@@ -243,9 +229,9 @@ protected:
 		distanceCb.data.OwnLabelSeed = ownLabelSeed;
 		distanceCb.data.MaxPotentialStep = maxPotentialStep;
 		distanceCb.data.VolumeWeight = volumeWeight;
-		distanceCb.data.MTVDiffusionRate = mtvDiffusionRate;
-		distanceCb.data.VolumePushbackRate = volumePushbackRate;
-		distanceCb.data.SmoothPressureRate = smoothPressureRate;
+		distanceCb.data.VolumeFloor = volumeFloor;
+		distanceCb.data._pad2a = 0.0f;
+		distanceCb.data._pad2b = 0.0f;
 		distanceCb.Upload();
 	}
 
@@ -291,6 +277,14 @@ protected:
 		cmd->SetComputeRootUnorderedAccessView(1, rasterLabelBuffer->GetGPUVirtualAddress());
 		cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(rasterLabelBuffer.Get()));
+
+		cmd->SetComputeRootSignature(computeConnectingNodesCS.rootSig.Get());
+		cmd->SetPipelineState(computeConnectingNodesCS.pso.Get());
+		cmd->SetComputeRoot32BitConstant(0, edgeConnectivityOnly ? 1u : 0u, 0);
+		cmd->SetComputeRootUnorderedAccessView(1, rasterLabelBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(2, nodeIsConnectingBuffer->GetGPUVirtualAddress());
+		cmd->Dispatch(BuildCandidatesAGroups, 1, 1); // ACount-based, same as buildCandidatesCS's A dispatch
+		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeIsConnectingBuffer.Get()));
 
 		cmd->SetComputeRootSignature(buildTetsCS.rootSig.Get());
 		cmd->SetPipelineState(buildTetsCS.pso.Get());
@@ -347,22 +341,6 @@ protected:
 			cmd->ResourceBarrier(_countof(b), b);
 		}
 
-		// Seed MTV (A-nodes=1, B-nodes=0) + NodePrevLabel, once per
-		// Reinitialize, right after candidates/potentials are (re)seeded.
-		cmd->SetComputeRootSignature(mtvSeedCS.rootSig.Get());
-		cmd->SetPipelineState(mtvSeedCS.pso.Get());
-		cmd->SetComputeRootUnorderedAccessView(0, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(2, nodeMTVBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(3, nodePrevLabelBuffer->GetGPUVirtualAddress());
-		cmd->Dispatch(SmoothnessGroups, 1, 1);
-		{
-			D3D12_RESOURCE_BARRIER b[] = {
-				CD3DX12_RESOURCE_BARRIER::UAV(nodeMTVBuffer.Get()),
-				CD3DX12_RESOURCE_BARRIER::UAV(nodePrevLabelBuffer.Get()),
-			};
-			cmd->ResourceBarrier(_countof(b), b);
-		}
 	}
 
 	// One outer Lloyd-loop round: fix combinatorics (assignInterfacePairsCS),
@@ -391,15 +369,13 @@ protected:
 			cmd->SetComputeRootUnorderedAccessView(6, nodeIncidentCountBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootUnorderedAccessView(7, nodeIncidentTetsBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootUnorderedAccessView(8, tetFaceNeighborsBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(9, nodeMTVBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(10, nodeCurrentVolumeBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(11, nodeSmoothPressureBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(9, nodeCurrentVolumeBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(10, nodeIsConnectingBuffer->GetGPUVirtualAddress());
 			cmd->Dispatch(SmoothnessGroups, 1, 1);
 			{
 				D3D12_RESOURCE_BARRIER b[] = {
 					CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(nodeCurrentVolumeBuffer.Get()),
-					CD3DX12_RESOURCE_BARRIER::UAV(nodeSmoothPressureBuffer.Get()),
 				};
 				cmd->ResourceBarrier(_countof(b), b);
 			}
@@ -410,73 +386,6 @@ protected:
 			cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
 			cmd->Dispatch(CommitGroups, 1, 1);
 			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()));
-		}
-
-		// MTV round: once per outer round, after this round's Jacobi sweeps
-		// have settled the potentials -- flip-detect (gather), diffuse
-		// (gather + apply flip shares), commit (scratch->main). Feeds
-		// smoothnessJacobiCS's Term 4 for the NEXT round's sweeps.
-		cmd->SetComputeRootSignature(mtvFlipDetectCS.rootSig.Get());
-		cmd->SetPipelineState(mtvFlipDetectCS.pso.Get());
-		cmd->SetComputeRootUnorderedAccessView(0, tetsBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(1, nodeIncidentCountBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(2, nodeIncidentTetsBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(3, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(4, nodePotentialBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(5, nodePrevLabelBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(6, nodeMTVBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(7, nodeFlipFlagBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(8, nodeFlipShareOldBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(9, nodeFlipShareNewBuffer->GetGPUVirtualAddress());
-		cmd->Dispatch(SmoothnessGroups, 1, 1);
-		{
-			D3D12_RESOURCE_BARRIER b[] = {
-				CD3DX12_RESOURCE_BARRIER::UAV(nodeFlipFlagBuffer.Get()),
-				CD3DX12_RESOURCE_BARRIER::UAV(nodeFlipShareOldBuffer.Get()),
-				CD3DX12_RESOURCE_BARRIER::UAV(nodeFlipShareNewBuffer.Get()),
-			};
-			cmd->ResourceBarrier(_countof(b), b);
-		}
-
-		cmd->SetComputeRootSignature(mtvDiffuseCS.rootSig.Get());
-		cmd->SetPipelineState(mtvDiffuseCS.pso.Get());
-		cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(1, tetsBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(2, nodeIncidentCountBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(3, nodeIncidentTetsBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(4, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(5, nodePotentialBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(6, nodePrevLabelBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(7, nodeMTVBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(8, nodeFlipFlagBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(9, nodeFlipShareOldBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(10, nodeFlipShareNewBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(11, nodeMTVScratchBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(12, nodePrevLabelScratchBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(13, nodeCurrentVolumeBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(14, nodeSmoothPressureBuffer->GetGPUVirtualAddress());
-		cmd->Dispatch(SmoothnessGroups, 1, 1);
-		{
-			D3D12_RESOURCE_BARRIER b[] = {
-				CD3DX12_RESOURCE_BARRIER::UAV(nodeMTVScratchBuffer.Get()),
-				CD3DX12_RESOURCE_BARRIER::UAV(nodePrevLabelScratchBuffer.Get()),
-			};
-			cmd->ResourceBarrier(_countof(b), b);
-		}
-
-		cmd->SetComputeRootSignature(mtvCommitCS.rootSig.Get());
-		cmd->SetPipelineState(mtvCommitCS.pso.Get());
-		cmd->SetComputeRootUnorderedAccessView(0, nodeMTVScratchBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(1, nodeMTVBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(2, nodePrevLabelScratchBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(3, nodePrevLabelBuffer->GetGPUVirtualAddress());
-		cmd->Dispatch(SmoothnessGroups, 1, 1);
-		{
-			D3D12_RESOURCE_BARRIER b[] = {
-				CD3DX12_RESOURCE_BARRIER::UAV(nodeMTVBuffer.Get()),
-				CD3DX12_RESOURCE_BARRIER::UAV(nodePrevLabelBuffer.Get()),
-			};
-			cmd->ResourceBarrier(_countof(b), b);
 		}
 	}
 
@@ -737,27 +646,21 @@ protected:
 	}
 
 	// Reads back the assigned interface pair, full 8-slot candidate/
-	// potential arrays, and the MTV/volume-conservation fields (MTV,
-	// CurrentVolume, SmoothPressure, PrevLabel, flip flag/shares) for the
-	// picked tet's 4 corners, for the "Picked Tet" GUI panel -- lets you
-	// directly inspect the actual solved numbers at a specific wedge
-	// inset/outcrop instead of guessing from the picture.
+	// potential arrays, and the volume-floor fields (CurrentVolume,
+	// IsConnecting) for the picked tet's 4 corners, for the "Picked Tet"
+	// GUI panel -- lets you directly inspect the actual solved numbers at a
+	// specific wedge inset/outcrop instead of guessing from the picture.
 	void ReadBackPickedTetDiagnostics() {
 		UINT64 pairBytes = (UINT64)TetCount * sizeof(UINT) * 2;
 		UINT64 candBytes = (UINT64)NodeCount * 8 * sizeof(UINT);
 		UINT64 potBytes = (UINT64)NodeCount * 8 * sizeof(float);
 		UINT64 nodeFloatBytes = (UINT64)NodeCount * sizeof(float);
-		UINT64 nodeUintBytes = (UINT64)NodeCount * sizeof(UINT);
+		UINT64 connectingBytes = (UINT64)ACount * sizeof(UINT);
 		com_ptr<ID3D12Resource> rbPair = CreateReadbackBuffer(device.Get(), pairBytes);
 		com_ptr<ID3D12Resource> rbCand = CreateReadbackBuffer(device.Get(), candBytes);
 		com_ptr<ID3D12Resource> rbPot = CreateReadbackBuffer(device.Get(), potBytes);
-		com_ptr<ID3D12Resource> rbMtv = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
 		com_ptr<ID3D12Resource> rbCurVol = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
-		com_ptr<ID3D12Resource> rbSmoothPressure = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
-		com_ptr<ID3D12Resource> rbPrevLabel = CreateReadbackBuffer(device.Get(), nodeUintBytes);
-		com_ptr<ID3D12Resource> rbFlipFlag = CreateReadbackBuffer(device.Get(), nodeUintBytes);
-		com_ptr<ID3D12Resource> rbFlipShareOld = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
-		com_ptr<ID3D12Resource> rbFlipShareNew = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
+		com_ptr<ID3D12Resource> rbConnecting = CreateReadbackBuffer(device.Get(), connectingBytes);
 
 		DX_API("reset upload allocator (pick diag)") uploadAllocator->Reset();
 		DX_API("reset upload command list (pick diag)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
@@ -765,13 +668,8 @@ protected:
 		cmd->CopyBufferRegion(rbPair.Get(), 0, tetInterfacePairBuffer.Get(), 0, pairBytes);
 		cmd->CopyBufferRegion(rbCand.Get(), 0, nodeCandidateLabelBuffer.Get(), 0, candBytes);
 		cmd->CopyBufferRegion(rbPot.Get(), 0, nodePotentialBuffer.Get(), 0, potBytes);
-		cmd->CopyBufferRegion(rbMtv.Get(), 0, nodeMTVBuffer.Get(), 0, nodeFloatBytes);
 		cmd->CopyBufferRegion(rbCurVol.Get(), 0, nodeCurrentVolumeBuffer.Get(), 0, nodeFloatBytes);
-		cmd->CopyBufferRegion(rbSmoothPressure.Get(), 0, nodeSmoothPressureBuffer.Get(), 0, nodeFloatBytes);
-		cmd->CopyBufferRegion(rbPrevLabel.Get(), 0, nodePrevLabelBuffer.Get(), 0, nodeUintBytes);
-		cmd->CopyBufferRegion(rbFlipFlag.Get(), 0, nodeFlipFlagBuffer.Get(), 0, nodeUintBytes);
-		cmd->CopyBufferRegion(rbFlipShareOld.Get(), 0, nodeFlipShareOldBuffer.Get(), 0, nodeFloatBytes);
-		cmd->CopyBufferRegion(rbFlipShareNew.Get(), 0, nodeFlipShareNewBuffer.Get(), 0, nodeFloatBytes);
+		cmd->CopyBufferRegion(rbConnecting.Get(), 0, nodeIsConnectingBuffer.Get(), 0, connectingBytes);
 		DX_API("close upload command list (pick diag)") cmd->Close();
 		{
 			ID3D12CommandList* lists[] = { cmd.Get() };
@@ -783,23 +681,13 @@ protected:
 		UINT* pair = nullptr;
 		UINT* cand = nullptr;
 		float* pot = nullptr;
-		float* mtv = nullptr;
 		float* curVol = nullptr;
-		float* smoothPressure = nullptr;
-		UINT* prevLabel = nullptr;
-		UINT* flipFlag = nullptr;
-		float* flipShareOld = nullptr;
-		float* flipShareNew = nullptr;
+		UINT* connecting = nullptr;
 		rbPair->Map(0, nullptr, (void**)&pair);
 		rbCand->Map(0, nullptr, (void**)&cand);
 		rbPot->Map(0, nullptr, (void**)&pot);
-		rbMtv->Map(0, nullptr, (void**)&mtv);
 		rbCurVol->Map(0, nullptr, (void**)&curVol);
-		rbSmoothPressure->Map(0, nullptr, (void**)&smoothPressure);
-		rbPrevLabel->Map(0, nullptr, (void**)&prevLabel);
-		rbFlipFlag->Map(0, nullptr, (void**)&flipFlag);
-		rbFlipShareOld->Map(0, nullptr, (void**)&flipShareOld);
-		rbFlipShareNew->Map(0, nullptr, (void**)&flipShareNew);
+		rbConnecting->Map(0, nullptr, (void**)&connecting);
 
 		pickedInterfaceLabelI = pair[pickedTetIndex * 2 + 0];
 		pickedInterfaceLabelJ = pair[pickedTetIndex * 2 + 1];
@@ -809,26 +697,16 @@ protected:
 				pickedCornerLabels[c][s] = cand[node * 8 + s];
 				pickedCornerPots[c][s] = pot[node * 8 + s];
 			}
-			pickedCornerMTV[c] = mtv[node];
 			pickedCornerCurrentVolume[c] = curVol[node];
-			pickedCornerSmoothPressure[c] = smoothPressure[node];
-			pickedCornerPrevLabel[c] = prevLabel[node];
-			pickedCornerFlipFlag[c] = flipFlag[node];
-			pickedCornerFlipShareOld[c] = flipShareOld[node];
-			pickedCornerFlipShareNew[c] = flipShareNew[node];
+			pickedCornerIsConnecting[c] = (node < ACount) ? connecting[node] : 0;
 		}
 		pickedDiagnosticsValid = true;
 
 		rbPair->Unmap(0, nullptr);
 		rbCand->Unmap(0, nullptr);
 		rbPot->Unmap(0, nullptr);
-		rbMtv->Unmap(0, nullptr);
 		rbCurVol->Unmap(0, nullptr);
-		rbSmoothPressure->Unmap(0, nullptr);
-		rbPrevLabel->Unmap(0, nullptr);
-		rbFlipFlag->Unmap(0, nullptr);
-		rbFlipShareOld->Unmap(0, nullptr);
-		rbFlipShareNew->Unmap(0, nullptr);
+		rbConnecting->Unmap(0, nullptr);
 	}
 
 	void BuildImGui() {
@@ -839,12 +717,18 @@ protected:
 		ImGui::SetNextWindowSize(ImVec2(280, 0), ImGuiCond_FirstUseEver);
 		ImGui::Begin("g-Distance Controls");
 		static const char* testShapeItems[] = {
-			"Torus", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D"
+			"Torus", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D", "Slab"
 		};
 		ImGui::Combo("Test Shape", &testShapeKind, testShapeItems, IM_ARRAYSIZE(testShapeItems));
-		ImGui::TextDisabled("(applied on Reinitialize)");
-
 		ImGui::SliderInt("Iterations", &iterations, 0, 64);
+		ImGui::SliderFloat("Seed Jitter", &seedJitter, 0.0f, 1.0f);
+		ImGui::SliderFloat("Own Label Seed", &ownLabelSeed, 0.0f, 5.0f);
+		ImGui::Checkbox("Neutral B Seed (+jitter)", &neutralBSeed);
+		ImGui::TextDisabled("(off = old majority-vote B seed)");
+		ImGui::Checkbox("Edge Connectivity Only", &edgeConnectivityOnly);
+		ImGui::TextDisabled("(18- vs 26-connectivity for pinning connecting nodes)");
+		ImGui::TextDisabled("(all of the above applied on Reinitialize)");
+
 		if (dataValid) {
 			ImGui::SliderInt("Continue Iterations", &continueIterations, 1, 64);
 			if (ImGui::Button("Continue")) needsContinue = true;
@@ -889,14 +773,9 @@ protected:
 						hasI[c] ? "" : "*", phiI[c],
 						hasJ[c] ? "" : "*", phiJ[c],
 						phiI[c] - phiJ[c]);
-					ImGui::Text("      MTV=%.4f  CurVol=%.4f  SmoothPressure=%.5f  PrevLabel=%u%s",
-						pickedCornerMTV[c], pickedCornerCurrentVolume[c], pickedCornerSmoothPressure[c],
-						pickedCornerPrevLabel[c],
-						pickedCornerFlipFlag[c] ? "  FLIPPED" : "");
-					if (pickedCornerFlipFlag[c]) {
-						ImGui::Text("      FlipShareOld=%.4f  FlipShareNew=%.4f",
-							pickedCornerFlipShareOld[c], pickedCornerFlipShareNew[c]);
-					}
+					ImGui::Text("      CurVol=%.4f%s",
+						pickedCornerCurrentVolume[c],
+						pickedCornerIsConnecting[c] ? "  CONNECTING (floor pinned)" : "");
 				}
 				ImGui::TextDisabled("(* = label not a candidate here, falls back to 0)");
 
@@ -909,14 +788,12 @@ protected:
 					for (uint c = 0; c < 4; c++) {
 						uint node = pickedTetNodes[c];
 						sprintf_s(line, sizeof(line), "%s (node %u, %s): phi_i=%s%.6f  phi_j=%s%.6f  g=%.6f\r\n"
-							"    MTV=%.6f  CurVol=%.6f  SmoothPressure=%.6f  PrevLabel=%u  FlipFlag=%u  FlipShareOld=%.6f  FlipShareNew=%.6f\r\n",
+							"    CurVol=%.6f  IsConnecting=%u\r\n",
 							cornerNames[c], node, (node < ACount) ? "A" : "B",
 							hasI[c] ? "" : "*", phiI[c],
 							hasJ[c] ? "" : "*", phiJ[c],
 							phiI[c] - phiJ[c],
-							pickedCornerMTV[c], pickedCornerCurrentVolume[c], pickedCornerSmoothPressure[c],
-							pickedCornerPrevLabel[c], pickedCornerFlipFlag[c],
-							pickedCornerFlipShareOld[c], pickedCornerFlipShareNew[c]);
+							pickedCornerCurrentVolume[c], pickedCornerIsConnecting[c]);
 						report += line;
 					}
 					ImGui::SetClipboardText(report.c_str());
@@ -930,10 +807,6 @@ protected:
 			ImGui::SliderFloat("Margin Target", &marginTarget, 0.0f, 2.0f);
 			ImGui::SliderFloat("Regularizer Weight", &regularizerWeight, 0.0f, 1.0f);
 			ImGui::SliderFloat("Jacobi Diag Epsilon", &jacobiDiagEpsilon, 0.001f, 1.0f);
-			ImGui::SliderFloat("Seed Jitter", &seedJitter, 0.0f, 1.0f);
-			ImGui::SliderFloat("Own Label Seed", &ownLabelSeed, 0.0f, 5.0f);
-			ImGui::Checkbox("Neutral B Seed (+jitter)", &neutralBSeed);
-			ImGui::TextDisabled("(applied on Reinitialize -- off = old majority-vote B seed)");
 			ImGui::SliderFloat("Max Potential Step", &maxPotentialStep, 0.0001f, 0.1f, "%.4f");
 			// Range is huge (not 0..5 like the other weights) because Term 4's
 			// natural gradient magnitude is orders of magnitude smaller than
@@ -942,14 +815,15 @@ protected:
 			// term's K=VSide/sumSide stays O(0.1-1)) -- confirmed via direct
 			// GPU-readback probe (kSum0/diag0) that ~800-5000 is the range
 			// where it actually starts overpowering smoothness's perpetual,
-			// never-converging push at a topologically point-like feature
-			// (an isolated voxel can't have a locally planar interface, so
-			// smoothness never settles there and keeps eroding it every
-			// sweep, forever, regardless of round count).
+			// never-converging push at a topologically point- or line-like
+			// feature (which can never be locally smooth anywhere along it,
+			// so smoothness never settles there and keeps eroding it every
+			// sweep, forever, regardless of round count) -- only applies to
+			// nodes flagged connecting (see "Edge Connectivity Only" above),
+			// and only as a one-sided floor: no penalty at all once a
+			// connecting node's own volume is at or above Volume Floor.
 			ImGui::SliderFloat("Volume Weight", &volumeWeight, 0.0f, 10000.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
-			ImGui::SliderFloat("MTV Diffusion Rate", &mtvDiffusionRate, 0.0f, 1.0f);
-			ImGui::SliderFloat("Volume Pushback Rate", &volumePushbackRate, 0.0f, 1.0f);
-			ImGui::SliderFloat("Smooth Pressure Rate", &smoothPressureRate, 0.0f, 10.0f);
+			ImGui::SliderFloat("Volume Floor", &volumeFloor, 0.0f, 2.0f);
 		}
 
 		ImGui::SliderFloat("Point Radius", &pointRadiusPx, 0.5f, 10.0f);
@@ -1016,6 +890,7 @@ public:
 			device->CreateDescriptorHeap(&imguiHeapDesc, IID_PPV_ARGS(imguiSrvHeap.GetAddressOf()));
 
 		rasterLabelBuffer          = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"rasterLabelBuffer");
+		nodeIsConnectingBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"nodeIsConnectingBuffer");
 		tetsBuffer                 = CreateRawUavBuffer(device.Get(), (UINT64)TetCount * sizeof(UINT) * 4, L"tetsBuffer");
 		nodeIncidentCountBuffer    = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeIncidentCountBuffer");
 		nodeIncidentTetsBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MaxIncidentTets * sizeof(UINT), L"nodeIncidentTetsBuffer");
@@ -1025,17 +900,10 @@ public:
 		nodePotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * 8 * sizeof(float), L"nodePotentialScratchBuffer");
 		tetInterfacePairBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)TetCount * sizeof(UINT) * 2, L"tetInterfacePairBuffer");
 		surfaceVertexBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)TetCount * 6 * sizeof(float) * 6, L"surfaceVertexBuffer");
-		nodeMTVBuffer              = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeMTVBuffer");
-		nodeMTVScratchBuffer       = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeMTVScratchBuffer");
-		nodePrevLabelBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodePrevLabelBuffer");
-		nodePrevLabelScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodePrevLabelScratchBuffer");
-		nodeFlipFlagBuffer         = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeFlipFlagBuffer");
-		nodeFlipShareOldBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeFlipShareOldBuffer");
-		nodeFlipShareNewBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeFlipShareNewBuffer");
 		nodeCurrentVolumeBuffer    = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeCurrentVolumeBuffer");
-		nodeSmoothPressureBuffer   = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSmoothPressureBuffer");
 
 		rasterLabelCS.createResources(device, "Shaders/rasterLabelCS.cso");
+		computeConnectingNodesCS.createResources(device, "Shaders/computeConnectingNodesCS.cso");
 		buildTetsCS.createResources(device, "Shaders/buildTetsCS.cso");
 		clearIncidentCS.createResources(device, "Shaders/clearIncidentCS.cso");
 		buildIncidentCS.createResources(device, "Shaders/buildIncidentCS.cso");
@@ -1045,10 +913,6 @@ public:
 		smoothnessJacobiCS.createResources(device, "Shaders/smoothnessJacobiCS.cso");
 		commitPotentialCS.createResources(device, "Shaders/commitPotentialCS.cso");
 		extractSurfaceCS.createResources(device, "Shaders/extractSurfaceCS.cso");
-		mtvSeedCS.createResources(device, "Shaders/mtvSeedCS.cso");
-		mtvFlipDetectCS.createResources(device, "Shaders/mtvFlipDetectCS.cso");
-		mtvDiffuseCS.createResources(device, "Shaders/mtvDiffuseCS.cso");
-		mtvCommitCS.createResources(device, "Shaders/mtvCommitCS.cso");
 
 		{
 			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/raymarchVS.cso");
@@ -1371,6 +1235,7 @@ public:
 		torusCb.ReleaseResources();
 		pickedTetCb.ReleaseResources();
 		rasterLabelBuffer.Reset();
+		nodeIsConnectingBuffer.Reset();
 		tetsBuffer.Reset();
 		nodeIncidentCountBuffer.Reset();
 		nodeIncidentTetsBuffer.Reset();
@@ -1380,15 +1245,7 @@ public:
 		nodePotentialScratchBuffer.Reset();
 		tetInterfacePairBuffer.Reset();
 		surfaceVertexBuffer.Reset();
-		nodeMTVBuffer.Reset();
-		nodeMTVScratchBuffer.Reset();
-		nodePrevLabelBuffer.Reset();
-		nodePrevLabelScratchBuffer.Reset();
-		nodeFlipFlagBuffer.Reset();
-		nodeFlipShareOldBuffer.Reset();
-		nodeFlipShareNewBuffer.Reset();
 		nodeCurrentVolumeBuffer.Reset();
-		nodeSmoothPressureBuffer.Reset();
 		imguiSrvHeap.Reset();
 		raymarchRootSig.Reset();
 		raymarchPso.Reset();
