@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Import this sheet in any app project that uses Egg::OpenXRApp.
+     It adds the OpenXR SDK lib path and links openxr_loader.lib.
+     Egg.vcxproj already has the include path, so the static library compiles
+     without this sheet; only the final executable needs it.
+
+     Expected SDK layout:
+       $(SolutionDir)Common\OpenXR\include\openxr\openxr.h
+       $(SolutionDir)Common\OpenXR\include\openxr\openxr_platform.h
+       $(SolutionDir)Common\OpenXR\lib\openxr_loader.lib
+
+     Download: https://github.com/KhronosGroup/OpenXR-SDK/releases
+-->
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup>
+    <Link>
+      <AdditionalLibraryDirectories>$(SolutionDir)Common\OpenXR\lib\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>openxr_loader.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup />
+</Project>
