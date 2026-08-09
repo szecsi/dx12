@@ -1,0 +1,1053 @@
+\documentclass[journal]{vgtc}                     % final (journal style)
+%\documentclass[journal,hideappendix]{vgtc}        % final (journal style) without appendices
+%\documentclass[review,journal]{vgtc}              % review (journal style)
+%\documentclass[review,journal,hideappendix]{vgtc} % review (journal style)
+%\documentclass[widereview]{vgtc}                  % wide-spaced review
+%\documentclass[preprint,journal]{vgtc}            % preprint (journal style)
+
+
+%% Uncomment one of the lines above depending on where your paper is
+%% in the conference process. ``review'' and ``widereview'' are for review
+%% submission, ``preprint'' is for pre-publication in an open access repository,
+%% and the final version doesn't use a specific qualifier.
+
+%% If you are submitting a paper to a conference for review with a double
+%% blind reviewing process, please use one of the ``review'' options and replace the value ``0'' below with your
+%% OnlineID. Otherwise, you may safely leave it at ``0''.
+\onlineid{0}
+
+%% In preprint mode you may define your own headline. If not, the default IEEE copyright message will appear in preprint mode.
+%\preprinttext{To appear in IEEE Transactions on Visualization and Computer Graphics.}
+
+%% In preprint mode, this adds a link to the version of the paper on IEEEXplore
+%% Uncomment this line when you produce a preprint version of the article 
+%% after the article receives a DOI for the paper from IEEE
+%\ieeedoi{xx.xxxx/TVCG.201x.xxxxxxx}
+
+%% declare the category of your paper, only shown in review mode
+\vgtccategory{Research}
+
+%% Paper title.
+\title{Leaping Wedges: A Smoothed Multi-label Volume Rendering Technique}
+
+%% Author ORCID IDs should be specified using \authororcid like below inside
+%% of the \author command. ORCID IDs can be registered at https://orcid.org/.
+%% Include only the 16-digit dashed ID.
+\author{%
+  %\authororcid{Josiah S.\ Carberry}{0000-0002-1825-0097},
+  \authororcid{András Fridvalszky}{0000-0002-5570-1280},
+  \authororcid{László Szécsi}{0000-0002-0225-048X},
+  \authororcid{László Szirmay-Kalos}{0000-0002-8523-2315}, and
+  \authororcid{Dóra Varnyú}{0000-0002-9220-5868}
+}
+%\author[paper1183]{paper1183}
+
+\authorfooter{
+  %% insert punctuation at end of each item
+  \item
+  	András Fridvalszky, László Szécsi, László Szirmay-Kalos, and Dóra Varnyú are with Department of Control Engineering and Information Technology, Budapest University of Technology and Economics, Budapest, Magyar Tudósok krt. 2, H-1117, Hungary.\\
+  	E-mail: \{fridvalszky|szecsi|szirmay|vdora\}@iit.bme.hu.
+}
+
+% TODO: 
+% alt texts
+% subfigure refs
+% 
+
+
+%% Abstract section.
+\abstract{%
+We introduce a novel approach to directly render multi-label segmented volumes in real-time. Our contribution consists of methods to construct and fair Labeled Distance Volumes (LDVs), extend them to a Body-Centered Cubic (BCC) lattice, and ray march the resulting tetragonal honeycomb. Together, they enable efficient, topology-preserving surface fairing, accurate handling of label junctions, translucent rendering, and ray-casting-based illumination effects. To accelerate traversal, we adapt the standard octree to the BCC lattice and embed the data structures for efficient GPU execution, requiring only a single texel access per marching step. Unlike prior approaches, our method does not rely on the original density field, making it applicable even when it is missing or inaccurate. Our method produces aliasing-free surfaces, smoother than those based on raw density measurements, and are comparable in quality to slower triangle mesh extraction methods. It is suitable for handling many labels in real-time, with minimal memory footprint, making our solution applicable for both interactive inspection and manual segmentation tasks.
+	
+%Segmented volumetric data, where individual voxels are assigned distinct labels, is widely used in medical imaging to classify tissues and structures. Traditional visualization approaches either extract and render triangle meshes for each segment or directly ray march the volume. However, both strategies present challenges. Triangle meshes are often large, require costly decimation and fairing for visual quality, and handle transparency and non-local illumination effects poorly. Direct ray marching of density fields can be noisy, inconsistent with the segmentation, or computationally inefficient when many labels are present. Both approaches struggle with smoothing the surfaces without changing the volume of thin features. We introduce a novel approach, called Leaping Wedges, to directly render multi-label segmented volumes in real-time. Our contribution consists of methods to construct and fair Labeled Distance Volumes (LDVs), extend them to a Body-Centered Cubic (BCC) lattice, and ray march the resulting tetragonal honeycomb. Together, they enable efficient, topology-preserving surface fairing, accurate handling of label junctions, translucent rendering, and ray-casting-based illumination effects. To accelerate traversal, we adapt the standard octree to the BCC lattice and embed the data structures for efficient GPU execution, requiring only a single texel access per marching step. Unlike prior approaches, our method does not rely on the original density field, making it applicable even when it is missing or inaccurate. We demonstrate our algorithm on large segmented thoracoscopic datasets with more than ten labels. Our method produces surfaces smoother than those based on raw density measurements, and are comparable in quality to slower triangle mesh extraction methods. It is more feature-preserving than previous methods for embedding binary volumes in smooth representations, while also suitable for multiple labels. We render complete segmented volumes with correct transparency in real-time, with minimal memory footprint, making our solution suitable for both interactive inspection and manual segmentation tasks.
+  %
+  %% We recommend that you link to your supplemental material here in the abstract, as well
+  %% as in the Supplemental Materials section at the end.
+  %A free copy of this paper and all supplemental materials are available at \url{https://OSF.IO/2NBSG}.
+}
+
+%% Keywords that describe your work. Will show as 'Index Terms' in journal
+%% please capitalize first letter and insert punctuation after last keyword
+\keywords{Direct volume rendering, ray-marching, surface smoothing, multilabel} % TODO
+
+%% A teaser figure can be included as follows
+\teaser{
+  \centering
+  \begin{subfigure}[b]{0.23\linewidth}
+  	\centering
+  	\includegraphics[width=\textwidth,alt={The figure depicts the rendering of the original segmentation of the thoracoscopic region with visualized surface normals, approximated from the Hounsfield-densities.}]{../figs/tease1labels}
+  	\caption{Original segmentation.}
+  	\label{fig:ex_subfigs_a}
+  \end{subfigure}%
+  \begin{subfigure}[b]{0.23\linewidth}
+  	\centering
+  	\includegraphics[width=\textwidth,alt={The figure depicts the proposed rendering of the smoothed surfaces with visualized surface normals, approximated from the distance field.}]{../figs/tease1normal}
+  	\caption{Smoothed surface normals.}
+  	\label{fig:ex_subfigs_b}
+  \end{subfigure}%
+  \begin{subfigure}[b]{0.23\linewidth}
+  	\centering
+  	\includegraphics[width=\textwidth,alt={The figure depicts the proposed, solid rendering of the smoothed surfaces.}]{../figs/tease1shade}
+  	\caption{Shaded surfaces.}
+  	\label{fig:ex_subfigs_c}
+  \end{subfigure}%
+  \begin{subfigure}[b]{0.23\linewidth}
+  	\centering
+  	\includegraphics[width=\textwidth,alt={The figure depicts the proposed, translucent rendering of the smoothed surfaces.}]{../figs/tease1inner}
+  	\caption{Translucent rendering.}
+  	\label{fig:ex_subfigs_d}
+  \end{subfigure}%
+  \subfigsCaption{Leaping wedges is a real-time volume rendering technique that reconstructs exact and smooth surfaces (b, c) from discrete segmented volumes (a). Correct translucent rendering (d), volumetric effects and conformance with the original labeling is also supported.}
+  \label{fig:ex_subfigs}
+  
+  %\includegraphics[width=\linewidth, alt={A view of a city with buildings peeking out of the clouds.}]{CypressView}
+  %\caption{%
+  %	In the Clouds: Vancouver from Cypress Mountain.
+  %	Note that the teaser may not be wider than the abstract block.%
+  %}
+  \label{fig:teaser}
+}
+
+%% Uncomment below to disable the manuscript note
+%\renewcommand{\manuscriptnotetxt}{}
+
+%% Copyright space is enabled by default as required by guidelines.
+%% It is disabled by the 'review' option or via the following command:
+%\nocopyrightspace
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%% LOAD PACKAGES %%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Tell graphicx where to find files for figures when calling \includegraphics.
+%% Note that due to the \DeclareGraphicsExtensions{} call it is no longer necessary
+%% to provide the the path and extension of a graphics file:
+%% \includegraphics{diamondrule} is completely sufficient.
+\graphicspath{{figs/}{figures/}{pictures/}{images/}{./}} % where to search for the images
+
+%% Only used in the template examples. You can remove these lines.
+\usepackage{tabu}                      % only used for the table example
+\usepackage{booktabs}                  % only used for the table example
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{lipsum}                    % used to generate placeholder text
+\usepackage{mwe}                       % used to generate placeholder figures
+\usepackage{ccicons}                   % package to be able to use icons from creative commons
+
+%% We encourage the use of mathptmx for consistent usage of times font
+%% throughout the proceedings. However, if you encounter conflicts
+%% with other math-related packages, you may want to disable it.
+\usepackage{mathptmx}                  % use matching math font
+\usepackage{amsmath}
+\newcommand{\Mod}[1]{\ (\mathrm{mod}\ #1)}
+
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\newcommand{\Break}{\State \textbf{break} }
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%% START OF THE PAPER %%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% The ``\maketitle'' command must be the first command after the
+%% ``\begin{document}'' command. It prepares and prints the title block.
+%% the only exception to this rule is the \firstsection command
+\firstsection{Introduction}
+
+\maketitle
+
+\newenvironment{absolutelynopagebreak}
+{\par\nobreak\vfil\penalty0\vfilneg
+	\vtop\bgroup}
+{\par\xdef\tpd{\the\prevdepth}\egroup
+	\prevdepth=\tpd}
+
+Volumetric visualization of radiological data (e.g., CT, MRI or PET scans) is invaluable for surgeons, enabling accurate diagnosis and precise surgical planning. Visualizing multiple regions or tissue types is best achieved through a segmentation over the original volumetric data. Automatic and semi-automatic methods for segmentation are available, including deep learning models like that of Wasserthal et al.~\cite{wasserthal2023totalsegmentator} which can segment more than a hundred anatomical structures. However, the options of manual editing, additional annotation, morphological operations, or simulations---each altering the segmentation, possibly without producing a corresponding density volume---are often required in several applications.
+ % , including educational contexts and surgical planning. 
+
+Our targeted use case is when multiple dynamically changing 3D segmentation labels---without a scalar volume---must be displayed as a smooth surface, but without loss of detail. Even though rendering segmented voxels as cubes can be done efficiently without artifacts, realising smooths surfaces is a challenging problem.
+
+%In this paper we propose a novel algorithm to visualize segmented, multi-label volumetric data with high emphasis on rendering smooth, visually pleasing surfaces with accurate surface-voxel correspondence and interactive manipulation of the segmentation. 
+%In this paper we address the problem of real-time visualization of 3D segmented data.
+Our solution assumes only a 3D label array, works in real-time, and reconstructs visually pleasing smooth surfaces. Volumes of thin features like veins are preserved, their topological connectivity is explicitly guaranteed by construction, and the original labeling is strictly followed. Our method provides explainability by preserving voxel-surface correspondences, allowing pinpointing of individual voxels. Exact transparency is directly supported and dynamic edits can be applied to the segmentation with a temporary graceful drop in rendering quality. We show how this algorithm maps efficiently to the GPU in terms of parallel execution and data bandwidth, with accessing exactly one node in the data array in every traversal or empty-space-skipping step.
+
+\section{Previous work}
+%There are two methodologies to visualize 3D segmented data: 
+\emph{Direct volume rendering} (DVR) uses the original volumetric data with acceleration structures while indirect approaches convert it or extract another representation for the visualized surfaces.
+
+\emph{Marching cubes}~\cite{lorensen1987marching} is the traditional method of extracting a triangle mesh from an isosurface. The standard algorithm can only handle binary classification, but it can be extended to handle multiple labels. Wu et al.~\cite{wu2003multiple} proposed a two-stage algorithm to handle the large number of different cases.
+\emph{Marching Tetrahedra}~\cite{gueziec2002exploiting} follows the same idea after dividing the cube into five tetrahedra, reducing the complexity of look-up tables and addressing ambiguities.
+Nielson and Franke~\cite{nielson1997computing} and M{\"u}ller~\cite{planning1995boundary} describe multiple methods to define the separating surface inside a general tetrahedron where multiple labels are present.
+Chan et al.~\cite{CHAN199883} proposed an alternate direct tetrahedral tessellation of the BCC lattice, also called the \emph{Tetragonal Disphenoid Honeycomb}, with more regular shape and only one type of tetrahedron.
+Directly extracted surfaces from binary (or multi-label) volumes are generally jagged and visually unpleasing if the underlying continuous representation is not available (or too noisy) to optimize the surface smoothness and curvature.
+Optimizing the triangle mesh after surface extraction is thoroughly explored win the work of Bade et al.~\cite{bade2007reducing} and Moench et al.~\cite{moench2010staircase,moench2011context} and by Treece et al.~\cite{treece1999regularised} for Marching Tetrahedra in particular. Sun et al.~\cite{sun2024multi} also discussed how to handle multiple labels.
+Nielson et al.~\cite{nielson2003shrouds} optimized orthogonal planar curves to find the optimal separating surface.
+
+Another approach is \emph{dual contouring}~\cite{ju2002dual} and the related \emph{Surface Nets} method~\cite{gibson1998using,gibson1998constrained} to generate a smooth surfaces for binary segmented data. Frisken~\cite{frisken2022surfacenets} extended it to multiple labels. While these methods are capable of producing smooth surfaces, preservation of volume is not ensured. Evrard et al.~\cite{evrard2018surface} introduced a more accurate method to reconstruct surfaces from discrete indicator functions using volume fractions.
+Whitaker~\cite{whitaker2000reducing} proposed to optimize a continuous-valued embedding function, initially approximated from the binary volume, while maintaining the original constraints.
+Lempitsky~\cite{lempitsky2010surface} applied convex quadratic optimization to the same problem.
+These methods still struggle to accurately represent thin features like veins. We revisit this specific challenge in \cref{sec:smoothing}, where we discuss why a natural volume-conservation constraint is, on its own, not a sufficient fix -- it does not guarantee topology preservation -- and adopt an explicit topological criterion instead.
+Cs\'ebfalvi~\cite{csebfalvi2013cosine} introduced an efficient higher-order reconstruction scheme for BCC grids. It relies heavily on GPU interpolation, precluding multiple labels or embedding empty-space-skipping data.
+
+Hadwiger et al.~\cite{hadwiger2003high} investigated direct multi-label volume rendering, but their approach relies on the density volume and their slicing-based solution exhibits sampling artifacts similar to ray-marching.
+
+All of the above approaches either extract a surface that can be rendered as a mesh, or produce ray-marchable or sliceable scalar volumes for a single label. 
+Our approach aims to avoid the prohibitive cost of ray marching multiple scalar volumes simultaneously while also avoiding limitations of construction times and rendering challenges such as transparency associated with triangle meshes. Even though smooth surfaces can be reproduced to an extent by leveraging underlying data (e.g., Hounsfield-densities), essentially extracting isosurfaces near segment boundaries, but these are not necessarily present or smooth themselves. Therefore we only assume the segmentation to be present and rely on its topology to produce smooth surfaces. We use the tetrahedral tessellation over the BCC lattice described by Chan et al.~\cite{CHAN199883}. Even though their construction is different, our separating surfaces inside the tetrahedra are equivalent to those defined by Nielson and Franke~\cite{nielson1997computing}. The surfaces can be also extracted as a triangle mesh if required, based on the work of Sun et al.~\cite{sun2024multi}.
+
+Bronson et al.~\cite{bronson2014lattice} proposed a method that also works on the same tetrahedral tessellation of the BCC lattice, but instead of DVR, their goal was to produce a high quality conforming mesh. Therefore their methodology of direct manipulation of the tetrahedra is not applicable to our use case.
+
+If interactive editing is not required, then neural networks could be employed to visualize volumetric data by training them on the volume itself~\cite{berger2018Generative}. A recent research direction instead uses them to generate a Gaussian representation for the volume~\cite{gao2025render} which can be rendered using 6D Gaussian Splatting. Their generation time approaches interactive performance, but small details are lost in the process, making it inappropriate to visualize vessels with high accuracy.
+
+State-of-the-art DVR approaches for volume visualization were recently reviewed by Sarton et al.~\cite{sarton2023state}.
+%The relevant concerns are different for structured and unstructured data, with 
+The main challenges addressed are volume traversal, acceleration structures, and out-of-core rendering.
+
+Amanatides et al.~\cite{amanatides1987fast} introduced a high performance algorithm for traversing structured 3D voxel data along a ray. We adapted it to our lattice, the Tetragonal Disphenoid Honeycomb, by maintaining six ray parameters for the differently oriented planes instead of three. Traversing unstructured data, especially tetrahedral meshes was investigated by Marmitt et al.~\cite{marmitt2006fast}. Their methods are not applicable for our use case of rendering structured data.
+
+Space partitioning data structures such as the octree, k-d tree, or BVH are useful for both accelerating the traversal with empty-space-skipping and to forego storing large empty regions in memory. Object distances could be also embedded in empty regions of the voxel data to accelerate traversal as proposed by Sramek~\cite{sramek1994fast}.
+%However, this requires computing an expensive distance transform. 
+Recently, hardware accelerated ray tracing was also employed to exploit the dedicated RT cores in the GPU~\cite{derin2021sparse,sahistan2021ray,morrical2023quick}.
+
+Traditional octrees are the standard way to partition structured cubic data. Their hierarchic nature aligns well with sparse data as shown by Laine et al.\cite{laine2010efficient} while a recent implementation of Herzberger et al.\cite{herzberger2024residency} coupled them with page tables to implement out-of-core rendering.
+
+We adapted the standard octree-based acceleration structure to the Tetragonal Disphenoid Honeycomb and embedded it with the segmentation into a single cubic texture similarly to the recent work of Bán and Valasek~\cite{banempty}. While it does not reduce memory requirements, it is simple and well suited for small to medium sized datasets and facilitates fast empty-space-skipping without multiple read operations. Nevertheless our approach is orthogonal to the choice of acceleration structure and the previous hierarchical or ray-tracing-based methods could be also adapted in a similar manner.
+
+Another recent methodology to render large-scale datasets is compressing~\cite{piochowiak2024fast} or encoding~\cite{sun2024adaptive} the data. These approaches can handle very large datasets with interactive performance while also producing smooth surfaces with functional approximation. In most cases, the cost of initial construction makes them unsuitable if dynamic edits must be supported. Approximations are not permissable when correspondence to the original data and preserving single-voxel features is required.
+
+Transfer functions can be used during traditional volume rendering to derive optical properties from volume data. They are also applicable for discrete, segmented (multi-material) data to produce high quality physically-based renders as shown by Igouchkine et al.~\cite{igouchkine2018multi}. Xu et al.~\cite{xu2025efficient} also incorporated path tracing to enhance the image with multiple scattering. Implementing or demonstrating complex transfer functions and lighting effects are out of scope for this study. They are also independent from our approach and could be applied without loss of generality. For the sake of simplicity and to focus on surface quality we opted for a simple Phong based material and lighting model.
+%The choice of transfer function and material properties  
+
+%Direct rendering of smooth surfaces for discrete multi-label data is challenging 
+%Rendering quality is closely tied to the kind of surfaces that can be represented. Direct rendering of segmented data often appears blocky, especially for thin features. 
+
+%Xiao et al.~\cite{xiao2012efficient} further improved performance by eliminating divergent code paths. //ez annyira nem tetszik, meg lehetne rengeteg mas optimalizalos cikket is keresni hozza1
+
+%In recent literature, octrees are more widely used to forgo storing empty volumes and thus enabling empty-space-skipping during ray traversal. Recently  applied them in a way that can be embedded alongside the ray marched data. While this technique does not reduce memory requirements, it facilitates fast empty-space-skipping without multiple read operations.
+
+
+
+%Traditionally, 3D segmented data can be rendered by generating a triangle mesh (e.g., marching cubes~\cite{lorensen1987marching} or dual contouring~\cite{ju2002dual}) or by using ray marching. Both approaches have advantages and limitations. Generating a triangle mesh is computationally expensive, and if the data changes due to edits or simulations, the mesh must be regenerated. Performing this for the entire dataset may be infeasible under time constraints, while partial updates with topology preservation can be complex and error-prone. Rendering transparent surfaces also poses challenges for traditional rasterization and requires separate techniques that are more demanding in hardware resources, or approximations with compromises in visual quality. 
+
+%Ray marching, on the other hand, elegantly solves the first two issues: the dataset can be updated directly and transparency is inherently supported. However, it requires substantial processing power to maintain real-time framerates and relies heavily upon optimizations, such as acceleration structures (e.g., octrees) and sphere tracing. In addition, the rendered surfaces often appear blocky, reflecting the underlying voxel structure and can be visually unpleasing. Aliasing artifacts from the marching are also hard to completely remove.
+
+%Direct visualization of the segmentation is prone to artifacts like aliasing and terracing, the surfaces will look artificial. While the original sampled densities can be used to approximate gradients and smooth out the surface, if the segmentation deviates from the data or the density field itself is noisy then  
+
+%There are two major methodologies in the literature to produce smooth surfaces from discrete segmentation. We can either apply global fairing operators to the extracted triangle mesh or obtain an embedding function that can be directly smoothed. As mentioned before, the mesh-based methods are poorly suited for dynamic adjustments of the segmentation, while smoothing the embedding function often makes it difficult to preserve thin features without sacrificing global smoothness.
+
+
+
+%% \section{Introduction} %for journal use above \firstsection{..} instead
+%This template is for papers of VGTC-sponsored conferences such as IEEE VIS, IEEE VR, and ISMAR which are published as special issues of TVCG.
+%The template does not contain the respective dates of the conference/journal issue, these will be entered by IEEE as part of the publication production process.
+%Therefore, \textbf{please leave the copyright statement at the bottom-left of this first page untouched}.
+
+%\section{Previous work}
+
+%-------------------------------------------------------------------------
+%\subsection{Volumetric surface extraction}
+
+
+
+
+
+
+
+%-------------------------------------------------------------------------
+%\subsection{Ray marching}
+
+
+%-------------------------------------------------------------------------
+\section{Overview of our contributions}
+Segmented volumetric data is usually available on the \emph{Simple Cubic} (SC) lattice. Each point has a label attribute and they are usually stored in a 3D array.
+In our approach, we construct a \emph{Labeled Distance Volume} (LDV) on an extended \emph{Body-Centered Cubic} (BCC) grid embedding the original SC labeling, with the goal of reconstructing a visually smooth representation that is fully consistent with the original data. The LDV is similar to a \emph{Signed Distance Function} (SDF) given at grid nodes, but uses labels instead of a single sign to identify not just inside and outside regions, but multiple regions, which often correspond to different organs or materials in medical imaging. For any single label, we interpret the LDV as an SDF, setting the sign to positive (here meaning \emph{inside}) for nodes matching the label, and negative otherwise.
+
+Our rendering algorithm performs ray marching on the BCC-LDV. During ray marching, the labeled distance values are used to find intersections with all separating surfaces in a single pass. 
+
+We discuss the initial \emph{Wedge Walking} approach in the following steps:
+\begin{itemize}
+	\item Converting input data to an initial BCC-LDV, seeding a small set of candidate label potentials at every vertex as an initial approximation of the separating surfaces defined by the labels (\cref{sec:initial}).
+	\item Optimizing the BCC-LDV's candidate potentials to smooth out the surfaces without violating the original labeling or its topology (\cref{sec:smoothing}).
+	\item Ray marching the BCC-LDV (\cref{sec:walking}).
+\end{itemize}
+
+Subsequently, we present a visually identical, but higher performance version. For this, an octree-based acceleration structure is built and incorporated into a single 3D array that stores it alongside the distances and the labels. We call this data structure the \emph{Body-Centered Cubic Labeled Distance Volume with a Flat Octree}, or BCC-LDV-FO. We present an adapted ray marching algorithm that works directly on this data structure (\cref{sec:octree}).
+
+
+%-------------------------------------------------------------------------
+\section{Preliminaries}
+
+%-------------------------------------------------------------------------
+\subsection{Notation}
+3D vectors are written as $\vec{v}$. $\vec{1}$ refers to the $(1,1,1)$ vector. An $N$-dimensional array is written in lowercase bold: $\mathbf{w}$. The number of dimensions will always be clear from the context. We use $w_i$ to refer to the $i$th element of $\mathbf{w}$, indexing starts at $0$. A matrix is written in uppercase bold: $\mathbf{M}$.
+
+%-------------------------------------------------------------------------
+\subsection{Wedge honeycomb}
+
+The BCC lattice can be divided into tetrahedra by connecting each vertex to its 14 nearest neighbors~\cite{CHAN199883}. For simplicity, we use the term \emph{wedge} to refer to the disphenoidal cells, even when they are transformed into a different coordinate frame and are no longer disphenoids. We refer to the entire tessellation of the volume as the \emph{wedge honeycomb}.
+
+Alternatively, the wedge honeycomb is generated by six differently oriented sets of equidistant parallel planes that separate the tetrahedra from each other. For later reference, we fix the indexing of the plane normals as follows:
+\begin{equation} \label{eq:normals}
+	\begin{split}
+		\vec{n}_0 = (+1, +1, 0), \ \
+		\vec{n}_1 =(+1, 0, +1), \ \ 
+		\vec{n}_2 =(0, +1, +1), \\
+		\vec{n}_3 =(-1, +1, 0), \ \ 
+		\vec{n}_4 =(+1, 0, -1), \ \ 
+		\vec{n}_5 =(0, -1, +1).
+	\end{split}
+\end{equation}
+
+%-------------------------------------------------------------------------
+\subsection{Honeycomb traversal}
+
+The DDA algorithm~\cite{amanatides1987fast} can be used to traverse the wedges. Apart from the initial wedge that contains the ray origin, the ray enters each wedge through one of its planes (called \emph{entry plane}), and leaves across one of the three remaining planes (\emph{exit plane}). During the traversal, we need to keep track of the orientation of the current wedge to identify the possible exit planes, pick the first intersected plane using the DDA algorithm (i.e. pick the intersection at the minimal ray parameter and advance it to the next parallel plane), and then find the neighboring wedge and update all data accordingly. To solve these tasks, we introduce coordinate systems in~\cref{sec:coordsys}, and a scheme to represent wedge position and orientation along with a way to find neighbors in~\cref{sec:wedgetrans}.
+
+The DDA traversal process generates, for each intersected wedge, the entry and exit points of the ray. We need to find intersections of this ray segment with label-separating surfaces inside the wedge. This computation is detailed in~\cref{sec:surfeval}.
+
+\begin{figure}[b!]
+	\centering
+	\includegraphics[width=.7\linewidth, alt={The highlighted tetarhedron consists of two odd and two even vertices.}]{../figs/fig_bcc}
+	\caption{A tetrahedron (wedge) inside the BCC lattice. Long edges are colored with blue and short edges with red.}
+	\label{fig:bcc}
+\end{figure}
+
+\begin{figure}[t!]
+	\centering
+	\includegraphics[width=\linewidth, alt={The rhombohedron before, and after transformation with vertex coordinates. The transformed rhombohedron is the unit cube.}]{../figs/fig_rhombo}
+	\caption{A rhombohedron (of six wedges) in BCC coordinate system (left) and rhombo coordinate system (right). The short edge that is shared by the wedges is thickened. On the right, the upper coordinate is the BCC coordinate and the lower coordinate is the transformed rhombo coordinate.}
+	\label{fig:rhombo}
+\end{figure}
+
+\begin{figure*}[t!]
+	\centering
+	\begin{subfigure}[b]{0.19\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={Rendering the original labeling has an inherent voxelized structure.}]{../figs/csig_segment_white}
+		\caption{Original labeling}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}[b]{0.19\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={After one iteration the surface changes, but protrusions appear.}]{../figs/csig_1_white}
+		\caption{1 iteration}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}[b]{0.19\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={After twenty iterations the protrusions disappear.}]{../figs/csig_20_white}
+		\caption{20 iterations}
+	\end{subfigure}
+	\hfill%
+	\begin{subfigure}[b]{0.19\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={After fifty iterations the surface converges to a smooth boundary that follows the original labeling.}]{../figs/csig_50_white}
+		\caption{50 iterations}
+	\end{subfigure}
+		\hfill%
+	\begin{subfigure}[b]{0.19\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={Offline processing produces even smoother surfaces. The geometry is similar and most visual difference is due to the shading normals.}]{../figs/csig_manual_white}
+		\caption{Offline smoothing}
+	\end{subfigure}
+	\subfigsCaption{Iterative smoothing of the spinous process of the vertebra. Although the initial distances (b) overestimate the isosurface, after 50 iterations it converges to a reasonably good approximation, comparable to offline smoothing (e) of the Marching Cubes generated mesh.}
+	\label{fig:smoothcomp}
+\end{figure*}
+
+\begin{figure*}[h]
+	\centering
+	\begin{subfigure}[b]{0.19\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={Thin vessel structures rendered with visualized surface normals. The original labeling exhibits poor voxel connectivity.}]{../figs/ves_segmented}
+		\caption{Original labeling}
+		\label{fig:vesselcomp1}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}[b]{0.19\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={The previous method produces smoother surfaces but part of the vessels disappeared.}]{../figs/ves_deriv_20_white}
+		\caption{Whitaker~\cite{whitaker2000reducing}}
+		\label{fig:vesselcomp2}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}[b]{0.19\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={The previous method produces smoother surfaces but part of the vessels disappeared.}]{../figs/ves_lempi_white}
+		\caption{Lempitsky~\cite{lempitsky2010surface}}
+		\label{fig:vesselcomp3}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}[b]{0.19\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={The proposed smoothing method retains every voxel from the original labeling, but the surfaces appear less smooth than previous methods.}]{../figs/ves_normal_white}
+		\caption{Proposed}
+		\label{fig:vesselcomp5}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}[b]{0.19\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={Offline processing produces smooth surfaces and retains every voxel, but their volume is decreased.}]{../figs/ves_manual_white}
+		\caption{Offline smoothing}
+		\label{fig:vesselcomp4}
+	\end{subfigure}%
+	\subfigsCaption{Comparison of previous (b), (c) and the proposed (d) smoothing operators to the original labeling (a) and to offline processing a generated mesh (e). Our approach retains more volume for very thin features at comparable smoothness.}
+	\label{fig:vesselcomp}
+\end{figure*}
+
+%-------------------------------------------------------------------------
+\subsection{Coordinate systems} \label{sec:coordsys}
+
+We define the \emph{BCC coordinate system} such that its origin coincides with the minimal corner of the input data (of index (0, 0, 0)) and the axes are parallel with the edges of the input data. Edges that are parallel with the axes are given a length of 2.
+
+In this coordinate system the each coordinates of a vertex are either all even or all odd. There are two types of edges in this structure: \emph{long edges} have a length of 2 and connect vertices with the same parity, while \emph{short edges} have a length of $\sqrt{3}$ and connect vertices with differing parity (see~\cref{fig:bcc}).
+
+A short edge is shared by six tetrahedra (wedges) that together form a rhombohedron. According to this we define the \emph{rhombo coordinate system} with the following transformation matrices: 
+\begin{equation*}
+	\begin{split}
+		\mathbf{T}_{\mathrm{bcc-to-rhombo}} &=
+		\left(
+		\begin{array}{ccc}
+			1/2 & 1/2 & 0 \\
+			1/2 & 0 & 1/2 \\
+			0 & 1/2 & 1/2
+		\end{array}
+		\right), \\
+		\mathbf{T}_{\mathrm{rhombo-to-bcc}} &=
+		\left(
+		\begin{array}{ccc}
+			1 & 1 & -1 \\
+			1 & -1 & 1 \\
+			-1 & 1 & 1
+		\end{array}
+		\right)
+	\end{split}
+\end{equation*}
+%$ bold(T)_"bcc-to-rhombo" = mat(1\/2, 1\/2, 0; 1\/2, 0, 1\/2; 0, 1\/2, 1\/2), $ $ bold(T)_"rhombo-to-bcc" = mat(1, 1, -1; 1, -1, 1; -1, 1, 1), $ 
+selecting the $\vec{1}$ space diagonal as the \emph{principal diagonal}. \Cref{fig:rhombo} shows a rhombohedron in the two coordinate systems. Note that a rhombohedron after the transformation is just the unit cube in the rhombo coordinate system. The origins of the two coordinate systems coincide. Short edges (except for those that are parallel to the principal diagonal) are parallel to the X-Y-Z axes and have a length of 1.
+
+%-------------------------------------------------------------------------
+\section{Generating the BCC-LDV}
+
+\emph{Internal-version note:} this section reflects a substantial revision of our original block-averaging construction, arrived at after building and rejecting an intermediate design (an explicit volume-conservation term, discussed and explained in \cref{sec:smoothing}). Several figures elsewhere in the paper (in particular \cref{fig:smoothcomp,fig:vesselcomp,fig:normalscomp}) still show renders produced with the original, now-superseded pass and are flagged as such where they occur; they should be regenerated against the current construction before this becomes a submission-ready version.
+
+%-------------------------------------------------------------------------
+\subsection{Initial candidate potentials} \label{sec:initial}
+
+We need to assign labels and distances to BCC vertices based on the original labeling. Rather than a single label and a single signed distance per vertex, we seed every vertex with a small set of \emph{candidate} labels, each carrying its own unnormalized potential value -- exactly the per-label values $\mathbf{w}$ already used to reconstruct separating surfaces and their normals in \cref{sec:surfeval,sec:normeval}. Only a vertex's candidate labels are ever considered when locating its maximal value or interpolating a surface within an incident wedge; every other label is implicitly $-\infty$ there.
+
+Vertices with even coordinates assume the labels of coinciding SC nodes (\cref{fig:bcc}) as a fixed candidate, seeded with a large positive potential that is never allowed to be out-competed by any other candidate at that vertex -- this is how the original segmentation's labeling is enforced as a hard constraint throughout the optimization of \cref{sec:smoothing}. So that neighboring wedges can still reconstruct a competing surface normal at an even vertex, we additionally give it, as further (soft) candidates, every label found anywhere in its $3 \times 3 \times 3$ neighborhood of even vertices, each seeded with a small value near zero.
+
+The remaining odd vertices have no ground-truth label of their own. We build their candidate set from every distinct label found among the even vertices of \emph{all} cubes incident to the vertex -- not just its own cube's eight corners, but the full one-cube halo of cubes sharing a face, edge, or corner with it. This is necessary because an odd vertex can be a corner of a wedge whose active separating surface is decided by a label absent from its own cube but present in a face-neighboring one; omitting such a candidate does not just leave that one corner uncommitted, it corrupts the entire wedge's reconstructed gradient (\cref{sec:normeval}), since the piecewise-linear interpolation mixes all four corners together and the missing candidate's implicit $-\infty$ participates regardless. Across all of our test scenes the resulting candidate set never exceeds eight labels, which we fix as an upper bound on a vertex's data.
+
+By default, odd-vertex candidates are seeded with a small random jitter around zero, with no label favored over another (\emph{neutral seeding}). We also support, as a configurable alternative, seeding the numerically most frequent neighboring label ("majority vote") with a stronger initial potential -- an odd-vertex analogue of the \emph{priority} mechanism described below. We found this majority-vote seeding biases the optimization of \cref{sec:smoothing} against thin, isolated features from the very first step, before any smoothing has had a chance to act: a single-voxel feature surrounded by majority-vote-seeded odd vertices starts every incident wedge already leaning toward the surrounding background. Neutral seeding removes this bias and is our default; its consequences for topology preservation are discussed together with the mechanism that actually addresses them in \cref{sec:smoothing}.
+
+This construction replaces our original \emph{priority} mechanism, in which we defined a total ordering on the labels and used it both to break ties when an odd vertex's neighborhood was ambiguous, and to give higher-priority labels (like thin vessels, which often connect only through a shared edge or corner) a proportionally higher initial distance, so that they would be more resistant to separation during smoothing. Priority was a coarse, global, per-\emph{label} heuristic: it could not distinguish an individual voxel that structurally needs protection (because it is the sole thing keeping two parts of a feature connected) from a same-label voxel that does not, and it offered no actual guarantee of connectivity preservation, only a statistical bias toward it for labels declared important in advance. It is superseded entirely by the local, per-\emph{vertex}, topology-driven test introduced in \cref{sec:smoothing}, which requires no advance knowledge of which labels are "thin" or important at all.
+
+
+%-------------------------------------------------------------------------
+\subsection{Distance volume optimization} \label{sec:smoothing}
+
+We reformulate distance volume smoothing as a discrete, quadratic energy-minimization problem defined directly over the wedge honeycomb, jointly over every candidate potential at every vertex, replacing the fixed block-averaging kernel of our original construction.
+
+Recall from \cref{sec:surfeval} that, within a wedge with barycentric coordinates $\mathbf{\beta}$, a label $l$'s reconstructed value is the linear interpolation $\mathbf{\beta} \cdot \mathbf{w}_l$ of its four vertex potentials, and (\cref{sec:normeval}) that the normal of any separating surface between labels $l$ and $l'$ inside that wedge is the constant gradient $\mathbf{w}_l - \mathbf{w}_{l'}$. Because this gradient is affine in the raw, unnormalized vertex potentials, requiring two wedges that share a face and the same active label pair to reconstruct a \emph{consistent} normal across that face is a quadratic penalty in those potentials. This is our dominant energy term, \emph{smoothness}:
+\begin{equation} \label{eq:smoothness}
+	E_{\mathrm{smooth}} = \!\!\!\sum_{\substack{\text{face-adjacent wedges } (a,b) \\ \text{sharing active pair } (l,l')}}\!\!\! \left\| (\mathbf{w}_l - \mathbf{w}_{l'})_a - (\mathbf{w}_l - \mathbf{w}_{l'})_b \right\|^2 .
+\end{equation}
+Two further quadratic terms complete the energy. A \emph{margin} term keeps each vertex's currently winning candidate ahead of its strongest competitor by a fixed gap, generalizing the original rule of flipping an odd vertex's label whenever its smoothed distance for the current label goes negative: even vertices apply the margin against their (fixed) true label and every competitor, while odd vertices, having no ground truth to anchor to, apply it between whichever candidate currently wins and its runner-up. A \emph{regularizer} term constrains each vertex's candidate potentials to sum to zero, which keeps their joint magnitude from drifting arbitrarily -- something the single, self-normalizing signed distance of our original per-vertex representation never needed, but which multiple simultaneous raw candidate potentials do.
+
+We minimize the sum of these three terms with the same fixed-iteration Jacobi relaxation used by our original smoothing pass, but now wrapped in an outer/inner loop, since which pair of labels is "active" in a given wedge is itself an unknown that depends on the very potentials being solved for. Each \emph{outer} round first re-derives, independently for every grid face (so that every wedge sharing that face agrees), which two labels are currently active from the four surrounding vertices' current winners; it then performs a fixed number of \emph{inner} Jacobi sweeps of the resulting fixed-combinatorics quadratic system, using the same read-stable/write-scratch/commit update pattern and a hard per-sweep step clamp as before for numerical stability. This alternating, Lloyd-style structure is the standard approach whenever an energy's own structure depends on a discrete assignment that must be solved for jointly with it.
+
+\paragraph{Thin-feature collapse.} The smoothness term inherently favors a locally planar separating surface, since it penalizes disagreement between neighboring wedges' reconstructed normals. A single isolated voxel or a one-voxel-wide line, however, has no locally planar surface to converge toward at all: its natural boundary is spherical or conical, with normals radiating in every direction, a configuration smoothness can never satisfy and therefore keeps pushing against, at essentially undiminished strength, every single sweep. Left unopposed, this collapses such a feature's reconstructed volume toward zero over enough outer rounds -- the same failure that motivated protecting high-priority labels with a stronger initial seed in our original construction (\cref{sec:initial}), and precisely what our synthetic stress-test shapes (an isolated point; a straight, one-voxel-wide line; voxels touching only along a face or body diagonal) are designed to expose.
+
+\paragraph{A volume-conservation detour.} Our first attempt at counteracting this collapse was an explicit, per-vertex \emph{target volume} that a fourth quadratic energy term pulled each vertex's actually reconstructed volume toward (computed as the exact marching-tetrahedra volume of its winning label's region across its incident wedges). Every even vertex was seeded with one full target unit on initialization, odd vertices with zero, and the target then diffused every outer round among same-label neighbors over the same wedge-adjacency graph already used for smoothness -- so a well-connected same-label region's targets would equalize toward roughly each vertex's geometric fair share, while a vertex with \emph{no} same-label neighbor (our isolated-point case) had nowhere to diffuse to and simply kept its full target forever, protecting it by construction.
+
+This worked, in that it measurably stopped the isolated point from shrinking away. It proved considerably harder to tune, and ultimately less useful, than intended, for two related reasons.
+
+First, \emph{it jeopardized numerical stability}. The smoothness term's natural gradient magnitude on these thin wedges is one to three orders of magnitude larger than the volume term's, so a naively comparable weight for the volume term had no measurable effect at all; only after raising its weight by a factor of $10^3$--$10^4$ did it become competitive, and every such change required retuning to avoid destabilizing the rest of the solve. It got worse once we corrected a flawed early version of the diffusion step -- which revised each vertex's own target purely from its own local mismatch, with no corresponding gain or loss anywhere else, and so was not actually a conservative transfer between neighbors despite being intended as one -- into a strictly pairwise, exactly volume-conserving flow. That flow then had to be damped by a large, worst-case-sized fixed normalization constant to stay numerically stable across all possible vertex degrees, and the resulting damping made the whole mechanism converge far too slowly to be useful at round counts that, without volume conservation, already sufficed for good results on well-behaved shapes such as our torus test case. In short, protecting a handful of pathological thin features came at the cost of visibly, measurably worse convergence everywhere else -- an unfavorable global trade for what is, in truth, a strictly local problem.
+
+Second, and more fundamentally, \emph{exact volume conservation does not, by itself, maintain topology}. Once we corrected the pairwise flow to genuinely conserve a connected feature's total target volume exactly -- which we confirmed empirically, tracking a one-voxel-wide line's total target volume over hundreds of relaxation rounds and finding it held constant throughout -- the line still visibly pinched apart into two disconnected blobs, one gathering around each endpoint, while the interior voxels were locally starved toward zero. The total volume genuinely never changed; it was simply redistributed, under the combined pull of smoothness and diffusion, into two separate stable concentrations rather than remaining one connected body. Volume conservation is a purely quantitative, integral constraint: it says nothing about how the conserved mass is locally arranged, and in particular gives no guarantee whatsoever that a feature which starts topologically connected stays that way. A mechanism that only tracks and conserves a scalar quantity per feature cannot, on its own, detect or prevent this kind of pinch-off.
+
+We concluded that explicit volume conservation solves a related but ultimately different problem from the one that actually matters here -- topology preservation -- while introducing real numerical cost and tuning fragility along the way, and abandoned it in favor of the substantially simpler mechanism described next.
+
+\paragraph{Connecting-vertex pinning and a local volume floor.} We instead address topology and volume as two separate concerns. \emph{Topology preservation} is handled once, purely combinatorially, before optimization ever begins, with no coupling to the energy solve at all: for every even vertex, we gather its same-label neighbors within its local $3\times3\times3$ neighborhood and test, with a small local flood fill, whether they would remain mutually connected to each other if the vertex itself were removed -- the \emph{simple point} criterion from digital topology and topology-preserving thinning (a proper citation for this classical concept should be added in a future revision). If they would not -- or if the vertex has no same-label neighbor at all, making it, degenerately, the entirety of its own feature -- we flag it as \emph{connecting}. A vertex with exactly one same-label neighbor (a line endpoint, for instance) is deliberately left unflagged: removing it cannot disconnect its single remaining neighbor from itself. The test runs once per even vertex at initialization, at fixed cost per vertex, and we verified it is exact for our synthetic stress-test shapes: every interior line vertex is correctly flagged connecting, both of a line's endpoints are correctly left unflagged, an isolated point is correctly flagged connecting, and none of our smooth, thick test volumes (e.g. the torus) ever flag a single vertex -- confirming the test is inert precisely where it should be.
+
+\emph{Volume protection} is then a strictly local, one-sided floor applied only where the topology test says it is actually needed: for a vertex flagged connecting, we add a term to the energy that pushes back only once its currently reconstructed volume dips below a fixed floor (one wedge-volume unit by default, a value derived from the geometric ceiling that a symmetric, neutrally-seeded isolated vertex can reach under the seeding of \cref{sec:initial}), applying zero force once it is at or above that floor. Smoothness therefore remains completely free to grow, reshape, or redistribute volume among connecting and non-connecting vertices alike beyond that point. Because the floor only ever engages for the small number of topologically necessary vertices, it is an exact no-op everywhere else -- again, not a single vertex of our torus test case is ever flagged -- so, unlike the volume-conservation detour above, protecting thin features here costs nothing for well-behaved regions: there is no global stability/quality trade to make.
+
+Together, an exact combinatorial connectivity guarantee and a local, geometrically-derived volume floor replace both the priority mechanism of \cref{sec:initial} and the volume-conservation detour above in our current construction. We emphasize, in the interest of honest internal reporting, that this combination is so far validated only on the synthetic stress-test shapes described above and on our smooth analytic test volumes; validating it on real, multi-organ segmentations with many simultaneously touching labels, and at junctions where three or more labels meet at a single connecting vertex, remains important future work (see also \cref{sec:discussion}).
+
+\Cref{fig:smoothcomp,fig:vesselcomp} illustrate the general effect of iterative smoothing using the original tricubic-kernel averaging pass, prior to the reformulation above; we retain them here since they still validly demonstrate that a wide, high-order averaging kernel is necessary at all (\cref{fig:smoothcomp}: a first-order, eight-neighbor average was found to tighten the surface around constrained labels rather than converge to a smooth one) and that a naive averaging-based smoothing pass, unprotected, destroys thin features (\cref{fig:vesselcomp}). As an internal note, both figures -- including panel (d) of \cref{fig:vesselcomp}, currently labeled "Proposed" but showing the now-superseded pass -- should be regenerated against the current potential-optimization construction, with an updated round count reported for it, before this becomes a submission-ready version.
+
+Note that the leaping wedges algorithm remains compatible with any smoothing technique that can be adapted to operate on the BCC-LDV -- the volume-conservation detour and the connecting-vertex/floor mechanism above are themselves two further examples, alongside the reference adaptations of Whitaker~\cite{whitaker2000reducing} and Lempitsky~\cite{lempitsky2010surface} already shown in \cref{fig:vesselcomp}, compared there against offline smoothing of the 3D mesh generated from Marching Cubes. Naturally, offline processing can achieve more visually pleasing surfaces, but it still struggles with one-voxel-width vessels.
+
+%-------------------------------------------------------------------------
+\section{Wedge Walking} \label{sec:walking}
+
+The rhombo coordinate system is used during the marching (converting back to the BCC coordinate system when reading a vertex). To efficiently find the coordinates of the next vertex, we are using the scheme discussed in the following section.
+
+\subsection{Wedge transitions} \label{sec:wedgetrans}
+
+Let us consider a rhombohedron (of six wedges) as described previously. These rhombohedra are uniquely identified by their minimal corner. There are two types of traversals: either we leave a rhombohedron through one of its six faces or traverse between wedges in the same rhombohedron. The wedges inside the rhombohedron all share a short edge. Therefore, being in a specific rhombohedron already identifies two vertices.
+% 3D-ben ezek kicsit pontatlanok: the bottom left corner and the top right corner.
+
+Looking at a rhombohedron through that short edge, its other six vertices form a hexagon. To identify the current wedge we just need to select one edge (two vertices) of this hexagon. We assign an integer identifier to each edge in the rhombohedron from \emph{0} to \emph{5} in clockwise order. The identifier of the currently selected edge, called \emph{wedge orientation index} ($\kappa$) is maintained throughout the marching (\cref{fig:hexa}).
+
+\begin{figure}[b!]
+	\centering
+	\includegraphics[width=.68\linewidth, alt={A rhombohedron in ortographic projection.}]{../figs/fig_hexa}
+	\caption{A rhombohedron in orthographic projection when looking through the principal diagonal. Short edges not connected with the principal diagonal are indexed from \emph{0} to \emph{5}, encoding the wedge orientation index~($\kappa$). A wedge (a triangle in this projection) is uniquely identified by selecting the rhombohedron and the wedge orientation index.}
+	\label{fig:hexa}
+\end{figure}
+
+Let us label the four vertices of the current wedge in the following way (see~\cref{fig:intraverse} for an example):
+\begin{itemize}
+	\item $v_0$: vertex with the lowest coordinates, on the principal diagonal.
+	\item $v_1$: vertex with the highest coordinates, on the principal diagonal.
+	\item $v_2$: vertex that has a distance of 1 from $v_0$.
+	\item $v_3$: vertex that has a distance of 1 from $v_1$.
+\end{itemize}
+
+When we traverse between wedges in the same rhombohedron (\cref{fig:intraverse}), we are always keeping vertex $v_0$ and $v_1$ and read a new vertex in place of either $v_2$ or $v_3$. The coordinates of the new vertex are given by
+\begin{equation} \label{eq:jmp23}
+	\vec{c}'_i = \begin{cases}
+		\vec{c_3} + \vec{c_0} - \vec{c_2} &\text{if $i=2$}, \\
+		\vec{c_2} + \vec{c_1} - \vec{c_3} &\text{if $i=3$}.
+	\end{cases}
+\end{equation}
+The new wedge orientation index is $\kappa' = \kappa \pm 1 \pmod{6}$.
+
+\begin{figure}[b!]
+	\centering
+	\includegraphics[width=\linewidth, alt={The same rhombohedron before and after traversal from wedge orientation index 1 to wedge orientation index 0.}]{../figs/fig_intraverse2}
+	\caption{Traversing inside a rhombohedron. When exiting the wedge through the face that is opposite of $v_3$, we exchange that vertex. Note that its role does not change and $\kappa$ changes by $\pm 1$ ($-1$ in this case). The sign depends upon the current wedge orientation index and whether $v_2$ or $v_3$ will be exchanged.}
+	\label{fig:intraverse}
+\end{figure}
+
+
+
+When we traverse to the next rhombohedron (\cref{fig:outtraverse}), the vertices are permuted instead of applying~\cref{eq:jmp23}. Leaving in the positive direction (the face opposite of $v_0$), the permutation is:
+\begin{equation}
+	\begin{gathered}
+		\left(
+		\begin{array}{cccc}
+			v_0 & v_1 & v_2 & v_3 \\
+			v'_1 & v_3 & v_0 & v_2
+		\end{array}
+		\right), \\
+		%	\text{then} \\
+		%	v'_1 = \texttt{load}(\vec{c_0} + \vec{1})
+		\vec{c}'_1 = \vec{c}_0 + \vec{1}.
+	\end{gathered}
+\end{equation}
+Leaving in the negative direction (the face opposite of $v_1$), the permutation is:
+% $ mat(v_0, v_1, v_2, v_3; v_2, v'_0, v_3, v_1), "  then " v'_0 = "load"(arrow(c_1) - arrow(1)). $<eq:jmp1>
+\begin{equation}
+	\begin{gathered}
+		\left(
+		\begin{array}{cccc}
+			v_0 & v_1 & v_2 & v_3 \\
+			v_2 & v'_0 & v_3 & v_1
+		\end{array}
+		\right), \\
+		%\text{then} \\
+		%	v'_0 = \texttt{load}(\vec{c_1} - \vec{1})
+		\vec{c}'_0 = \vec{c}_1 - \vec{1}.
+	\end{gathered}
+\end{equation}
+The new wedge orientation index is $\kappa' = \kappa \pm 2 \pmod{6}$ in both cases.
+
+
+\begin{figure}[b!]
+	\centering
+	\includegraphics[width=.8\linewidth, alt={Schematic diagram of two triangles with inscribed separating surfaces. The left triangle has an unlabeled area in the middle while in the right triangle that area is evenly distributed among the labels.}]{../figs/fig_trinegative}
+	\caption{Classification with individual SDFs (left) and based on the highest value (right). Blue lines indicate the separating surfaces. On the left, the value of each SDF in the inner area is negative, leaving it without a label. On the right, selecting the highest value leads to a natural distribution of the ambiguous area, while keeping the surface continuity between neighboring wedges. It also leads to an efficient algorithm to compute surface-ray intersections.}
+	\label{fig:trinegative}
+\end{figure}
+
+%-------------------------------------------------------------------------
+\subsection{Surface evaluation} \label{sec:surfeval}
+
+In each traversed wedge, we need to find where the ray segment intersects label-separating surfaces. The BCC-LDV stores labels and distances at the BCC lattice nodes, i.e. at the wedge vertices. For all present labels, a piecewise linear, per-wedge reconstruction of an SDF is possible if distances at nodes matching the label are taken as samples with a positive sign, while other distances are given a negative sign. In the case where two labels are present, the two SDFs are identical up to a sign, with the same zero set which defines the label-separating surface. We generalize this to multiple labels by classifying the points in the wedge to the label whose SDF has the \emph{highest value} at that point. As all distance functions are linear, the separating surfaces between these volumes are going to be planar polygons. Note that simply considering the zero sets of the individual distance functions would assign no label to some points where all of the distances are negative (see~\cref{fig:trinegative}). Our setup avoids this. Despite the simpler construction, our separating surfaces are equivalent to those defined by Nielson and Franke~\cite{nielson1997computing}.
+
+\begin{figure}[t!]
+	\centering
+	\includegraphics[width=.95\linewidth, alt={Two neighboring rhombohedra when traversal changes the current rhombohedron. The wedge orientation index changes from 1 to 3.}]{../figs/fig_outtraverse}
+	\caption{Traversing outside a rhombohedron. When exiting the wedge through the face that is opposite of $v_0$ (or $v_1$), we step outside, into the next rhombohedron. It is easy to see that $\kappa$ always changes by $\pm 2 \pmod{6}$.}
+	\label{fig:outtraverse}
+\end{figure}
+
+\begin{figure}[b!]
+	\centering
+	\includegraphics[width=.8\linewidth, alt={Four lines represent how the distance function changes along the ray. The lines intersect each other on six occasions, but we are intrested in the 4 intersections when the maximal value changes.}]{../figs/fig_tetralines}
+	\caption{The SDFs and their intersections in 1D along the ray. The entry label is orange, while the exit label is yellow. Intersection points with separating surfaces occur where the maximal function changes, i.e. at the intersections of the SDFs themselves. Note that there are at most three such intersections and the derivative of the maximum SDF must be increasing.}
+	\label{fig:tetralines}
+\end{figure}
+
+\begin{figure*}[tb!]
+	\centering
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={Exact surface normal vectors are visualized, the true form of the surface is easy to discern.}]{../figs/csig_50_flat_white}
+		\caption{Exact}
+		\label{fig:normalscomp1}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={Approximated surface normals are visualized from the distance field.}]{../figs/csig_50_smooth_white}
+		\caption{Smoothed SDF}
+		\label{fig:normalscomp2}
+	\end{subfigure}
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={Approximated surface normals are visualized from Hounsfield-densities. They exhibit inconsistencies with the surface.}]{../figs/csig_classic_white}
+		\caption{Hounsfield-densities}
+		\label{fig:normalscomp3}
+	\end{subfigure}
+		\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth, alt={Interpolated vertex normals are visualized for the offline processed mesh. The normals are closer to the approximation from the distance field than to the approximation from the Hounsfield-densities.}]{../figs/csig_manual_white_normal}
+		\caption{Interpolated vertex normals}
+		\label{fig:normalscomp4}
+	\end{subfigure}
+	\subfigsCaption{Comparison of estimated normal vectors between the exact (a) and smoothed (b) versions. 50 iterations of the original tricubic averaging pass (\cref{sec:smoothing}) were used for (a) and (b) -- to be regenerated against the current potential-optimization pass -- while (c) is the corresponding ray marched isosurface of the Hounsfield-densities. In (b) and (c) we employed central differences to estimate the normal vector. In (d) interpolated vertex normals of the offline mesh are visualized.}
+	\label{fig:normalscomp}
+\end{figure*}
+
+We do not need to explicitly represent the separating planar polygons, and compute intersections with them --- which would be possible, but expensive. Instead, we consider the SDFs along the ray segment, which are simply 1D linear functions (see~\cref{fig:tetralines}). A label applies where its SDF is the maximal one. These maximal segments form a polyline, the steepness of which increases at every intersection. Therefore, we traverse the SDFs in the order of their derivatives.
+
+All SDF values have to be known at the entry and exit points of the ray within the wedge, along with the labels at these two points. As the entry point is the exit point in the previous wedge, the label and the SDF values there are not recomputed. This also avoids artifacts that could arise due to floating point inaccuracy. The label and the SDF values at the new exit point are computed by finding the barycentric weights of the ray exit point on the exit face, and applying the weighting to the signed distance values reconstructed from the BCC-LDV.
+
+%We formulate our algorithm for this case, without the loss of generality, which also helps to arrive at an efficient implementation without excessive branching.
+
+
+\begin{algorithm}[b!]
+	\caption{Shade-intersections. The input is the labels at the four vertices $\mathbf{l}$, the entry $\vec{p}$ and exit $\vec{p}'$ points in the wedge along the ray, and the interpolated distance function values at both points for each vertex $\mathbf{w}, \mathbf{w}'$. Note that vertices with identical labels share SDFs, with repeated entries in $\mathbf{w}$.}\label{alg:findter}
+	\begin{algorithmic}
+		\Procedure{Shade-intersections}{$\mathbf{l}, \vec{p}, \vec{p}', \mathbf{w}, \mathbf{w}'$}
+		\State $\nabla \gets \mathbf{w} - \mathbf{w}'$ \Comment{SDF derivatives per label}
+		\State $\texttt{sort}_{\nabla}(\mathbf{l}, \mathbf{w}, \mathbf{w}')$ \Comment{sort SDFs by $\nabla$}
+		\State $\eta \gets \max_{i \in \{0,...,3\}} w_i$ \Comment{index of entry label}
+		\State $\eta' \gets \max_{i \in \{0,...,3\}} w'_i$ \Comment{index of exit label}
+		\State $i \gets \eta$ \Comment{index of current label}
+		\While{$i \neq \eta'$}
+		\State $j^\star \gets i$ \Comment{index of the intersected label}
+		\State $t^\star \gets \infty$ \Comment{parameter of the intersection}
+		\For{$j \in \{n,...3\}$} \Comment{find closest intersection $j^\star, t^\star$}
+		\If{$l_i \neq l_j$} \Comment{ignore repeated labels}
+		\State $t \gets (w_i - w_j) / (w_i - w_j - w'_i + w'_j)$
+		\If{$t \in [0,t^\star)$} \Comment{better intersection found}
+		\State $j^\star \gets j$
+		\State $t^\star \gets t$
+		\EndIf
+		\EndIf
+		\EndFor
+		\If{$j^\star \neq i$} \Comment{found valid intersection}
+		\State $\texttt{shade}(\vec{p} + t^\star (\vec{p}' - \vec{p}), l_i)$
+		\State $i \gets j^\star$ \Comment{move to next segment}
+		\Else \Comment{there are no more intersection}
+		\Break
+		\EndIf
+		\EndWhile
+		\EndProcedure
+	\end{algorithmic}
+\end{algorithm}
+
+There are at most four labels present in a wedge and there are six possible intersections between the four SDFs along the ray. If we do not handle transparency, only the first intersection is needed, i.e. finding the closest intersection between the SDF of the entry label and the three other functions is sufficient. For transparent shading, the intersections where the two functions are locally maximal are needed.
+%As all functions are linear, and therefore convex, their elementwise maximum must also be convex. Thus, the derivative of the maximum must be increasing, meaning that the linear segments will be traversed in the order of their derivatives.
+As we know labels are traversed in the order of the derivatives, we sort the four labels according to the difference of the exit and entry point values, allowing us to efficiently shade all ray-surface intersections inside the wedge in~\cref{alg:findter}.
+
+%-------------------------------------------------------------------------
+\subsection{Normal vector estimation} \label{sec:normeval}
+
+Smooth normal vectors for the extracted surface are usually estimated with central differences over the reconstructed data \cite{moller1997comparison}. We also employed this method to estimate the gradients at the vertices of the BCC lattice as differences of SDF values at long edge neighbors. Then, we linearly interpolated them within the wedge to get the normal at a surface point. Thus, 20 additional vertices are accessed to produce normals corresponding to a third-order reconstruction of the surface. We also implemented an alternative method that calculates the exact normal vectors for the separating surfaces, without additional data access. These are very efficient to compute and can be used to flat shade the surface, which may be desirable in some use cases. For comparison with the classical ray marching approach see~\cref{fig:normalscomp}. The computation of the exact normal is as follows:
+
+Let $\mathbf{w}$ and $\mathbf{w}'$ be the arrays that contain the four SDF values at the wedge vertices, for the two labels separated by the surface in question, respectively. With $\mathbf{\beta}$ as the 3D barycentric coordinates within the wedge, the distance functions for the two labels are reconstructed as $\mathbf{\beta} \cdot \mathbf{w}$ and $\mathbf{\beta} \cdot \mathbf{w}'$. At the separating surface, the functions are equal, therefore it is the zero set of 
+\begin{equation}
+	f(\mathbf{\beta}) = \mathbf{\beta} \cdot \mathbf{w} - \mathbf{\beta} \cdot \mathbf{w}' = \mathbf{\beta} \cdot (\mathbf{w} - \mathbf{w}').
+\end{equation}
+The normal vector of the separating surface is the constant gradient:
+\begin{equation}
+	\nabla f = \mathbf{w} - \mathbf{w}'.
+\end{equation}
+To transform the gradient from barycentric coordinates to rhombo coordinates we can use a matrix of the form:
+\begin{equation}
+	\mathbf{M}_{\kappa} =
+	\left(
+	\begin{array}{ccc}
+		\mathbf{i_x} \\
+		\mathbf{i_y} \\
+		\mathbf{i_z}
+	\end{array}
+	\right),
+\end{equation}
+where the rows of $\mathbf{M}_{\kappa}$ are the axes of the rhombo coordinate system in barycentric coordinates. $\mathbf{M}_{\kappa}$ depends on the orientation of the current wedge which is determined by the wedge orientation index $\kappa$.
+
+%-------------------------------------------------------------------------
+\section{Octree acceleration structure} \label{sec:octree}
+
+For complex scenes, an acceleration structure is mandatory to maintain real-time framerate. We chose an octree that is built over the rhombohedral cells. In the rhombo coordinate system this can be considered a standard octree. We implemented it as a flat octree, i.e. we stored in each vertex the size of the largest homogeneous block that contained the rhombohedral cell associated with that vertex or 0 if the rhombohedron was not homogeneous. Note that the octree over the rhombohedra is larger at the base level than an octree over the SC lattice would be (\cref{fig:enclosing}). Fortunately, we can omit these empty areas and only store the flat octree at the existing vertices of the BCC lattice.
+%Nevertheless, to build the octree we must consider the whole hierarchy, therefore the first level is effectively the same size as the base level.
+
+\begin{figure}[b!]
+	\centering
+	\includegraphics[width=.8\linewidth, alt={The figure demonstrates why the octree is larger at the base level by inscribing the original volume into the enclosing rhombohedron in both three and two dimensions.}]{../figs/fig_enclosing}
+	\caption{Left: the original volume (black) is enclosed by the rhombohedron (blue) that is the basis for the octree. Right: first (blue) and second (red) subdivision of the octree in 2D, as viewed from the top. Note that $7/8$ of the rhombohedron (in 3D) is empty.}
+	\label{fig:enclosing}
+\end{figure}
+
+%-------------------------------------------------------------------------
+\subsection{Octree construction}
+
+First the base level is computed, i.e. we calculate for each rhombohedron if it is homogeneous or not and store 0 or 1, respectively. Then this binary volume is dilated once with the $3 \times 3 \times 3$ homogeneous structuring element. This step is necessary to ensure that we need to read exactly one vertex at the end of each step. Otherwise, after skipping a homogeneous block we could reach an inhomogeneous wedge, where data for all four vertices would be required at once (see~\cref{fig:readwedge}). The second step recursively fills a mip chain over the base level by storing the maximum of the subnodes on the previous level. Building the first level is special since parts of the base level are not stored directly but instead implicitly homogeneous as they are outside of the original input data and considered to be empty. The third step creates the octree by traversing the mip chain from top to bottom, searching for the first node where a 0 is stored. The first 0 indicates that at this level and below, the rhombohedra are homogeneous. We store the level in the acceleration structure.
+
+%-------------------------------------------------------------------------
+\subsection{Octree traversal}
+
+Let us consider a single rhombohedral cell with coordinate $\vec{c}$ in a homogeneous block of size $2^h$. We are interested in where the ray will intersect the boundaries of this block, and the exact coordinates and wedge orientation index of the next wedge at that position. Based on $\vec{c}$ and $h$ and the ray direction $\vec{d}$, we can compute which plane will be intersected first and select the intersected rhombohedron $\vec{c}'$ at the base level. To compute the new wedge orientation index $\kappa'$, we can compare the intersected point on the face of the rhombohedron against the planes that separate the rhombohedron into wedges. Note that based on the jump direction, two planes are redundant and only the plane that intersects the face that we arrived on must be checked (see right of~\cref{fig:rhombo} on how the three pairs of opposite blue edges define the three planes).
+
+After the wedge is determined by the rhombohedron and the wedge orientation index, the ray parameters (per plane) must be updated. We must not use floating point arithmetic to calculate this, because it would cause errors in the consistency of the DDA. Therefore, we need to determine the exact number of DDA steps skipped along all six plane orientations. Let $\vec{n_j}, j \in \{0,...,5\}$ be the normal vectors of the six planes in the rhombo coordinate system (see~\cref{eq:normals} for the normal vectors in the BCC coordinate system). Note that the first three vectors are the normal vectors of the planes separating the octree nodes and the last three vectors are such that $\vec{n}_j \cdot \vec{n}_{j+3} = 0$.
+%APPENDIX: For the first three plane orientations, the situation is identical to the DDA on a voxel grid, and the number of traversed planes is trivial to find. For the other three plane orientations, we observe that, between two neighboring planes, two of first plane sets form a continous surface. Crossing this zigzag surface requires crossing the axis-aligned planes an odd number of times.
+%APPENDIX: See Figure~\ref{fig:DDA} for a 2D illustration.
+Let $\vec{\Delta} = \vec{c}'-\vec{c}$. Then the number of skipped equidistant parallel planes with normal $\vec{n}_j$ is 
+\begin{equation} \label{eq:skipplane}
+	\lambda_j = \begin{cases}
+		|\vec{\Delta}_j| &\text{if $j\in \{0,1,2\}$}\\
+		|\vec{\Delta}_k - \vec{\Delta}_m| - 1 + s_j + s'_j  &\text{if $j\in \{3,4,5\}$}
+	\end{cases},
+\end{equation}
+where $k=j+1 \pmod{3}$, $m=j+2 \pmod{3}$ (referring to the planes that are \emph{not} perpendicular to the $j$th plane). Terms $s_j$ and $s'_j$ indicate whether we skipped over the plane ($1$ if we did, $0$ otherwise) with normal $\vec{n}_j$ inside the initial and final rhombohedron, respectively. They can be computed from $\vec{\Delta}, \kappa$ and $\kappa'$.
+
+Note that after skipping in the positive direction along any axes and arriving to rhombohedron $\vec{c}'$, the vertex that is outside the homogeneous block will be always $v_1$, but the octree level, $h_{\vec{c}'}$ is stored at $v_0$. To be able to immediately continue skipping without reading two texels in the same step, we also have to store $h_{\vec{c}-\vec{1}}$ alongside $h_{\vec{c}}$ at each vertex.
+
+%-------------------------------------------------------------------------
+\section{Data storage}
+
+The algorithm requires the following per-vertex data during rendering: label ($l$), distance ($w$), and the size of the largest containing homogeneous octree node ($h$). These are packed into one 32 bit channel (see~\cref{tab:vertexstorage}) and a two channel texture is used to store vertices with coordinates $\vec{c}$ and $\vec{c}+\vec{1}$ in the same texel.
+
+
+\begin{table}[ht]
+	\caption{Structure of a 32 bits channel storing the data of vertex $v$ with coordinate $\vec{c}$. The first row corresponds to the case when the node is homogeneous and the second when it is not.}
+	\centering
+	\begin{tabularx}{0.9\linewidth} { 
+			>{\raggedright\arraybackslash}c 
+			| >{\raggedright\arraybackslash}X
+			>{\raggedleft\arraybackslash}X 
+			| >{\raggedleft\arraybackslash}X  
+			| >{\raggedleft\arraybackslash}X 
+			| >{\raggedleft\arraybackslash}X } \toprule
+		1. bit & 2. & 6. & 22. & 27. & 32. bit \\ \midrule
+		\multicolumn{1}{c|}{0}  & \multicolumn{2}{c|}{$h_{\vec{c}}$} & \multicolumn{1}{c|}{$\hat{w}$} &  \multicolumn{1}{c|}{$h_{\vec{c}-\vec{1}}$} & \multicolumn{1}{c}{$l$} \\ \midrule
+		\multicolumn{1}{c|}{1}  & \multicolumn{3}{c|}{$w$} & \multicolumn{1}{c|}{$h_{\vec{c}-\vec{1}}$} & \multicolumn{1}{c}{$l$} \\\bottomrule
+	\end{tabularx}
+
+	\label{tab:vertexstorage}
+\end{table}
+
+The first bit indicates whether the octree node is homogeneous or not. If it is homogeneous (0) then the next 5 bits store the octree level, otherwise (1) the next 21 bits store the distance. In either case the last 10 bits store the octree level of $\vec{c} - \vec{1}$ and the label of the vertex. If homogeneous, we also store the distance at a lower precision $\hat{w}$, to be used during normal vector estimation for the central differences. In our experiments, we found that using at least 10 bits for the distance is required to avoid artifacts.
+
+\begin{figure}[t!]
+	\centering
+	\includegraphics[width=.4\linewidth, alt={The figure illustrates that surfaces can occur at the boundary of homogeneous regions which require distance data from the otherwise skippable, homogeneous region.}]{../figs/fig_readwedge}
+	\caption{After leaving the homogeneous red rhombohedron and arriving to the highlighted wedge, although the three red vertices have the same label, we would still require the distances there to find the potential red-blue surface. Dilating the inhomogeneous blocks avoids this.}
+	\label{fig:readwedge}
+\end{figure}
+
+For a $256 \times 256 \times 256 \times 2$ volume we require 134 MB texture memory during rendering. For building the octree, an additional 4 MB intermediate texture memory is required. The potential optimization of \cref{sec:smoothing} requires each vertex to hold up to eight candidate label/potential pairs simultaneously rather than a single value, so its working memory footprint during construction is correspondingly larger than the final baked representation -- up to $8\times$ in the worst case, though typically much less, since most vertices have far fewer than eight distinct candidates in their neighborhood. As before, if the segmentation is immutable, this working memory can be released once the optimization converges, leaving only the finalized per-vertex label and value needed for rendering.
+
+%-------------------------------------------------------------------------
+\section{Results}
+See~\cref{fig:ml,fig:bigperf} for visual presentation of the results. We have evaluated smaller artificial volumes, generated from a combination of SDFs, and a larger segmented CT scan of the thoracoscopic region.
+
+\emph{Internal-version note:} the ray marching and octree-construction timings below are unaffected by the revision described in \cref{sec:smoothing}, since the runtime BCC-LDV-FO representation is unchanged. The smoothing timings, however (\cref{tab:performance8nv}, "1 smoothing iteration"), were measured with the original tricubic block-averaging pass; the current outer/inner Jacobi optimization has different per-round cost characteristics and has not yet been re-benchmarked at this scale. Re-measuring construction performance with the current pass is future work before this becomes a submission-ready version.
+
+We measured performance on an RTX 4090 GPU. Results are compiled in~\cref{tab:performance4nvidia} comparing the proposed algorithm to the baseline method (standard DDA traversal with embedded octree). Note that transparency comes at a considerable cost as the octree will be less effective at empty-space-skipping after the first surface. Segments can be disabled by setting their opacity to 0. To optimize performance for this scenario we recommend recomputing the octree while treating invisible segments as empty area. This achieves optimal performance and can be done in a reasonable time frame. Performance measurements for smoothing the volume and building the octree are presented in~\cref{tab:performance8nv}. Computations to build the octree can be also performed throughout multiple frames (similarly to iterative processing) to prevent performance spikes. Visual artifacts during this time can be prevented by overriding the octree over the modified are until the new version is ready. Note that the measurements are for the whole volume. In a real world scenario they should be recomputed only over the modified area.
+
+\begin{figure}[b!]
+	\centering
+	\includegraphics[width=\linewidth, alt={The figure depicts various shapes rendered with volumetric effect.}]{../figs/v3}
+	\caption{Volumetric effect achieved with simple transfer functions assigned to the segments.}
+	\label{fig:voleff}
+\end{figure}
+
+\begin{figure*}[htb]
+	\centering
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the reconstruction of the Marschner-Lobb signal is with visualized surface normals.}]{../figs/lm_40_white}
+		\caption{$40 \times 40 \times 40 \times 2$}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the reconstruction of the Marschner-Lobb signal is with visualized surface normals.}]{../figs/lm_48_white}
+		\caption{$48 \times 48 \times 48 \times 2$}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the reconstruction of the Marschner-Lobb signal is with visualized surface normals.}]{../figs/lm_64_white}
+		\caption{$64 \times 64 \times 64 \times 2$}
+	\end{subfigure}
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the reconstruction of the Marschner-Lobb signal is with visualized surface normals.}]{../figs/lm_128_white}
+		\caption{$128 \times 128 \times 128 \times 2$}
+	\end{subfigure}
+	\subfigsCaption{Reconstruction of the Marschner-Lobb signal on multiple resolutions. Note that we employ only linear interpolation from the nearest vertices, therefore the lower resolution prevents accurate reconstruction of the higher frequency details.}
+	\label{fig:ml}
+\end{figure*}
+
+\begin{figure*}[htb]
+	\centering
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the solid rendering of various shapes.}]{../figs/sdf_64_opaque}
+		\caption{$64 \times 64 \times 64 \times 2$}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the solid rendering of various shapes.}]{../figs/sdf_128_opaque}
+		\caption{$128 \times 128 \times 128 \times 2$}
+	\end{subfigure}
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the solid rendering of various shapes.}]{../figs/sdf_256_solid}
+		\caption{$256 \times 256 \times 256 \times 2$}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the solid rendering of various shapes.}]{../figs/sdf_512_solid}
+		\caption{$512 \times 512 \times 512 \times 2$}
+	\end{subfigure}%
+	
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the transparent rendering of various shapes.}]{../figs/sdf_64_transp}
+		\caption{$64 \times 64 \times 64 \times 2$}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the solid rendering of various shapes.}]{../figs/sdf_128_transp}
+		\caption{$128 \times 128 \times 128 \times 2$}
+	\end{subfigure}
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the solid rendering of various shapes.}]{../figs/sdf_256_transp}
+		\caption{$256 \times 256 \times 256 \times 2$}
+	\end{subfigure}%
+	\hfill%
+	\begin{subfigure}{.24\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the solid rendering of various shapes.}]{../figs/sdf_512_transp}
+		\caption{$512 \times 512 \times 512 \times 2$}
+	\end{subfigure}%
+	
+	\begin{subfigure}{.49\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the solid rendering of segmented organs in the thoracoscopic region.}]{../figs/perf_opaqe}
+		\caption{$512 \times 512 \times 133 \times 2$}
+	\end{subfigure}
+	\hfill%
+	\begin{subfigure}{.49\linewidth}
+		\centering
+		\includegraphics[width=\textwidth,alt={The figure depicts the transparent rendering of segmented organs in the thoracoscopic region.}]{../figs/perf_transp}
+		\caption{$512 \times 512 \times 133 \times 2$}
+	\end{subfigure}
+	
+	\subfigsCaption{Solid and transparent renders of both synthetic and medical, segmented datasets of various resolutions. The corresponding frame times are compiled in~\cref{tab:performance4nvidia}.}
+	\label{fig:bigperf}
+\end{figure*}
+
+
+
+%\begin{table*}[t!]
+%	\caption{Performance measurements for one frame in [ms] for various volume resolutions on an RX 7900 XTX. Render target resolution was $1024 \times 768$. See corresponding images on~\cref{fig:bigperf}.}
+%	\label{tab:performance4}
+%	\centering
+%	\begin{tabular}{cccccccccc} \toprule
+%		& & \multicolumn{2}{c}{$64 \times 64 \times 64$} & \multicolumn{2}{c}{$96 \times 96 \times 96$} & \multicolumn{2}{c}{$128 \times 128 \times 128$} & \multicolumn{2}{c}{$512 \times 512 \times 133$} \\
+%		\cmidrule(lr){3-4} \cmidrule(lr){5-6} \cmidrule(lr){7-8} \cmidrule(lr){9-10}
+%		& \multicolumn{1}{r}{octree $\rightarrow$} & w/ & w/o & w/ & w/o & w/ & w/o & w/ & w/o \\
+%		\midrule
+%		\multirow{2}{*}{Baseline} & Opaque & 1.1 & 2.6 & 1.2 & 3.8 & 1.3 & 5.2 & 2.3 & 27 \\
+%		& Transparent   	                  & 2.7 & 4.2 & 3.4 & 6.4 & 3.8 & 8.5 & 8.8 & 36 \\ 
+%		\midrule
+%		\multirow{2}{*}{Proposed} & Opaque & 1.1 & 2.6 & 1.2 & 3.8 & 1.3 & 5.2 & 2.3 & 27 \\
+%		& Transparent   	                  & 2.7 & 4.2 & 3.4 & 6.4 & 3.8 & 8.5 & 8.8 & 36 \\ 
+%		%\midrule
+%		%\multirow{2}{*}{RTX 2080 SUPER} & Opaque & 4.4 & 130 & 5 & - & 5.2 & & 9.8 & \\
+%		%& Transparent & 11 & & 14 & & 16.5 & & 63 & \\ 
+%		\bottomrule
+%	\end{tabular}
+%\end{table*}
+
+\begin{table*}[t!]
+	\caption{Performance measurements for one frame in [ms] for various volume resolutions on an RTX 4090. Render target resolution was $1024 \times 768$. See corresponding images on~\cref{fig:bigperf}.}
+	\label{tab:performance4nvidia}
+	\centering
+	\begin{tabular}{ccccccc} \toprule
+		& & $64 \times 64 \times 64$ & $128 \times 128 \times 128$ & $256 \times 256 \times 256$ & $512 \times 512 \times 133$ & $512 \times 512 \times 512$ \\
+		\midrule
+		\multirow{2}{*}{Baseline} & Opaque & 0.8  & 1 & 1.1 & 1.5 & 1.3 \\
+		& Transparent   	               & 2 & 2.7 & 3 & 4.4 & 3.2  \\ 
+		\midrule
+		\multirow{2}{*}{Proposed} & Opaque & 1 & 1.5 & 1.8 & 3 & 2.3 \\
+						    & Transparent  & 4.7 & 5.2 & 7 & 11.5 & 9.2 \\ 
+		\bottomrule
+	\end{tabular}
+\end{table*}
+
+%\begin{table*}[t!]
+%	\caption{Performance measurements for iterative processing and building the octree [ms] for various volume resolutions on a RX 7900 XTX. Iterative processing times are for one iteration.}
+%	\label{tab:performance8}
+%	\centering
+%	\begin{tabular}{ccccc} \toprule
+%		& $64 \times 64 \times 64$ & $96 \times 96 \times 96$ & $128 \times 128 \times 128$ & $512 \times 512 \times 133$ \\
+%		\midrule
+%		Octree building & 0.3 & 1.7 & 1.95 & 65.6 \\
+%		\midrule
+%		1 iteration & 0.4 & 0.8 & 2 & 25 \\
+%		%\midrule
+%		%\multirow{2}{*}{RTX 2080 SUPER} & Opaque & 4.4 & 130 & 5 & - & 5.2 & & 9.8 & \\
+%		%& Transparent & 11 & & 14 & & 16.5 & & 63 & \\ 
+%		\bottomrule
+%	\end{tabular}
+%\end{table*}
+
+\begin{table*}[t!]
+	\caption{Performance measurements for iterative processing and building the octree in [ms] for various volume resolutions on an RTX 4090. Iterative processing times are for one iteration. Both measurements are for processing the whole volume.}
+	\label{tab:performance8nv}
+	\centering
+	\begin{tabular}{cccccc} \toprule
+		& $64 \times 64 \times 64$ & $128 \times 128 \times 128$ & $256 \times 256 \times 256$ & $512 \times 512 \times 133$ & $512 \times 512 \times 512$ \\
+		\midrule
+		Octree building & 0.2 & 0.7 & 4.7  & 31 & 37.3 \\
+		\midrule
+		1 smoothing iteration     & 0.4 & 1.8 & 14.2 & 31.4 & 118.2 \\
+		%\midrule
+		%\multirow{2}{*}{RTX 2080 SUPER} & Opaque & 4.4 & 130 & 5 & - & 5.2 & & 9.8 & \\
+		%& Transparent & 11 & & 14 & & 16.5 & & 63 & \\ 
+		\bottomrule
+	\end{tabular}
+\end{table*}
+
+
+%-------------------------------------------------------------------------
+\section{Discussion} \label{sec:discussion}
+
+We would like to emphasize that the presented solution is modular regarding the potential-optimization process, the data storage, and octree integration. As presented in \cref{fig:vesselcomp}, other smoothing operators are compatible if they can be adapted to the wedge honeycomb, and \cref{sec:smoothing} discusses one such alternative -- explicit volume conservation -- in detail: we implemented it, tuned it extensively, and ultimately rejected it, for two reasons worth restating here. It does not, by itself, guarantee topology preservation, since a connected feature can pinch apart into disconnected pieces while its total (conserved) volume never changes. And enforcing it at global scale jeopardized numerical stability: the weight required to make it competitive with the smoothness term, combined with the damping required to keep its exactly-conservative form numerically stable, together destabilized and slowed convergence for well-behaved volumes in order to protect a small number of pathological ones.
+
+The combination we adopted instead -- a one-time, purely combinatorial connectivity test that flags vertices whose removal would locally disconnect a same-label feature, paired with a local, one-sided volume floor that engages only for those flagged vertices -- separates the two concerns (topology, volume) so that neither incurs any cost where it is not needed. So far it is validated only on synthetic stress-test shapes designed to isolate specific ambiguous configurations (a single voxel; a straight, one-voxel-wide line; voxels touching only along a face or body diagonal) and on our smooth analytic test volumes. Extending this validation to real, multi-organ segmentations with many simultaneously touching labels, and to junctions where three or more labels meet at a single connecting vertex, is important future work before the mechanism can be considered a full replacement for the priority-based approach throughout. More broadly, feature-aware processing that explicitly recognizes and preserves tubular or sheet-like structures (rather than inferring their necessity purely from local connectivity) remains a promising direction beyond what connecting-vertex pinning alone provides. Better visual results for specific volumes could also be achieved where there are no single-voxel-width structures at all, in which case the connectivity test and volume floor are simply inert.
+
+Even though we embedded the octree with the labels and distances, larger volumes could be supported by separating the two and not storing the homogeneous regions at all. It is even possible to adapt ray-tracing-based methods or out-of-core architectures if they are applied over the rhombohedra instead of the wedges as presented in~\cref{sec:octree}.
+
+Transfer functions for volumetric effects can be also adapted by assigning them to segments or segment boundaries. \Cref{fig:voleff} presents one such example.
+
+
+
+%-------------------------------------------------------------------------
+\section{Conclusion \& Applications}
+
+In this paper we introduced a novel multi-label volume rendering algorithm based on ray marching. The proposed method works on a Labeled Distance Volume defined on the BCC lattice and reconstructs smooth separating surfaces even at label junctions. We have also presented a combinatorial energy-optimization algorithm to generate the BCC-LDV from a discrete segmentation, combining a quadratic smoothness/margin/regularizer objective with an explicit, purely topological connectivity test and a local volume floor to retain thin features. We deliberately avoided relying on a global volume-conservation constraint for this purpose, having found it to be neither sufficient on its own (it does not guarantee topology preservation) nor free of cost (it measurably jeopardizes convergence stability for well-behaved regions to protect a small number of pathological ones).
+
+Interactive manipulation of the segmentation is supported through dynamic recomputation of the BCC-LDV-FO. This requires local smoothing of the manipulated area and recomputation of the octree, both of which can be done throughout multiple frames.
+
+Even though rendered surfaces are artifact and aliasing free like rasterized triangle meshes, exact transparency and advanced volume visualization techniques are also supported similarly to ray marching.
+
+
+% TODO: CYMK?
+%TODO Add alternative texts that describe the content of the image to all figures.
+
+
+%\section{Supplemental Material Instructions}
+%\label{sec:supplement_inst}
+
+%In support of transparent research practices and long-term open science goals, you are encouraged to make your supplemental materials available on a publicly-accessible repository.
+%Please describe the available supplemental materials in the \hyperref[sec:supplemental_materials]{Supplemental Materials} section.
+%These details could include (1) what materials are available, (2) where they are hosted, and (3) any necessary omissions.
+
+
+%\section{Appendices}
+%\label{sec:appendices_inst}
+
+%Appendices can be specified using \verb|\appendix|.
+%For example, our Troubleshooting instructions in
+%\iflabelexists{appendix:troubleshooting}
+%  {\cref{appendix:troubleshooting}}
+%  {the appendix of the full paper at \url{https://osf.io/nrmyc}}.
+
+%Note that the paper submission has to end after the \textbf{References} section and within the page limit of the conference you are submitting to.
+%Any version of Appendices or the paper with Appendices included has to be submitted separately as supplementary material (not that, for IEEE VIS starting in 2026, you can optionally also submit an additional full version including the appendices).
+%You can use the \verb|hideappendix| class option to remove everything after \verb|\appendix|.
+%We encourage you to submit a full version of your paper to a preprint server with any appendices included.
+
+%You can use the \verb|\iflabelexists| macro to cross reference an appendix from the main text, but only if that label (i.e., the appendix) actually exists.
+%For example, above we use 
+
+%\begin{verbatim}
+%\iflabelexists{appendix:troubleshooting}
+%  {\cref{appendix:troubleshooting}}
+%  {the appendix of the full paper at
+%   \url{https://osf.io/XXXXX}}.
+%\end{verbatim}
+
+%In order to cross-reference to the appendix with \verb|\cref| if it exists, but if the appendix is commented out then we will simply create a hyperlinked URL to it.
+
+
+%\section*{Supplemental Materials}
+%\label{sec:supplemental_materials}
+
+%Refer to the instructions for this section (\cref{sec:supplement_inst}).
+%Below is an example you can follow that includes the actual supplemental material for this template:
+
+%All supplemental materials are available on OSF at \href{https://doi.org/10.17605/OSF.IO/2NBSG}{\texttt{osf\discretionary{}{.}{.}io\discretionary{/}{}{/}2nbsg}}, released under a \href{https://creativecommons.org/licenses/by/4.0/}{\ccby{} CC BY 4.0 license}.
+%In particular, they include (1) Excel files containing the data for and analyses for creating \cref{tab:vis_papers} and \cref{fig:vis_papers}, (2) figure images in multiple formats, and (3) a full version of this paper with all appendices.
+%Our other code is intellectual property of a corporation---Starbucks Research---and there is no feasible way to share it publicly.
+
+
+%% if specified like this the section will be omitted in review mode
+\acknowledgments{%
+	This project has been supported by the National Research, Development and Innovation Office, Hungary (OTKA K145970). The RTX 4090 GPUs used in the project are donations of NVIDIA.%
+}
+
+
+\bibliographystyle{abbrv-doi-hyperref}
+%\bibliographystyle{abbrv-doi-hyperref-narrow}
+%\bibliographystyle{abbrv-doi}
+%\bibliographystyle{abbrv-doi-narrow}
+
+\bibliography{template}
+
+
+\appendix % You can use the `hideappendix` class option to skip everything after \appendix
+\crefalias{section}{appendix} % this is to make sure that cleverref switches to referring to Appx. X from here on
+
+%\section{About Appendices}
+%Refer to \cref{sec:appendices_inst} for instructions regarding appendices.
+
+%\section{Troubleshooting}
+%\label{appendix:troubleshooting}
+
+%\subsection{ifpdf error}
+
+%If you receive compilation errors along the lines of \texttt{Package ifpdf Error: Name clash, \textbackslash ifpdf is already defined} then please add a new line \verb|\let\ifpdf\relax| right after the \verb|\documentclass[journal]{vgtc}| call.
+%Note that your error is due to packages you use that define \verb|\ifpdf| which is obsolete (the result is that \verb|\ifpdf| is defined twice); these packages should be changed to use \verb|ifpdf| package instead.
+
+
+%\subsection{\texttt{pdfendlink} error}
+
+%Occasionally (for some \LaTeX\ distributions) this hyper-linked bib\TeX\ style may lead to \textbf{compilation errors} (\texttt{pdfendlink ended up in different nesting level ...}) if a reference entry is broken across two pages (due to a bug in \verb|hyperref|).
+%In this case, make sure you have the latest version of the \verb|hyperref| package (i.e.\ update your \LaTeX\ installation/packages) or, alternatively, revert back to \verb|\bibliographystyle{abbrv-doi}| (at the expense of removing hyperlinks from the bibliography) and try \verb|\bibliographystyle{abbrv-doi-hyperref}| again after some more editing.
+
+\end{document}
+
