@@ -31,18 +31,6 @@
     <FxCompile Include="Shaders\computeConnectingNodesCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\buildTetsCS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\clearIncidentCS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\buildIncidentCS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\buildTetFaceNeighborsCS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\buildCandidatesCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
@@ -97,6 +85,9 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\DistanceSurface.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\LabelPalette.hlsli">
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\PickedTetCb.hlsli">

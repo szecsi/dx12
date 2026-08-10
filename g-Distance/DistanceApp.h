@@ -14,6 +14,7 @@
 
 #include "Shaders/DistanceConfig.hlsli"
 #include "Shaders/DistanceCb.hlsli"
+#include "Shaders/DistanceGridCb.hlsli"
 #include "Shaders/DistanceFrameCb.hlsli"
 #include "Shaders/PickedTetCb.hlsli"
 #include "Shaders/TorusListCb.hlsli"
@@ -53,33 +54,60 @@ enum DistanceTestShape {
 // (soft-stargazing-biscuit.md) for the full design rationale.
 class DistanceApp : public Egg::SimpleApp {
 
-	static constexpr uint GridRes  = GRID_RES;   // must match DistanceConfig.hlsli
-	static constexpr float CellSize = CELL_SIZE; // must match DistanceConfig.hlsli
+	static constexpr float CellSize = CELL_SIZE; // must match DistanceConfig.hlsli -- physical unit, independent of grid resolution
 	static constexpr uint MaxIncidentTets = MAX_INCIDENT_TETS;
 
-	static constexpr uint BDim   = GridRes - 1;
-	static constexpr uint ACount = GridRes * GridRes * GridRes;
-	static constexpr uint BCount = BDim * BDim * BDim;
-	static constexpr uint NodeCount = ACount + BCount;
+	// -- runtime grid-size state --
+	// GridRes is a GUI slider now (applied on Reinitialize, capped at 256 --
+	// see the approved plan's memory-scaling discussion for why not higher),
+	// not a compile-time constant. gridResSetting/windowCubeDimSetting are
+	// the freely-draggable GUI values; GridRes/BDim/ACount/BCount/NodeCount/
+	// CubeOriginMin/CubeBoundDim/TotalCubeCandidates/TetCount/WindowCubeDim/
+	// WindowTetCount/windowOriginCube* are the CURRENTLY APPLIED values,
+	// matching whatever's actually allocated right now -- recomputed by
+	// EnsureGridBuffersSized(), called once at the top of RunReinit() (never
+	// on Continue). Keeping these separate from the GUI setting means
+	// dragging the slider without hitting Reinitialize can never desync
+	// buffer sizes from what these members claim. Defaults below match
+	// GridRes=20's old compile-time values exactly, so anything that
+	// (incorrectly) read them before the first Reinit would still see
+	// today's numbers.
+	int gridResSetting = 20;        // GUI: "Grid Resolution" (applied on Reinitialize)
+	// Real (grid-unit) full width of the rendered window -- 16 is the user's
+	// own original suggestion, and also happens to exactly reproduce
+	// WindowCubeDim=40 (today's whole-domain q-dispatch size) at the default
+	// GridRes=20 via the 2*W+8 formula below (2*16+8=40), so the default
+	// case stays a true no-op.
+	int windowCubeDimSetting = 16;  // GUI: "Render Window Size" (real grid units, applied on Reinitialize)
 
-	// Disphenoid tet count -- see buildTetsCS.hlsl's derivation comment.
-	static constexpr uint Nx = GridRes - 2;
-	static constexpr uint Ni = GridRes - 1;
-	static constexpr uint FacesPerOrientation = Nx * Ni * Ni;
-	static constexpr uint TotalFaces = FacesPerOrientation * 3;
-	static constexpr uint TetCount = TotalFaces * 4;
+	uint GridRes = 20, BDim = 19, ACount = 8000, BCount = 6859, NodeCount = 14859;
+	// Rhombohedral cube-based tet indexing -- computed on the fly
+	// everywhere, no connectivity buffers at all. See DistanceLattice.hlsli's
+	// header comment for the bccToRhombo derivation. Must match that file
+	// exactly (same "must match" convention as GridRes/CellSize/
+	// MaxIncidentTets above).
+	int  CubeOriginMin = -1;
+	uint CubeBoundDim = 40, TotalCubeCandidates = 64000;
+	// Total tet SLOTS -- fixed/dense indexing (tetBase = 6*cubeLinearIndex).
+	// No storage anywhere for the whole domain's worth of these; every
+	// tetIndex is computed fresh. Must match DistanceLattice.hlsli exactly.
+	uint TetCount = 384000;
 
-	static constexpr uint RasterGroups            = (GridRes + 3) / 4; // numthreads(4,4,4)
-	static constexpr uint BuildTetsGroups         = (TotalFaces + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
-	static constexpr uint ClearIncidentGroups     = (NodeCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
-	static constexpr uint BuildIncidentGroups     = (TetCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
-	static constexpr uint BuildCandidatesAGroups  = (ACount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
-	static constexpr uint BuildCandidatesBGroups  = (BCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
-	static constexpr uint AssignInterfaceGroups   = (TetCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
-	static constexpr uint SmoothnessGroups        = (NodeCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
-	static constexpr uint CommitGroups            = (NodeCount * 8 + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
+	// Render window: GridRes-independent, fixed-size region actually
+	// extracted/rendered (surfaceVertexBuffer's real sizing driver) --
+	// origin centered on the domain center (same center BuildShapeList()
+	// places test shapes at), see EnsureGridBuffersSized().
+	int  windowOriginCubeX = 0, windowOriginCubeY = 0, windowOriginCubeZ = 0;
+	uint WindowCubeDim = 40, WindowTetCount = 384000, WindowRealHalfExtent = 10;
 
-	static constexpr float MaxMarchDist = GridRes * CellSize * 3.0f;
+	// 0 = "nothing applied yet" sentinel, forces EnsureGridBuffersSized()'s
+	// first call to allocate everything.
+	int lastAppliedGridRes = 0, lastAppliedWindowCubeDim = 0;
+
+	uint RasterGroups = 0, BuildCandidatesAGroups = 0, BuildCandidatesBGroups = 0,
+		AssignPairsGroups = 0, ExtractSurfaceGroups = 0, SmoothnessGroups = 0, CommitGroups = 0;
+
+	float MaxMarchDist = 60.0f;
 	static constexpr int MaxMarchSteps = 256;
 
 	uint frameCount = 0;
@@ -93,29 +121,25 @@ protected:
 	uint64_t uploadFenceValue = 0;
 
 	// -- static lattice/topology data, built once at init (RunReinit only) --
+	// Tet connectivity (corners, incident tets, cross-cube neighbors) has NO
+	// buffers at all -- every consumer computes it on the fly from a tet or
+	// node index via DistanceLattice.hlsli's GetTetCornerQs/ResolveCorner/
+	// GatherIncidentTets/GetCrossNeighbors.
 	com_ptr<ID3D12Resource> rasterLabelBuffer;          // ACount uint: ground-truth A-node label
-	com_ptr<ID3D12Resource> tetsBuffer;                 // TetCount uint4: (A0,A1,B0,B1) global node indices
-	com_ptr<ID3D12Resource> nodeIncidentCountBuffer;    // NodeCount uint: reverse-adjacency degree
-	com_ptr<ID3D12Resource> nodeIncidentTetsBuffer;     // NodeCount*MaxIncidentTets uint: reverse adjacency
-	com_ptr<ID3D12Resource> tetFaceNeighborsBuffer;     // TetCount uint2: cross-orientation neighbor tets (SENTINEL_LABEL = none)
 	com_ptr<ID3D12Resource> nodeIsConnectingBuffer;     // ACount uint (0/1): sole local connector of its same-label neighborhood, see computeConnectingNodesCS.hlsl
 
 	// -- per-node candidate/potential state, (re)seeded at init, evolved by the outer loop --
-	com_ptr<ID3D12Resource> nodeCandidateLabelBuffer;   // NodeCount*8 uint (SENTINEL_LABEL = unused slot)
-	com_ptr<ID3D12Resource> nodePotentialBuffer;        // NodeCount*8 float, "current" (Jacobi read buffer)
-	com_ptr<ID3D12Resource> nodePotentialScratchBuffer; // NodeCount*8 float, Jacobi write buffer
+	com_ptr<ID3D12Resource> nodeCandidateLabelBuffer;   // NodeCount uint, MAX_CANDIDATES(6) 5-bit labels packed per node (SENTINEL_CANDIDATE = unused slot)
+	com_ptr<ID3D12Resource> nodePotentialBuffer;        // NodeCount*MAX_CANDIDATES float, "current" (Jacobi read buffer)
+	com_ptr<ID3D12Resource> nodePotentialScratchBuffer; // NodeCount*MAX_CANDIDATES float, Jacobi write buffer
 	com_ptr<ID3D12Resource> tetInterfacePairBuffer;     // TetCount uint2: current active (labelI,labelJ) per tet
-	com_ptr<ID3D12Resource> surfaceVertexBuffer;        // TetCount*6 SurfaceVertex (pos+normal), render-only
+	com_ptr<ID3D12Resource> surfaceVertexBuffer;        // TetCount*6 SurfaceVertex (pos+normal+labelI+labelJ), render-only
 
 	// -- volume floor (connecting nodes only, see smoothnessJacobiCS.hlsl) --
 	com_ptr<ID3D12Resource> nodeCurrentVolumeBuffer;    // NodeCount float: node's own winning-label reconstructed volume, written by smoothnessJacobiCS every sweep
 
 	Egg::Compute::ComputeShader rasterLabelCS;
 	Egg::Compute::ComputeShader computeConnectingNodesCS;
-	Egg::Compute::ComputeShader buildTetsCS;
-	Egg::Compute::ComputeShader clearIncidentCS;
-	Egg::Compute::ComputeShader buildIncidentCS;
-	Egg::Compute::ComputeShader buildTetFaceNeighborsCS;
 	Egg::Compute::ComputeShader buildCandidatesCS;
 	Egg::Compute::ComputeShader assignInterfacePairsCS;
 	Egg::Compute::ComputeShader smoothnessJacobiCS;
@@ -133,6 +157,7 @@ protected:
 
 	Egg::ConstantBuffer<DistanceFrameCb> frameCb;
 	Egg::ConstantBuffer<DistanceCb>      distanceCb;
+	Egg::ConstantBuffer<DistanceGridCb>  distanceGridCb;
 	Egg::ConstantBuffer<TorusListCb>     torusCb;
 	Egg::ConstantBuffer<PickedTetCb>     pickedTetCb;
 
@@ -172,8 +197,8 @@ protected:
 	uint pickedTetNodes[4] = { 0, 0, 0, 0 }; // A0,A1,B0,B1 global node indices
 	bool pickedDiagnosticsValid = false;
 	uint pickedInterfaceLabelI = 0, pickedInterfaceLabelJ = 0;
-	uint pickedCornerLabels[4][8] = {};
-	float pickedCornerPots[4][8] = {};
+	uint pickedCornerLabels[4][MAX_CANDIDATES] = {};
+	float pickedCornerPots[4][MAX_CANDIDATES] = {};
 	float pickedCornerCurrentVolume[4] = {};   // NodeCurrentVolume, written by smoothnessJacobiCS's Term 4
 	uint pickedCornerIsConnecting[4] = {};     // NodeIsConnecting (A-nodes only; 0 for B corners), computeConnectingNodesCS
 
@@ -211,12 +236,39 @@ protected:
 			return;
 		}
 
-		torusCb.data.nTorii = 1;
-		torusCb.data.torii[0].center      = center;
-		torusCb.data.torii[0].axis        = float3(0, 1, 0);
-		torusCb.data.torii[0].majorRadius = 6.0f;
-		torusCb.data.torii[0].minorRadius = 2.5f;
-		torusCb.data.torii[0].label       = 1;
+		// Restored multi-label test scene: 3 interlocking tori on
+		// perpendicular axes, ported from g-BCC's BuildShapeList (which has
+		// this exact list, scaled for its 48-unit grid, with two of the
+		// three entries commented out -- see g-BCC/BccApp.h). Torus 0/1
+		// share this scene's center on perpendicular axes, producing a
+		// genuine 3-label junction where they cross; torus 2 sits below,
+		// offset and on a third axis, only touching torus 0. Scaled down
+		// (roughly by major-radius ratio, 6/14) to fit g-Distance's smaller
+		// 20-unit grid -- torus 0's radii match this project's original
+		// single-torus default exactly, torus 1/2 keep g-BCC's relative
+		// proportions rather than an exact rescale.
+		//
+		// Note (multi-label caveat, see mwd.tex's Discussion): the outer
+		// combinatorics loop (assignInterfacePairsCS.hlsl) only ever tracks
+		// the top-2 most frequent labels per grid face as a v1
+		// simplification -- at a genuine 3-label junction like torus 0/1's
+		// crossing, this may bias which 2 of the 3 locally-present labels
+		// get an active, smoothness-optimized interface at any given face.
+		struct { float3 offset, axis; float major, minor; uint label; } list[] = {
+			{ float3(0, 0, 0),  float3(0, 1, 0), 6.0f, 2.5f, 1 },
+			{ float3(0, 0, 0),  float3(1, 0, 0), 4.5f, 2.0f, 2 },
+			{ float3(0, -4, 0), float3(0, 0, 1), 3.5f, 1.5f, 3 },
+		};
+
+		uint n = (uint)(sizeof(list) / sizeof(list[0]));
+		torusCb.data.nTorii = n;
+		for (uint i = 0; i < n; i++) {
+			torusCb.data.torii[i].center      = center + list[i].offset;
+			torusCb.data.torii[i].axis        = list[i].axis.Normalize();
+			torusCb.data.torii[i].majorRadius = list[i].major;
+			torusCb.data.torii[i].minorRadius = list[i].minor;
+			torusCb.data.torii[i].label       = list[i].label;
+		}
 	}
 
 	void UploadDistanceCb() {
@@ -264,17 +316,138 @@ protected:
 		return res;
 	}
 
-	// Static lattice + topology build: rasterize A, build disphenoid tets,
-	// build the node->tets reverse adjacency, seed candidate labels +
-	// potentials. Everything here is independent of the solve's tunables and
-	// never changes across outer-loop rounds, so it only ever runs once per
-	// Reinitialize (never on Continue) -- see buildTetsCS.hlsl's comment on
-	// why tet connectivity is built once, not per iteration.
+	void UploadDistanceGridCb() {
+		distanceGridCb.data.GridRes = GridRes;
+		distanceGridCb.data.BDim = BDim;
+		distanceGridCb.data.ACount = ACount;
+		distanceGridCb.data.BCount = BCount;
+		distanceGridCb.data.NodeCount = NodeCount;
+		distanceGridCb.data.CubeOriginMin = CubeOriginMin;
+		distanceGridCb.data.CubeBoundDim = CubeBoundDim;
+		distanceGridCb.data.TotalCubeCandidates = TotalCubeCandidates;
+		distanceGridCb.data.TetCount = TetCount;
+		distanceGridCb.data.WindowOriginCubeX = windowOriginCubeX;
+		distanceGridCb.data.WindowOriginCubeY = windowOriginCubeY;
+		distanceGridCb.data.WindowOriginCubeZ = windowOriginCubeZ;
+		distanceGridCb.data.WindowCubeDim = WindowCubeDim;
+		distanceGridCb.data.WindowTetCount = WindowTetCount;
+		distanceGridCb.data.WindowRealHalfExtent = WindowRealHalfExtent;
+		distanceGridCb.data._padGrid1 = 0.0f;
+		distanceGridCb.Upload();
+	}
+
+	// Recomputes every grid-resolution-derived value from the current GUI
+	// settings (gridResSetting/windowCubeDimSetting -- see the "Grid
+	// Resolution"/"Render Window Size" sliders), resizing (Reset + recreate)
+	// exactly the buffers whose size depends on them if either setting
+	// actually changed since the last call (or on the very first call).
+	// Called once at the top of RunReinit() -- never on Continue, matching
+	// the existing "topology is init-only" convention. If GridRes itself
+	// changed (not just the render window), also recenters the camera and
+	// recomputes MaxMarchDist, since the domain's physical size just
+	// changed -- a same-GridRes Reinit (e.g. just switching test shape)
+	// leaves the camera alone.
+	void EnsureGridBuffersSized() {
+		int newGridRes = gridResSetting < 4 ? 4 : (gridResSetting > 256 ? 256 : gridResSetting);
+		int newWindowCubeDim = windowCubeDimSetting < 8 ? 8 : (windowCubeDimSetting > 128 ? 128 : windowCubeDimSetting);
+
+		bool gridChanged = (lastAppliedGridRes != newGridRes);
+		bool windowChanged = (lastAppliedWindowCubeDim != newWindowCubeDim);
+
+		if (!gridChanged && !windowChanged) {
+			UploadDistanceGridCb(); // cheap, always safe -- nothing else to do
+			return;
+		}
+
+		GridRes = (uint)newGridRes;
+		BDim = GridRes - 1;
+		ACount = GridRes * GridRes * GridRes;
+		BCount = BDim * BDim * BDim;
+		NodeCount = ACount + BCount;
+
+		CubeOriginMin = -1;
+		CubeBoundDim = 2 * GridRes;
+		TotalCubeCandidates = CubeBoundDim * CubeBoundDim * CubeBoundDim;
+		TetCount = TotalCubeCandidates * 6;
+
+		// windowCubeDimSetting is the desired REAL (grid-unit) full width of
+		// the rendered region, GridRes-independent. A q-space axis-aligned
+		// dispatch box does NOT correspond to a compact real-space region
+		// under the bccToRhombo shear (confirmed empirically: an unscaled
+		// q-box left a real-space span 1.5x its own size and, worse, an
+		// elongated diagonal shape, not a local window at all) -- so
+		// WindowCubeDim (the q-space DISPATCH size) is deliberately
+		// oversized to safely CONTAIN the desired real box (forward-mapping
+		// a real box of full-width W through q=(i+j,i+k,j+k) needs q-space
+		// full-width 2W, +margin for safety), and the actual cutoff is an
+		// explicit real-space filter (WindowRealHalfExtent, applied in
+		// extractSurfaceCS.hlsl's IsWithinRealWindow / this file's
+		// CpuIsWithinRealWindow) on top.
+		WindowRealHalfExtent = (uint)(newWindowCubeDim / 2);
+		WindowCubeDim = (uint)(2 * newWindowCubeDim) + 8;
+		if (WindowCubeDim > CubeBoundDim) WindowCubeDim = CubeBoundDim;
+		WindowTetCount = WindowCubeDim * WindowCubeDim * WindowCubeDim * 6;
+
+		// Center the render window on the domain center in q-space -- the
+		// same physical center BuildShapeList() places test shapes at
+		// (i=j=k=GridRes/2 in real grid coordinates maps to
+		// q=(GridRes,GridRes,GridRes) via the bccToRhombo transform).
+		int centerQ = (int)GridRes;
+		windowOriginCubeX = centerQ - (int)(WindowCubeDim / 2);
+		windowOriginCubeY = centerQ - (int)(WindowCubeDim / 2);
+		windowOriginCubeZ = centerQ - (int)(WindowCubeDim / 2);
+
+		RasterGroups = (GridRes + 3) / 4;
+		BuildCandidatesAGroups = (ACount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
+		BuildCandidatesBGroups = (BCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
+		AssignPairsGroups = (TotalCubeCandidates + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
+		ExtractSurfaceGroups = (WindowTetCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
+		SmoothnessGroups = (NodeCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
+		CommitGroups = (NodeCount * MAX_CANDIDATES + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
+
+		if (gridChanged) {
+			rasterLabelBuffer          = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"rasterLabelBuffer");
+			nodeIsConnectingBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"nodeIsConnectingBuffer");
+			nodeCandidateLabelBuffer   = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeCandidateLabelBuffer");
+			nodePotentialBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialBuffer");
+			nodePotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialScratchBuffer");
+			tetInterfacePairBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)TetCount * sizeof(UINT) * 2, L"tetInterfacePairBuffer");
+			nodeCurrentVolumeBuffer    = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeCurrentVolumeBuffer");
+		}
+		if (gridChanged || windowChanged) {
+			surfaceVertexBuffer = CreateRawUavBuffer(device.Get(), (UINT64)WindowTetCount * 6 * sizeof(float) * 8, L"surfaceVertexBuffer"); // pos(3)+normal(3)+labelI+labelJ, see DistanceSurface.hlsli
+		}
+
+		UploadDistanceGridCb();
+
+		if (gridChanged) {
+			using namespace Egg::Math;
+			MaxMarchDist = GridRes * CellSize * 3.0f;
+			if (camera) {
+				camera->SetProj(0.9f, aspectRatio, 0.1f, MaxMarchDist);
+				camera->SetSpeed(0.15f * GridRes);
+				float3 center(GridRes * CellSize * 0.5f, GridRes * CellSize * 0.5f, GridRes * CellSize * 0.5f);
+				float3 eye = center + float3(0.0f, GridRes * 0.6f, GridRes * -1.0f);
+				camera->SetView(eye, (center - eye).Normalize());
+			}
+		}
+
+		lastAppliedGridRes = newGridRes;
+		lastAppliedWindowCubeDim = newWindowCubeDim;
+	}
+
+	// Static lattice + topology build: rasterize A, seed candidate labels +
+	// potentials. No tet connectivity is built or stored here at all
+	// anymore -- every consumer computes it on the fly (see
+	// DistanceLattice.hlsli). Independent of the solve's tunables and never
+	// changes across outer-loop rounds, so it only ever runs once per
+	// Reinitialize (never on Continue).
 	void RunTopologyBuild(com_ptr<ID3D12GraphicsCommandList>& cmd) {
 		cmd->SetComputeRootSignature(rasterLabelCS.rootSig.Get());
 		cmd->SetPipelineState(rasterLabelCS.pso.Get());
 		cmd->SetComputeRootConstantBufferView(0, torusCb.GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(1, rasterLabelBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
 		cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(rasterLabelBuffer.Get()));
 
@@ -283,43 +456,9 @@ protected:
 		cmd->SetComputeRoot32BitConstant(0, edgeConnectivityOnly ? 1u : 0u, 0);
 		cmd->SetComputeRootUnorderedAccessView(1, rasterLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(2, nodeIsConnectingBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
 		cmd->Dispatch(BuildCandidatesAGroups, 1, 1); // ACount-based, same as buildCandidatesCS's A dispatch
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeIsConnectingBuffer.Get()));
-
-		cmd->SetComputeRootSignature(buildTetsCS.rootSig.Get());
-		cmd->SetPipelineState(buildTetsCS.pso.Get());
-		cmd->SetComputeRootUnorderedAccessView(0, tetsBuffer->GetGPUVirtualAddress());
-		cmd->Dispatch(BuildTetsGroups, 1, 1);
-		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(tetsBuffer.Get()));
-
-		cmd->SetComputeRootSignature(clearIncidentCS.rootSig.Get());
-		cmd->SetPipelineState(clearIncidentCS.pso.Get());
-		cmd->SetComputeRootUnorderedAccessView(0, nodeIncidentCountBuffer->GetGPUVirtualAddress());
-		cmd->Dispatch(ClearIncidentGroups, 1, 1);
-		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeIncidentCountBuffer.Get()));
-
-		cmd->SetComputeRootSignature(buildIncidentCS.rootSig.Get());
-		cmd->SetPipelineState(buildIncidentCS.pso.Get());
-		cmd->SetComputeRootUnorderedAccessView(0, tetsBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(1, nodeIncidentCountBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(2, nodeIncidentTetsBuffer->GetGPUVirtualAddress());
-		cmd->Dispatch(BuildIncidentGroups, 1, 1);
-		{
-			D3D12_RESOURCE_BARRIER b[] = {
-				CD3DX12_RESOURCE_BARRIER::UAV(nodeIncidentCountBuffer.Get()),
-				CD3DX12_RESOURCE_BARRIER::UAV(nodeIncidentTetsBuffer.Get()),
-			};
-			cmd->ResourceBarrier(_countof(b), b);
-		}
-
-		cmd->SetComputeRootSignature(buildTetFaceNeighborsCS.rootSig.Get());
-		cmd->SetPipelineState(buildTetFaceNeighborsCS.pso.Get());
-		cmd->SetComputeRootUnorderedAccessView(0, tetsBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(1, nodeIncidentCountBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(2, nodeIncidentTetsBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(3, tetFaceNeighborsBuffer->GetGPUVirtualAddress());
-		cmd->Dispatch(BuildIncidentGroups, 1, 1); // same TetCount-based group count
-		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(tetFaceNeighborsBuffer.Get()));
 
 		cmd->SetComputeRootSignature(buildCandidatesCS.rootSig.Get());
 		cmd->SetPipelineState(buildCandidatesCS.pso.Get());
@@ -327,6 +466,7 @@ protected:
 		cmd->SetComputeRootUnorderedAccessView(2, rasterLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(3, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(4, nodePotentialBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
 		cmd->SetComputeRoot32BitConstant(0, 0u, 0); // Mode = A-nodes
 		cmd->SetComputeRoot32BitConstant(0, neutralBSeed ? 1u : 0u, 1); // NeutralBSeed
 		cmd->Dispatch(BuildCandidatesAGroups, 1, 1);
@@ -349,11 +489,11 @@ protected:
 	void RunOneRound(com_ptr<ID3D12GraphicsCommandList>& cmd) {
 		cmd->SetComputeRootSignature(assignInterfacePairsCS.rootSig.Get());
 		cmd->SetPipelineState(assignInterfacePairsCS.pso.Get());
-		cmd->SetComputeRootUnorderedAccessView(0, tetsBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(3, tetInterfacePairBuffer->GetGPUVirtualAddress());
-		cmd->Dispatch(BuildTetsGroups, 1, 1); // now one thread per FACE (TotalFaces), not per tet -- see assignInterfacePairsCS.hlsl
+		cmd->SetComputeRootUnorderedAccessView(0, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(2, tetInterfacePairBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+		cmd->Dispatch(AssignPairsGroups, 1, 1); // one thread per rhombohedral cube (TetCount/6 == TotalCubeCandidates), not per tet -- see assignInterfacePairsCS.hlsl
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(tetInterfacePairBuffer.Get()));
 
 		int sweeps = jacobiSweepsPerRound > 0 ? jacobiSweepsPerRound : 1;
@@ -361,16 +501,13 @@ protected:
 			cmd->SetComputeRootSignature(smoothnessJacobiCS.rootSig.Get());
 			cmd->SetPipelineState(smoothnessJacobiCS.pso.Get());
 			cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(1, tetsBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(2, tetInterfacePairBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(3, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(4, nodePotentialBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(5, nodePotentialScratchBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(6, nodeIncidentCountBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(7, nodeIncidentTetsBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(8, tetFaceNeighborsBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(9, nodeCurrentVolumeBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(10, nodeIsConnectingBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, tetInterfacePairBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(3, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(4, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(5, nodeCurrentVolumeBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(6, nodeIsConnectingBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(7, distanceGridCb.GetGPUVirtualAddress());
 			cmd->Dispatch(SmoothnessGroups, 1, 1);
 			{
 				D3D12_RESOURCE_BARRIER b[] = {
@@ -384,6 +521,7 @@ protected:
 			cmd->SetPipelineState(commitPotentialCS.pso.Get());
 			cmd->SetComputeRootUnorderedAccessView(0, nodePotentialScratchBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
 			cmd->Dispatch(CommitGroups, 1, 1);
 			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()));
 		}
@@ -401,18 +539,19 @@ protected:
 	void RunExtractSurface(com_ptr<ID3D12GraphicsCommandList>& cmd) {
 		cmd->SetComputeRootSignature(extractSurfaceCS.rootSig.Get());
 		cmd->SetPipelineState(extractSurfaceCS.pso.Get());
-		cmd->SetComputeRootUnorderedAccessView(0, tetsBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(1, tetInterfacePairBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(3, nodePotentialBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(4, surfaceVertexBuffer->GetGPUVirtualAddress());
-		cmd->Dispatch(AssignInterfaceGroups, 1, 1); // one thread per tet (TetCount)
+		cmd->SetComputeRootUnorderedAccessView(0, tetInterfacePairBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(3, surfaceVertexBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
+		cmd->Dispatch(ExtractSurfaceGroups, 1, 1); // one thread per WINDOW tet slot (WindowTetCount), not the whole domain
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(surfaceVertexBuffer.Get()));
 	}
 
 	// Full reseed: rebuild the test scene, rasterize + rebuild lattice
 	// topology from scratch, then relax for `iterations` outer rounds.
 	void RunReinit() {
+		EnsureGridBuffersSized(); // must run before BuildShapeList (uses GridRes) and before any buffer is touched
 		BuildShapeList();
 		torusCb.Upload();
 		UploadDistanceCb();
@@ -453,25 +592,120 @@ protected:
 		uploadFence.cpuWait();
 	}
 
-	// CPU mirror of DistanceLattice.hlsli's NodeWorldPos -- used only by the
-	// tet-picking debug tool below, which needs node positions on the CPU
-	// side to brute-force-search for the tet enclosing a picked world point.
-	static Egg::Math::float3 CpuNodeWorldPos(uint g) {
-		using namespace Egg::Math;
-		if (g < ACount) {
-			uint k = g / (GridRes * GridRes);
-			uint rem = g % (GridRes * GridRes);
-			uint j = rem / GridRes;
-			uint i = rem % GridRes;
-			return float3((float)i, (float)j, (float)k) * CellSize;
+	// CPU mirrors of DistanceLattice.hlsli's q-space corner arithmetic --
+	// used only by the tet-picking debug tool below, which needs to compute
+	// tet corners itself now (no Tets buffer, no GPU round-trip needed at
+	// all for this anymore -- see DistanceLattice.hlsli's header comment).
+	// Kept in exact lockstep with the shader-side functions of the same
+	// name/shape.
+	static constexpr int CubeVertexOffsetsCpu[6][2][3] = {
+		{ {1,0,0}, {1,0,1} },
+		{ {1,0,0}, {1,1,0} },
+		{ {0,1,0}, {1,1,0} },
+		{ {0,1,0}, {0,1,1} },
+		{ {0,0,1}, {0,1,1} },
+		{ {0,0,1}, {1,0,1} },
+	};
+
+	// Not static -- CubeBoundDim/CubeOriginMin/GridRes/BDim/ACount are runtime
+	// members now (grid resolution is a GUI slider), not compile-time
+	// constants.
+	void CpuCubeOriginFromLinear(uint lin, int& cx, int& cy, int& cz) {
+		uint cd = CubeBoundDim;
+		uint z = lin / (cd * cd);
+		uint rem = lin % (cd * cd);
+		uint y = rem / cd;
+		uint x = rem % cd;
+		cx = (int)x + CubeOriginMin;
+		cy = (int)y + CubeOriginMin;
+		cz = (int)z + CubeOriginMin;
+	}
+
+	// Mirrors DistanceLattice.hlsli's GetTetCornerQs.
+	void CpuGetTetCornerQs(uint tetIndex, int q[4][3]) {
+		uint cubeLin = tetIndex / 6;
+		uint slot = tetIndex % 6;
+		int cx, cy, cz;
+		CpuCubeOriginFromLinear(cubeLin, cx, cy, cz);
+		q[0][0] = cx;     q[0][1] = cy;     q[0][2] = cz;     // D0
+		q[1][0] = cx + 1; q[1][1] = cy + 1; q[1][2] = cz + 1; // D1
+		q[2][0] = cx + CubeVertexOffsetsCpu[slot][0][0];
+		q[2][1] = cy + CubeVertexOffsetsCpu[slot][0][1];
+		q[2][2] = cz + CubeVertexOffsetsCpu[slot][0][2];      // U0
+		q[3][0] = cx + CubeVertexOffsetsCpu[slot][1][0];
+		q[3][1] = cy + CubeVertexOffsetsCpu[slot][1][1];
+		q[3][2] = cz + CubeVertexOffsetsCpu[slot][1][2];      // U1
+	}
+
+	// Mirrors DistanceLattice.hlsli's ResolveCorner -- returns false (nodeIdx
+	// left at SENTINEL) for a virtual/out-of-grid corner.
+	bool CpuResolveCorner(int qx, int qy, int qz, uint& nodeIdx) {
+		bool isB = ((qx + qy + qz) & 1) != 0;
+		int px = qx, py = qy, pz = qz;
+		if (isB) { px -= 1; py -= 1; pz -= 1; }
+		int i = (px + py - pz) / 2;
+		int j = (px - py + pz) / 2;
+		int k = (-px + py + pz) / 2;
+		if (!isB) {
+			if (i < 0 || j < 0 || k < 0 || i >= (int)GridRes || j >= (int)GridRes || k >= (int)GridRes) { nodeIdx = 0xFFFFFFFFu; return false; }
+			nodeIdx = (uint)i + (uint)j * GridRes + (uint)k * GridRes * GridRes;
 		} else {
-			uint l = g - ACount;
-			uint k = l / (BDim * BDim);
-			uint rem = l % (BDim * BDim);
-			uint j = rem / BDim;
-			uint i = rem % BDim;
-			return (float3((float)i, (float)j, (float)k) + float3(0.5f, 0.5f, 0.5f)) * CellSize;
+			if (i < 0 || j < 0 || k < 0 || i >= (int)BDim || j >= (int)BDim || k >= (int)BDim) { nodeIdx = 0xFFFFFFFFu; return false; }
+			nodeIdx = ACount + (uint)i + (uint)j * BDim + (uint)k * BDim * BDim;
 		}
+		return true;
+	}
+
+	// Mirrors DistanceLattice.hlsli's CubeLinearIndex.
+	bool CpuCubeLinearIndex(int cx, int cy, int cz, uint& idx) {
+		int sx = cx - CubeOriginMin, sy = cy - CubeOriginMin, sz = cz - CubeOriginMin;
+		if (sx < 0 || sy < 0 || sz < 0 || sx >= (int)CubeBoundDim || sy >= (int)CubeBoundDim || sz >= (int)CubeBoundDim) return false;
+		idx = (uint)sx + (uint)sy * CubeBoundDim + (uint)sz * CubeBoundDim * CubeBoundDim;
+		return true;
+	}
+
+	// Mirrors extractSurfaceCS.hlsl's IsWithinRealWindow.
+	bool CpuIsWithinRealWindow(int cx, int cy, int cz) {
+		int i = (cx + cy - cz) / 2;
+		int j = (cx - cy + cz) / 2;
+		int k = (-cx + cy + cz) / 2;
+		int center = (int)(GridRes / 2);
+		int half = (int)WindowRealHalfExtent;
+		return abs(i - center) <= half && abs(j - center) <= half && abs(k - center) <= half;
+	}
+
+	// Mirrors extractSurfaceCS.hlsl's GlobalTetIndexFromWindowLocal -- the
+	// pick tool only ever needs to search the rendered window (nothing
+	// outside it is ever visible to click on), not the whole domain. Also
+	// applies the same real-space cutoff (CpuIsWithinRealWindow), so picking
+	// never finds a tet that extractSurfaceCS.hlsl would have degenerated.
+	bool CpuGlobalTetIndexFromWindowLocal(uint localT, uint& globalT) {
+		uint localCubeLin = localT / 6;
+		uint slot = localT % 6;
+		uint wd = WindowCubeDim;
+		uint lz = localCubeLin / (wd * wd);
+		uint rem = localCubeLin % (wd * wd);
+		uint ly = rem / wd;
+		uint lx = rem % wd;
+		int gx = (int)lx + windowOriginCubeX;
+		int gy = (int)ly + windowOriginCubeY;
+		int gz = (int)lz + windowOriginCubeZ;
+		if (!CpuIsWithinRealWindow(gx, gy, gz)) { globalT = 0; return false; }
+		uint globalLin;
+		if (!CpuCubeLinearIndex(gx, gy, gz, globalLin)) { globalT = 0; return false; }
+		globalT = globalLin * 6 + slot;
+		return true;
+	}
+
+	// Mirrors DistanceLattice.hlsli's QWorldPos -- always succeeds, no range
+	// check (extrapolates past the real grid for a virtual corner).
+	static Egg::Math::float3 CpuQWorldPos(int qx, int qy, int qz) {
+		using namespace Egg::Math;
+		bool isB = ((qx + qy + qz) & 1) != 0;
+		int px = qx, py = qy, pz = qz;
+		if (isB) { px -= 1; py -= 1; pz -= 1; }
+		float3 base((float)(px + py - pz) * 0.5f, (float)(px - py + pz) * 0.5f, (float)(-px + py + pz) * 0.5f);
+		return (isB ? (base + float3(0.5f, 0.5f, 0.5f)) : base) * CellSize;
 	}
 
 	// Barycentric coordinates of p w.r.t. tet (P0,P1,P2,P3) -- same dual-
@@ -504,51 +738,50 @@ protected:
 		pickedTetCb.Upload();
 	}
 
-	// Brute-force point-in-tet search: reads back the (static, small)
-	// Tets buffer fresh every call -- this is a rare, user-triggered debug
-	// operation, not a per-frame cost, so simplicity/correctness wins over
-	// caching a CPU-side copy across Reinitialize/Continue calls.
+	// Brute-force point-in-tet search: pure CPU arithmetic now, no GPU
+	// buffer/round-trip at all -- tet connectivity has no buffer to read
+	// (see DistanceLattice.hlsli), every tet's corners are computed
+	// directly from its index. Still a rare, user-triggered debug
+	// operation, and now scoped to just the WINDOW (WindowTetCount, via
+	// CpuGlobalTetIndexFromWindowLocal) rather than the whole domain --
+	// nothing outside the rendered window is ever visible to click on, and
+	// at large GridRes the whole domain is far too big to brute-force scan
+	// interactively. Returns a GLOBAL tetIndex (needed to index
+	// tetInterfacePairBuffer, which is sized for the whole domain).
+	// Skips slots with no real corner at all (a fully virtual/background
+	// tet, nothing meaningful to pick there).
 	uint FindEnclosingTet(const Egg::Math::float3& point) {
 		using namespace Egg::Math;
-		UINT64 tetsBytes = (UINT64)TetCount * sizeof(UINT) * 4;
-		com_ptr<ID3D12Resource> readback = CreateReadbackBuffer(device.Get(), tetsBytes);
-
-		DX_API("reset upload allocator (pick)") uploadAllocator->Reset();
-		DX_API("reset upload command list (pick)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
-		auto& cmd = uploadCommandList;
-		cmd->CopyBufferRegion(readback.Get(), 0, tetsBuffer.Get(), 0, tetsBytes);
-		DX_API("close upload command list (pick)") cmd->Close();
-		{
-			ID3D12CommandList* lists[] = { cmd.Get() };
-			commandQueue->ExecuteCommandLists(1, lists);
-		}
-		uploadFence.signal(commandQueue, ++uploadFenceValue);
-		uploadFence.cpuWait();
-
-		UINT* tets = nullptr;
-		readback->Map(0, nullptr, (void**)&tets);
 
 		uint found = 0xFFFFFFFFu;
 		const float eps = 0.02f;
-		for (uint t = 0; t < TetCount; t++) {
-			uint a0 = tets[t * 4 + 0], a1 = tets[t * 4 + 1], b0 = tets[t * 4 + 2], b1 = tets[t * 4 + 3];
-			float3 P0 = CpuNodeWorldPos(a0);
-			float3 P1 = CpuNodeWorldPos(a1);
-			float3 P2 = CpuNodeWorldPos(b0);
-			float3 P3 = CpuNodeWorldPos(b1);
-			float4 bary = BarycentricOf(point, P0, P1, P2, P3);
+		for (uint localT = 0; localT < WindowTetCount; localT++) {
+			uint globalT;
+			if (!CpuGlobalTetIndexFromWindowLocal(localT, globalT)) continue;
+
+			int q[4][3];
+			CpuGetTetCornerQs(globalT, q);
+
+			float3 P[4];
+			uint refs[4];
+			bool anyReal = false;
+			for (int c = 0; c < 4; c++) {
+				P[c] = CpuQWorldPos(q[c][0], q[c][1], q[c][2]);
+				if (CpuResolveCorner(q[c][0], q[c][1], q[c][2], refs[c])) anyReal = true;
+			}
+			if (!anyReal) continue;
+
+			float4 bary = BarycentricOf(point, P[0], P[1], P[2], P[3]);
 			if (bary.x >= -eps && bary.y >= -eps && bary.z >= -eps && bary.w >= -eps) {
-				found = t;
-				pickedTetCb.data.Corner0 = float4(P0, 1.0f);
-				pickedTetCb.data.Corner1 = float4(P1, 1.0f);
-				pickedTetCb.data.Corner2 = float4(P2, 1.0f);
-				pickedTetCb.data.Corner3 = float4(P3, 1.0f);
-				pickedTetNodes[0] = a0; pickedTetNodes[1] = a1; pickedTetNodes[2] = b0; pickedTetNodes[3] = b1;
+				found = globalT;
+				pickedTetCb.data.Corner0 = float4(P[0], 1.0f);
+				pickedTetCb.data.Corner1 = float4(P[1], 1.0f);
+				pickedTetCb.data.Corner2 = float4(P[2], 1.0f);
+				pickedTetCb.data.Corner3 = float4(P[3], 1.0f);
+				pickedTetNodes[0] = refs[0]; pickedTetNodes[1] = refs[1]; pickedTetNodes[2] = refs[2]; pickedTetNodes[3] = refs[3];
 				break;
 			}
 		}
-
-		readback->Unmap(0, nullptr);
 		return found;
 	}
 
@@ -652,8 +885,8 @@ protected:
 	// specific wedge inset/outcrop instead of guessing from the picture.
 	void ReadBackPickedTetDiagnostics() {
 		UINT64 pairBytes = (UINT64)TetCount * sizeof(UINT) * 2;
-		UINT64 candBytes = (UINT64)NodeCount * 8 * sizeof(UINT);
-		UINT64 potBytes = (UINT64)NodeCount * 8 * sizeof(float);
+		UINT64 candBytes = (UINT64)NodeCount * sizeof(UINT);
+		UINT64 potBytes = (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float);
 		UINT64 nodeFloatBytes = (UINT64)NodeCount * sizeof(float);
 		UINT64 connectingBytes = (UINT64)ACount * sizeof(UINT);
 		com_ptr<ID3D12Resource> rbPair = CreateReadbackBuffer(device.Get(), pairBytes);
@@ -693,9 +926,24 @@ protected:
 		pickedInterfaceLabelJ = pair[pickedTetIndex * 2 + 1];
 		for (uint c = 0; c < 4; c++) {
 			uint node = pickedTetNodes[c];
-			for (uint s = 0; s < 8; s++) {
-				pickedCornerLabels[c][s] = cand[node * 8 + s];
-				pickedCornerPots[c][s] = pot[node * 8 + s];
+			if (node == 0xFFFFFFFFu) {
+				// Virtual corner (outside the real grid) -- mirrors
+				// GetCornerTopLabel/GetCornerPotential's convention: label 0
+				// with potential 1.0, everything else absent, no real
+				// volume/connecting data to show.
+				pickedCornerLabels[c][0] = 0;
+				pickedCornerPots[c][0] = 1.0f;
+				for (uint s = 1; s < MAX_CANDIDATES; s++) {
+					pickedCornerLabels[c][s] = SENTINEL_CANDIDATE;
+					pickedCornerPots[c][s] = 0.0f;
+				}
+				pickedCornerCurrentVolume[c] = 0.0f;
+				pickedCornerIsConnecting[c] = 0;
+				continue;
+			}
+			for (uint s = 0; s < MAX_CANDIDATES; s++) {
+				pickedCornerLabels[c][s] = (cand[node] >> (s * 5u)) & 0x1Fu;
+				pickedCornerPots[c][s] = pot[node * MAX_CANDIDATES + s];
 			}
 			pickedCornerCurrentVolume[c] = curVol[node];
 			pickedCornerIsConnecting[c] = (node < ACount) ? connecting[node] : 0;
@@ -717,9 +965,34 @@ protected:
 		ImGui::SetNextWindowSize(ImVec2(280, 0), ImGuiCond_FirstUseEver);
 		ImGui::Begin("g-Distance Controls");
 		static const char* testShapeItems[] = {
-			"Torus", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D", "Slab"
+			"3 Tori (multi-label)", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D", "Slab"
 		};
 		ImGui::Combo("Test Shape", &testShapeKind, testShapeItems, IM_ARRAYSIZE(testShapeItems));
+		ImGui::SliderInt("Grid Resolution", &gridResSetting, 4, 256, "%d", ImGuiSliderFlags_Logarithmic);
+		ImGui::SliderInt("Render Window Size", &windowCubeDimSetting, 8, 48);
+		ImGui::TextDisabled("(real grid units, GridRes-independent -- only this much of the domain, centered, is ever extracted/rendered)");
+		{
+			// ~0.50 KB * GridRes^3 for the per-node arrays + tetInterfacePairBuffer
+			// (both scale with the whole solved domain, not just the render
+			// window -- see the approved plan's memory-scaling discussion).
+			// Recomputed for the packed candidate-label buffer (nodeCandidateLabelBuffer:
+			// 1 packed uint/node instead of MAX_CANDIDATES separate uints;
+			// nodePotential(Scratch): MAX_CANDIDATES(6, was 8) floats/node) --
+			// was ~590 before packing.
+			// surfaceVertexBuffer's actual q-space dispatch size is
+			// 2*windowCubeDimSetting+8 (clamped to the domain's own bounding
+			// box) -- see EnsureGridBuffersSized's comment on why a q-space
+			// box must be oversized to safely contain the intended real
+			// window under the bccToRhombo shear.
+			double gr = (double)gridResSetting;
+			double cubeBoundDimEst = 2.0 * gr;
+			double qDispatch = 2.0 * (double)windowCubeDimSetting + 8.0;
+			if (qDispatch > cubeBoundDimEst) qDispatch = cubeBoundDimEst;
+			double solveBytes = 504.0 * gr * gr * gr;
+			double windowBytes = qDispatch * qDispatch * qDispatch * 6.0 * 192.0;
+			double totalMB = (solveBytes + windowBytes) / (1024.0 * 1024.0);
+			ImGui::TextDisabled("Estimated buffer memory at these settings: ~%.1f MB", totalMB);
+		}
 		ImGui::SliderInt("Iterations", &iterations, 0, 64);
 		ImGui::SliderFloat("Seed Jitter", &seedJitter, 0.0f, 1.0f);
 		ImGui::SliderFloat("Own Label Seed", &ownLabelSeed, 0.0f, 5.0f);
@@ -758,7 +1031,7 @@ protected:
 				bool hasI[4], hasJ[4];
 				for (uint c = 0; c < 4; c++) {
 					phiI[c] = 0.0f; phiJ[c] = 0.0f; hasI[c] = false; hasJ[c] = false;
-					for (uint s = 0; s < 8; s++) {
+					for (uint s = 0; s < MAX_CANDIDATES; s++) {
 						uint l = pickedCornerLabels[c][s];
 						if (l == pickedInterfaceLabelI) { phiI[c] = pickedCornerPots[c][s]; hasI[c] = true; }
 						if (l == pickedInterfaceLabelJ) { phiJ[c] = pickedCornerPots[c][s]; hasJ[c] = true; }
@@ -832,7 +1105,7 @@ protected:
 		ImGui::SliderFloat("Node Fade Start Distance", &nodeFadeStartDistance, 0.0f, 3.0f);
 
 		ImGui::Separator();
-		ImGui::Text("A nodes: %u   B nodes: %u   Tets: %u", ACount, BCount, TetCount);
+		ImGui::Text("A nodes: %u   B nodes: %u   Tets (domain/window): %u / %u", ACount, BCount, TetCount, WindowTetCount);
 		ImGui::Text("%.1f FPS", ImGui::GetIO().Framerate);
 		ImGui::End();
 
@@ -879,6 +1152,7 @@ public:
 
 		frameCb.CreateResources(device.Get());
 		distanceCb.CreateResources(device.Get());
+		distanceGridCb.CreateResources(device.Get());
 		torusCb.CreateResources(device.Get());
 		pickedTetCb.CreateResources(device.Get());
 
@@ -889,25 +1163,15 @@ public:
 		DX_API("create imgui srv heap")
 			device->CreateDescriptorHeap(&imguiHeapDesc, IID_PPV_ARGS(imguiSrvHeap.GetAddressOf()));
 
-		rasterLabelBuffer          = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"rasterLabelBuffer");
-		nodeIsConnectingBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"nodeIsConnectingBuffer");
-		tetsBuffer                 = CreateRawUavBuffer(device.Get(), (UINT64)TetCount * sizeof(UINT) * 4, L"tetsBuffer");
-		nodeIncidentCountBuffer    = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeIncidentCountBuffer");
-		nodeIncidentTetsBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MaxIncidentTets * sizeof(UINT), L"nodeIncidentTetsBuffer");
-		tetFaceNeighborsBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)TetCount * sizeof(UINT) * 2, L"tetFaceNeighborsBuffer");
-		nodeCandidateLabelBuffer   = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * 8 * sizeof(UINT), L"nodeCandidateLabelBuffer");
-		nodePotentialBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * 8 * sizeof(float), L"nodePotentialBuffer");
-		nodePotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * 8 * sizeof(float), L"nodePotentialScratchBuffer");
-		tetInterfacePairBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)TetCount * sizeof(UINT) * 2, L"tetInterfacePairBuffer");
-		surfaceVertexBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)TetCount * 6 * sizeof(float) * 6, L"surfaceVertexBuffer");
-		nodeCurrentVolumeBuffer    = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeCurrentVolumeBuffer");
+		// rasterLabelBuffer/nodeIsConnectingBuffer/nodeCandidateLabelBuffer/
+		// nodePotentialBuffer(+scratch)/tetInterfacePairBuffer/
+		// surfaceVertexBuffer/nodeCurrentVolumeBuffer are all sized by the
+		// runtime grid resolution -- created (and resized on later grid-
+		// resolution changes) by EnsureGridBuffersSized(), called from the
+		// first RunReinit() rather than here.
 
 		rasterLabelCS.createResources(device, "Shaders/rasterLabelCS.cso");
 		computeConnectingNodesCS.createResources(device, "Shaders/computeConnectingNodesCS.cso");
-		buildTetsCS.createResources(device, "Shaders/buildTetsCS.cso");
-		clearIncidentCS.createResources(device, "Shaders/clearIncidentCS.cso");
-		buildIncidentCS.createResources(device, "Shaders/buildIncidentCS.cso");
-		buildTetFaceNeighborsCS.createResources(device, "Shaders/buildTetFaceNeighborsCS.cso");
 		buildCandidatesCS.createResources(device, "Shaders/buildCandidatesCS.cso");
 		assignInterfacePairsCS.createResources(device, "Shaders/assignInterfacePairsCS.cso");
 		smoothnessJacobiCS.createResources(device, "Shaders/smoothnessJacobiCS.cso");
@@ -1148,7 +1412,7 @@ public:
 			commandList->SetGraphicsRootUnorderedAccessView(1, surfaceVertexBuffer->GetGPUVirtualAddress());
 			commandList->SetPipelineState(surfacePso.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			commandList->DrawInstanced(TetCount * 6, 1, 0, 0);
+			commandList->DrawInstanced(WindowTetCount * 6, 1, 0, 0); // windowed -- see extractSurfaceCS.hlsl
 		}
 
 		if (dataValid && showNodes) {
@@ -1156,6 +1420,7 @@ public:
 			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
 			commandList->SetPipelineState(nodePointPso.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 			commandList->DrawInstanced(4, NodeCount, 0, 0);
@@ -1232,14 +1497,11 @@ public:
 	virtual void ReleaseResources() override {
 		frameCb.ReleaseResources();
 		distanceCb.ReleaseResources();
+		distanceGridCb.ReleaseResources();
 		torusCb.ReleaseResources();
 		pickedTetCb.ReleaseResources();
 		rasterLabelBuffer.Reset();
 		nodeIsConnectingBuffer.Reset();
-		tetsBuffer.Reset();
-		nodeIncidentCountBuffer.Reset();
-		nodeIncidentTetsBuffer.Reset();
-		tetFaceNeighborsBuffer.Reset();
 		nodeCandidateLabelBuffer.Reset();
 		nodePotentialBuffer.Reset();
 		nodePotentialScratchBuffer.Reset();

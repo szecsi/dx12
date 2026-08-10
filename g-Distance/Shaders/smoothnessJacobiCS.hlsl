@@ -1,4 +1,5 @@
 #include "DistanceCb.hlsli"
+#define DISTANCE_GRID_CB_REGISTER b1
 #include "DistanceLattice.hlsli"
 
 // Outer Lloyd-loop step 2: one Jacobi sweep over every (node, candidate-slot)
@@ -11,23 +12,29 @@
 // codebase).
 //
 // Term 1 (smoothness): for every pair of face-adjacent tets (both "fan"
-// neighbors within one grid face, see buildTetsCS.hlsl, AND cross-orientation
-// neighbors around the same A-edge, see buildTetFaceNeighborsCS.hlsl) that
-// currently share the same active interface label pair (i,j), penalize
-// ||gradA-gradB||^2 where grad = (grad phi_i - grad phi_j) is the tet's
-// constant (affine-interpolation) gradient.
+// neighbors within one rhombohedral cube AND cross-cube neighbors across a
+// cube's D0/D1 "cap" faces) that currently share the same active interface
+// label pair (i,j), penalize ||gradA-gradB||^2 where grad = (grad phi_i -
+// grad phi_j) is the tet's constant (affine-interpolation) gradient.
+// Tet connectivity is not stored anywhere -- every tet's corners
+// (GetTetCornerQs/ResolveCorner/QWorldPos), a node's incident tets
+// (GatherIncidentTets), and a tet's cross-cube neighbors (GetCrossNeighbors)
+// are all computed fresh every sweep from DistanceLattice.hlsli's q-space
+// arithmetic; see that file's header comment. A corner outside the real
+// grid resolves to a fixed virtual background node (label 0, potential
+// 1.0) rather than needing any special "is this tet valid" branch.
 //
-// Gathered per node via NodeIncidentTets: for each tet touching this node,
-// all 4 of its face-neighbors (fanNext, fanPrev, and the 2 cross-neighbors)
-// are candidate pairs. Each candidate pair (tetX,P) is processed by exactly
-// one of the two tets' node-threads -- whichever tet has the smaller index
-// treats itself as "tetA"; a node holding only the larger-indexed tet
-// processes it as "tetB" itself, but only if the smaller-indexed partner
-// is NOT also in its own incident list (in which case that other tet's own
-// forward pass already covers it). This is the fix for a real gap in an
-// earlier version of this pass: processing only (tetX, fanNext(tetX)) for
-// each of a node's own tets silently drops any node that is a corner of a
-// pair's *second* tet only (never its first) -- about a third of a fan's
+// Gathered per node: for each tet touching this node, all 4 of its face-
+// neighbors (fanNext, fanPrev, and the 2 cross-neighbors) are candidate
+// pairs. Each candidate pair (tetX,P) is processed by exactly one of the
+// two tets' node-threads -- whichever tet has the smaller index treats
+// itself as "tetA"; a node holding only the larger-indexed tet processes
+// it as "tetB" itself, but only if the smaller-indexed partner is NOT also
+// in its own incident list (in which case that other tet's own forward
+// pass already covers it). This is the fix for a real gap in an earlier
+// version of this pass: processing only (tetX, fanNext(tetX)) for each of
+// a node's own tets silently drops any node that is a corner of a pair's
+// *second* tet only (never its first) -- about a third of a fan's
 // A-vertices, structurally, every sweep.
 // Term 2 (margin hinge): A-nodes -- own/input label (slot 0) kept above
 // every other candidate by MarginTarget. B-nodes -- whichever candidate is
@@ -51,55 +58,39 @@
     "UAV(u3)," \
     "UAV(u4)," \
     "UAV(u5)," \
-    "UAV(u6)," \
-    "UAV(u7)," \
-    "UAV(u8)," \
-    "UAV(u9)"
+    "CBV(b1)"
 
-RWStructuredBuffer<uint4>  Tets : register(u0);
-RWStructuredBuffer<uint2>  TetInterfacePair : register(u1);
-RWStructuredBuffer<uint>   NodeCandidateLabel : register(u2);
-RWStructuredBuffer<float>  NodePotential : register(u3);
-RWStructuredBuffer<float>  NodePotentialScratch : register(u4);
-RWStructuredBuffer<uint>   NodeIncidentCount : register(u5);
-RWStructuredBuffer<uint>   NodeIncidentTets : register(u6);
-RWStructuredBuffer<uint2>  TetFaceNeighbors : register(u7);
+RWStructuredBuffer<uint2>  TetInterfacePair : register(u0);
+RWStructuredBuffer<uint>   NodeCandidateLabel : register(u1);
+RWStructuredBuffer<float>  NodePotential : register(u2);
+RWStructuredBuffer<float>  NodePotentialScratch : register(u3);
 // This node's own winning-label reconstructed volume (volSum[ownSlot]),
 // written every sweep -- read by the Picked Tet debug panel and by Term 4's
 // own floor check below.
-RWStructuredBuffer<float>  NodeCurrentVolume : register(u8);
+RWStructuredBuffer<float>  NodeCurrentVolume : register(u4);
 // ACount-sized (computeConnectingNodesCS.hlsl) -- only ever index with
 // node<ACount.
-RWStructuredBuffer<uint>   NodeIsConnecting : register(u9);
+RWStructuredBuffer<uint>   NodeIsConnecting : register(u5);
 
+// Finds the CURRENT (always-real, dispatched) node's own slot for a label
+// -- distinct from DistanceLattice.hlsli's GetCornerPotential/
+// GetCornerTopLabel, which resolve an arbitrary (possibly virtual) OTHER
+// tet corner; this is specifically "where does MY OWN candidate array
+// carry this label", needed for writing into grad[]/diag[] by slot index.
 int FindSlot(uint node, uint label)
 {
     if (label == SENTINEL_LABEL) return -1;
-    for (int s = 0; s < 8; s++)
-        if (NodeCandidateLabel[node * 8 + (uint)s] == label) return s;
+    for (int s = 0; s < (int)MAX_CANDIDATES; s++)
+        if (GetCandidateLabelAt(NodeCandidateLabel, node, (uint)s) == label) return s;
     return -1;
 }
 
-// A missing candidate contributes 0 to that corner's field value for the
-// label in question -- under the sum-to-0 regularizer (term 3 below) this
-// is the semantically right fallback, not just a safe default: 0 is
-// exactly the decision boundary in that scheme (whichever candidate is
-// actually winning at any node is guaranteed positive, see term 3), so a
-// label a node never tracked defaults to "definitely not winning" rather
-// than an arbitrary value.
-float GetPotBySlot(uint node, int slot)
-{
-    return (slot >= 0) ? NodePotential[node * 8 + (uint)slot] : 0.0;
-}
-
-float3 TetFieldGrad(uint4 tetNodes, float3 w[4], uint label)
+float3 TetFieldGrad(uint refs[4], float3 w[4], uint label)
 {
     if (label == SENTINEL_LABEL) return float3(0, 0, 0);
-    uint verts[4] = { tetNodes.x, tetNodes.y, tetNodes.z, tetNodes.w };
     float3 g = float3(0, 0, 0);
     for (uint c = 0; c < 4; c++) {
-        int s = FindSlot(verts[c], label);
-        g += GetPotBySlot(verts[c], s) * w[c];
+        g += GetCornerPotential(refs[c], label, NodeCandidateLabel, NodePotential, 0.0) * w[c];
     }
     return g;
 }
@@ -107,16 +98,18 @@ float3 TetFieldGrad(uint4 tetNodes, float3 w[4], uint label)
 // Accumulates node's gradient/diagonal contribution from the smoothness
 // term of exactly one tet-pair (tetA,tetB) -- called at most once per pair
 // per node (see the dedup rule in the caller).
-void AccumulatePair(uint node, uint tetA, uint tetB, inout float grad[8], inout float diag[8])
+void AccumulatePair(uint node, uint tetA, uint tetB, inout float grad[6], inout float diag[6])
 {
     uint2 pairA = TetInterfacePair[tetA];
     uint2 pairB = TetInterfacePair[tetB];
     if (pairA.x == pairA.y) return;                                // no active interface in tetA
     if (pairA.x != pairB.x || pairA.y != pairB.y) return;          // combinatorics disagree this round
-
-    uint4 tA = Tets[tetA];
-    uint4 tB = Tets[tetB];
     uint li = pairA.x, lj = pairA.y;
+
+    int3 qA0, qA1, qA2, qA3; GetTetCornerQs(tetA, qA0, qA1, qA2, qA3);
+    int3 qB0, qB1, qB2, qB3; GetTetCornerQs(tetB, qB0, qB1, qB2, qB3);
+    uint refA[4] = { ResolveCorner(qA0), ResolveCorner(qA1), ResolveCorner(qA2), ResolveCorner(qA3) };
+    uint refB[4] = { ResolveCorner(qB0), ResolveCorner(qB1), ResolveCorner(qB2), ResolveCorner(qB3) };
     // Previously bailed out here whenever any of the 8 corners lacked li or
     // lj as an actual candidate (e.g. a B-node whose own cube never saw the
     // OTHER label, even though a neighboring cube's tet needs it) -- that
@@ -126,20 +119,21 @@ void AccumulatePair(uint node, uint tetA, uint tetB, inout float grad[8], inout 
     // no optimization ever pulling it toward consistency with its
     // neighbors) -- this was the real cause of the wedge-shaped indents
     // that persisted even after fixing the A/B magnitude asymmetry. Now
-    // just proceeds using GetPotBySlot's 0-fallback below instead.
+    // just proceeds using GetCornerPotential's 0-fallback below instead
+    // (which also transparently covers a virtual/out-of-grid corner).
 
-    float3 PA[4] = { NodeWorldPos(tA.x), NodeWorldPos(tA.y), NodeWorldPos(tA.z), NodeWorldPos(tA.w) };
-    float3 PB[4] = { NodeWorldPos(tB.x), NodeWorldPos(tB.y), NodeWorldPos(tB.z), NodeWorldPos(tB.w) };
+    float3 PA[4] = { QWorldPos(qA0), QWorldPos(qA1), QWorldPos(qA2), QWorldPos(qA3) };
+    float3 PB[4] = { QWorldPos(qB0), QWorldPos(qB1), QWorldPos(qB2), QWorldPos(qB3) };
 
     float3 wA[4]; TetShapeGradients(PA[0], PA[1], PA[2], PA[3], wA[0], wA[1], wA[2], wA[3]);
     float3 wB[4]; TetShapeGradients(PB[0], PB[1], PB[2], PB[3], wB[0], wB[1], wB[2], wB[3]);
 
-    float3 gA = TetFieldGrad(tA, wA, li) - TetFieldGrad(tA, wA, lj);
-    float3 gB = TetFieldGrad(tB, wB, li) - TetFieldGrad(tB, wB, lj);
+    float3 gA = TetFieldGrad(refA, wA, li) - TetFieldGrad(refA, wA, lj);
+    float3 gB = TetFieldGrad(refB, wB, li) - TetFieldGrad(refB, wB, lj);
     float3 diff = gA - gB;
 
-    int cA = (tA.x == node) ? 0 : (tA.y == node) ? 1 : (tA.z == node) ? 2 : (tA.w == node) ? 3 : -1;
-    int cB = (tB.x == node) ? 0 : (tB.y == node) ? 1 : (tB.z == node) ? 2 : (tB.w == node) ? 3 : -1;
+    int cA = (refA[0] == node) ? 0 : (refA[1] == node) ? 1 : (refA[2] == node) ? 2 : (refA[3] == node) ? 3 : -1;
+    int cB = (refB[0] == node) ? 0 : (refB[1] == node) ? 1 : (refB[2] == node) ? 2 : (refB[3] == node) ? 3 : -1;
     float3 deltaWA = (cA >= 0) ? wA[cA] : float3(0, 0, 0);
     float3 deltaWB = (cB >= 0) ? wB[cB] : float3(0, 0, 0);
     float3 K = deltaWA - deltaWB;
@@ -159,10 +153,10 @@ void AccumulatePair(uint node, uint tetA, uint tetB, inout float grad[8], inout 
     }
 }
 
-bool IsInMyIncidentList(uint node, uint incCount, uint tetIdx)
+bool IsInMyIncidentList(uint incCount, uint incidentTets[MAX_INCIDENT_TETS], uint tetIdx)
 {
     for (uint e = 0; e < incCount; e++)
-        if (NodeIncidentTets[node * MAX_INCIDENT_TETS + e] == tetIdx) return true;
+        if (incidentTets[e] == tetIdx) return true;
     return false;
 }
 
@@ -173,10 +167,10 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     uint node = tid.x;
     if (node >= NodeCount) return;
 
-    float grad[8] = { 0,0,0,0,0,0,0,0 };
-    float diag[8] = { 0,0,0,0,0,0,0,0 };
-    float volSum[8] = { 0,0,0,0,0,0,0,0 };
-    float kSum[8] = { 0,0,0,0,0,0,0,0 };
+    float grad[6] = { 0,0,0,0,0,0 };
+    float diag[6] = { 0,0,0,0,0,0 };
+    float volSum[6] = { 0,0,0,0,0,0 };
+    float kSum[6] = { 0,0,0,0,0,0 };
 
     // Term 3: sum-to-0 regularizer -- pushes the SUM of this node's valid
     // candidate potentials toward 0, instead of shrinking each slot toward
@@ -197,28 +191,30 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     {
         float sumPhi = 0.0;
         uint validCount = 0;
-        for (uint s = 0; s < 8; s++) {
-            if (NodeCandidateLabel[node * 8 + s] == SENTINEL_LABEL) continue;
-            sumPhi += NodePotential[node * 8 + s];
+        for (uint s = 0; s < MAX_CANDIDATES; s++) {
+            if (GetCandidateLabelAt(NodeCandidateLabel, node, s) == SENTINEL_CANDIDATE) continue;
+            sumPhi += NodePotential[node * MAX_CANDIDATES + s];
             validCount++;
         }
         if (validCount > 0) {
             float residual = sumPhi; // target sum is 0
-            for (uint s = 0; s < 8; s++) {
-                if (NodeCandidateLabel[node * 8 + s] == SENTINEL_LABEL) continue;
+            for (uint s = 0; s < MAX_CANDIDATES; s++) {
+                if (GetCandidateLabelAt(NodeCandidateLabel, node, s) == SENTINEL_CANDIDATE) continue;
                 grad[s] += 2.0 * RegularizerWeight * residual;
                 diag[s] += 2.0 * RegularizerWeight;
             }
         }
     }
 
-    // Term 1: smoothness, gathered over this node's incident tets and all 4
-    // of each one's face-neighbors (2 fan + 2 cross-orientation). Also
-    // gathers Term 4's per-tet volume contribution (see below) in the same
-    // pass, since both need the same incident-tet list.
-    uint incCount = min(NodeIncidentCount[node], MAX_INCIDENT_TETS);
+    // Term 1: smoothness, gathered over this node's incident tets (computed
+    // on the fly, see GatherIncidentTets) and all 4 of each one's face-
+    // neighbors (2 fan + 2 cross-cube, GetCrossNeighbors). Also gathers
+    // Term 4's per-tet volume contribution (see below) in the same pass,
+    // since both need the same incident-tet list.
+    uint incidentTets[MAX_INCIDENT_TETS];
+    uint incCount = GatherIncidentTets(node, incidentTets);
     for (uint e = 0; e < incCount; e++) {
-        uint tetX = NodeIncidentTets[node * MAX_INCIDENT_TETS + e];
+        uint tetX = incidentTets[e];
 
         // Term 4 gather: this tet's contribution to node's reconstructed
         // volume. Runs once per incident tet (not deduped/paired like term 1
@@ -241,24 +237,21 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
         //    tet contributed NOTHING to any of its corners' CurrentVolume.
         {
             uint2 pr = TetInterfacePair[tetX];
-            uint4 tX = Tets[tetX];
-            uint vertsX[4] = { tX.x, tX.y, tX.z, tX.w };
+            int3 qX0, qX1, qX2, qX3; GetTetCornerQs(tetX, qX0, qX1, qX2, qX3);
+            uint refsX[4] = { ResolveCorner(qX0), ResolveCorner(qX1), ResolveCorner(qX2), ResolveCorner(qX3) };
             int myCorner = -1;
-            for (uint c0 = 0; c0 < 4; c0++) if (vertsX[c0] == node) myCorner = (int)c0;
+            for (uint c0 = 0; c0 < 4; c0++) if (refsX[c0] == node) myCorner = (int)c0;
 
             if (myCorner >= 0) {
-                float3 PX[4] = {
-                    NodeWorldPos(vertsX[0]), NodeWorldPos(vertsX[1]),
-                    NodeWorldPos(vertsX[2]), NodeWorldPos(vertsX[3])
-                };
+                float3 PX[4] = { QWorldPos(qX0), QWorldPos(qX1), QWorldPos(qX2), QWorldPos(qX3) };
                 const float epsFloor = 1.0e-4;
 
                 if (pr.x != pr.y) {
                     uint li = pr.x, lj = pr.y;
                     float phiLi[4], phiLj[4], g[4];
                     for (uint c = 0; c < 4; c++) {
-                        phiLi[c] = GetPotBySlot(vertsX[c], FindSlot(vertsX[c], li));
-                        phiLj[c] = GetPotBySlot(vertsX[c], FindSlot(vertsX[c], lj));
+                        phiLi[c] = GetCornerPotential(refsX[c], li, NodeCandidateLabel, NodePotential, 0.0);
+                        phiLj[c] = GetCornerPotential(refsX[c], lj, NodeCandidateLabel, NodePotential, 0.0);
                         g[c] = phiLi[c] - phiLj[c];
                     }
                     bool posSideX[4]; uint countPosX; float Vtet, VPos;
@@ -286,7 +279,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
                     uint sharedLabel = pr.x;
                     float phiShared[4];
                     for (uint c3 = 0; c3 < 4; c3++) {
-                        phiShared[c3] = GetPotBySlot(vertsX[c3], FindSlot(vertsX[c3], sharedLabel));
+                        phiShared[c3] = GetCornerPotential(refsX[c3], sharedLabel, NodeCandidateLabel, NodePotential, 0.0);
                     }
                     float3 e1 = PX[1] - PX[0], e2 = PX[2] - PX[0], e3 = PX[3] - PX[0];
                     float Vtet = abs(dot(e1, cross(e2, e3))) / 6.0;
@@ -305,13 +298,13 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             }
         }
 
-        uint tetBase = (tetX / 4) * 4;
-        uint slot = tetX % 4;
-        uint2 cross = TetFaceNeighbors[tetX];
+        uint tetBase = (tetX / 6) * 6; // rhombohedral cube-based indexing: 6 tets/cube, always contiguous
+        uint slot = tetX % 6;
+        uint2 cross = GetCrossNeighbors(tetX);
 
         uint partners[4] = {
-            tetBase + ((slot + 1) % 4), // fan next
-            tetBase + ((slot + 3) % 4), // fan prev
+            tetBase + ((slot + 1) % 6), // fan next
+            tetBase + ((slot + 5) % 6), // fan prev
             cross.x,
             cross.y,
         };
@@ -328,7 +321,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
                 // incident tets (if it is, tetX will be reached again in
                 // this same loop from a node that had P first, or already
                 // was, via P<tetX there).
-                if (!IsInMyIncidentList(node, incCount, P)) {
+                if (!IsInMyIncidentList(incCount, incidentTets, P)) {
                     AccumulatePair(node, P, tetX, grad, diag);
                 }
             }
@@ -341,9 +334,9 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     int ownSlot = -1;
     {
         float ownPot = -1.0e30;
-        for (uint s5 = 0; s5 < 8; s5++) {
-            if (NodeCandidateLabel[node * 8 + s5] == SENTINEL_LABEL) continue;
-            float p = NodePotential[node * 8 + s5];
+        for (uint s5 = 0; s5 < MAX_CANDIDATES; s5++) {
+            if (GetCandidateLabelAt(NodeCandidateLabel, node, s5) == SENTINEL_CANDIDATE) continue;
+            float p = NodePotential[node * MAX_CANDIDATES + s5];
             if (p > ownPot) { ownPot = p; ownSlot = (int)s5; }
         }
     }
@@ -396,10 +389,10 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     // extractSurfaceCS.hlsl's crossing-point math -- this is what was
     // producing the wedge-shaped indents even after the earlier fixes.
     if (node < ACount) {
-        float phi0 = NodePotential[node * 8 + 0];
-        for (uint s = 1; s < 8; s++) {
-            if (NodeCandidateLabel[node * 8 + s] == SENTINEL_LABEL) continue;
-            float phiS = NodePotential[node * 8 + s];
+        float phi0 = NodePotential[node * MAX_CANDIDATES + 0];
+        for (uint s = 1; s < MAX_CANDIDATES; s++) {
+            if (GetCandidateLabelAt(NodeCandidateLabel, node, s) == SENTINEL_CANDIDATE) continue;
+            float phiS = NodePotential[node * MAX_CANDIDATES + s];
             float violation = MarginTarget - (phi0 - phiS);
             if (violation > 0.0) {
                 grad[0] += -2.0 * MarginWeight * violation;
@@ -411,16 +404,16 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     } else {
         int topSlot = -1;
         float topPot = -1.0e30;
-        for (uint s = 0; s < 8; s++) {
-            if (NodeCandidateLabel[node * 8 + s] == SENTINEL_LABEL) continue;
-            float p = NodePotential[node * 8 + s];
+        for (uint s = 0; s < MAX_CANDIDATES; s++) {
+            if (GetCandidateLabelAt(NodeCandidateLabel, node, s) == SENTINEL_CANDIDATE) continue;
+            float p = NodePotential[node * MAX_CANDIDATES + s];
             if (p > topPot) { topPot = p; topSlot = (int)s; }
         }
         if (topSlot >= 0) {
-            for (uint s = 0; s < 8; s++) {
+            for (uint s = 0; s < MAX_CANDIDATES; s++) {
                 if ((int)s == topSlot) continue;
-                if (NodeCandidateLabel[node * 8 + s] == SENTINEL_LABEL) continue;
-                float phiS = NodePotential[node * 8 + s];
+                if (GetCandidateLabelAt(NodeCandidateLabel, node, s) == SENTINEL_CANDIDATE) continue;
+                float phiS = NodePotential[node * MAX_CANDIDATES + s];
                 float violation = MarginTarget - (topPot - phiS);
                 if (violation > 0.0) {
                     grad[topSlot] += -2.0 * MarginWeight * violation;
@@ -432,10 +425,10 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
         }
     }
 
-    for (uint s = 0; s < 8; s++) {
-        float phi = NodePotential[node * 8 + s];
+    for (uint s = 0; s < MAX_CANDIDATES; s++) {
+        float phi = NodePotential[node * MAX_CANDIDATES + s];
         float newPhi = phi;
-        if (NodeCandidateLabel[node * 8 + s] != SENTINEL_LABEL) {
+        if (GetCandidateLabelAt(NodeCandidateLabel, node, s) != SENTINEL_CANDIDATE) {
             // Hard step clamp -- plain per-unknown-diagonal Jacobi on this
             // coupled system (each unknown's diagonal ignores that the other
             // unknowns feeding the same residual are moving simultaneously
@@ -445,6 +438,6 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             step = clamp(step, -MaxPotentialStep, MaxPotentialStep);
             newPhi = phi + step;
         }
-        NodePotentialScratch[node * 8 + s] = newPhi;
+        NodePotentialScratch[node * MAX_CANDIDATES + s] = newPhi;
     }
 }

@@ -1,3 +1,4 @@
+#define DISTANCE_GRID_CB_REGISTER b0
 #include "DistanceLattice.hlsli"
 
 // One-time pass (per Reinitialize, right after rasterLabelCS): flags every
@@ -31,7 +32,8 @@
 #define ComputeConnectingSig "RootFlags(0)," \
     "RootConstants(num32BitConstants=1, b1)," \
     "UAV(u0)," \
-    "UAV(u1)"
+    "UAV(u1)," \
+    "CBV(b0)"
 
 cbuffer ConnectingConsts : register(b1) {
     uint EdgeConnectivityOnly; // 1 = require a shared edge (18-connectivity), 0 = any corner touch counts (26-connectivity)

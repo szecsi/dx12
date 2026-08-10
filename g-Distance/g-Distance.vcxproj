@@ -74,10 +74,6 @@
   <ItemGroup>
     <FxCompile Include="Shaders\rasterLabelCS.hlsl" />
     <FxCompile Include="Shaders\computeConnectingNodesCS.hlsl" />
-    <FxCompile Include="Shaders\buildTetsCS.hlsl" />
-    <FxCompile Include="Shaders\clearIncidentCS.hlsl" />
-    <FxCompile Include="Shaders\buildIncidentCS.hlsl" />
-    <FxCompile Include="Shaders\buildTetFaceNeighborsCS.hlsl" />
     <FxCompile Include="Shaders\buildCandidatesCS.hlsl" />
     <FxCompile Include="Shaders\assignInterfacePairsCS.hlsl" />
     <FxCompile Include="Shaders\smoothnessJacobiCS.hlsl" />
@@ -114,6 +110,7 @@
     <None Include="Shaders\DistanceCb.hlsli" />
     <None Include="Shaders\DistanceFrameCb.hlsli" />
     <None Include="Shaders\DistanceSurface.hlsli" />
+    <None Include="Shaders\LabelPalette.hlsli" />
     <None Include="Shaders\PickedTetCb.hlsli" />
     <None Include="Shaders\TorusListCb.hlsli" />
     <None Include="Shaders\TorusSdf.hlsli" />

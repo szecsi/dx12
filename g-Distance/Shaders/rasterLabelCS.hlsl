@@ -1,5 +1,6 @@
 #include "TorusListCb.hlsli"
 #include "TorusSdf.hlsli"
+#define DISTANCE_GRID_CB_REGISTER b0
 #include "DistanceLattice.hlsli"
 
 // A-sublattice only -- B has no ground truth (that's what the whole rest of
@@ -30,7 +31,8 @@
 //                      genuinely higher-connectivity thin feature.
 #define RasterSig "RootFlags(0)," \
     "CBV(b1)," \
-    "UAV(u0)"
+    "UAV(u0)," \
+    "CBV(b0)"
 
 RWStructuredBuffer<uint> RasterLabel : register(u0);
 

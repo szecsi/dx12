@@ -5,18 +5,21 @@
 // are the original cubic grid's corners (GridRes^3, ground-truth labels);
 // B-nodes are cube centers ((GridRes-1)^3, solved). Both sublattices are
 // packed into one "global node index" space -- [0,ACount) for A, then
-// [ACount,ACount+BCount) for B -- so Tets/NodeIncidentTets/NodeCandidateLabel/
-// NodePotential can all be single flat buffers addressed uniformly, no
-// separate A/B buffer pairs anywhere.
+// [ACount,ACount+BCount) for B -- so NodeCandidateLabel/NodePotential can be
+// single flat buffers addressed uniformly, no separate A/B buffer pairs
+// anywhere. Tet connectivity has no buffers of its own at all -- see the
+// "Rhombohedral cube-based tet indexing" section below, everything is
+// computed on the fly from a tet or node index.
 //
 // Position/offset conventions (APos/BPos/CrossOffsets*) are ported from
 // g-BCC's bccCommon.hlsli.
-
-static const uint GridRes = GRID_RES;
-static const uint BDim    = GRID_RES - 1u;
-static const uint ACount  = GRID_RES * GRID_RES * GRID_RES;
-static const uint BCount  = BDim * BDim * BDim;
-static const uint NodeCount = ACount + BCount;
+//
+// GridRes/BDim/ACount/BCount/NodeCount (and the q-space bounding-box/window
+// fields further below) are all RUNTIME values now -- grid resolution is a
+// GUI slider applied on Reinitialize, not a compile-time constant -- see
+// DistanceGridCb.hlsli. Every function in this file already just references
+// these names, so nothing else here changes.
+#include "DistanceGridCb.hlsli"
 
 uint AIdx(uint i, uint j, uint k) { return i + j * GridRes + k * GridRes * GridRes; }
 uint BIdxLocal(uint i, uint j, uint k) { return i + j * BDim + k * BDim * BDim; }
@@ -72,17 +75,278 @@ static const int3 SameLatticeOffsets[26] = {
     int3(-1, 1, 1), int3(0, 1, 1), int3(1, 1, 1),
 };
 
-// Interior-face tet generation constants (buildTetsCS.hlsl): every interior
-// face of the A corner-grid emits 4 disphenoids (2 A + 2 B each), see that
-// file's header comment for the full derivation. Nx = count of interior
-// positions along a face's own normal axis; Ni = count of positions along
-// each of the two in-plane axes (same for all 3 orientations since the grid
-// is cubic).
-static const uint Nx = GridRes - 2u;
-static const uint Ni = GridRes - 1u;
-static const uint FacesPerOrientation = Nx * Ni * Ni;
-static const uint TotalFaces = FacesPerOrientation * 3u;
-static const uint TetCount = TotalFaces * 4u;
+// Rhombohedral cube-based tet indexing (bccToRhombo change of basis): every
+// unit cube of a virtual "q-space" simple-cubic lattice decomposes into 6
+// tets sharing the cube's main diagonal D0=(0,0,0)-D1=(1,1,1); each tet's
+// remaining 2 vertices are one of the cube's 6 equatorial (non-diagonal-
+// touching) edges. q relates to true BCC lattice points via
+// q=(i+j,i+k,j+k) for A-node (i,j,k) and q=(i+j+1,i+k+1,j+k+1) for B-node
+// (i,j,k); node type is recoverable as the parity of q.x+q.y+q.z (even=A,
+// odd=B). No buffer stores tet connectivity anywhere in this pipeline --
+// every consumer (smoothnessJacobiCS.hlsl, extractSurfaceCS.hlsl,
+// assignInterfacePairsCS.hlsl) computes a tet's corners, a node's incident
+// tets, and a tet's cross-cube neighbors on the fly, purely from a tet or
+// node index plus the small constant tables below. Tables derived and
+// cross-verified earlier this session (see the approved plan,
+// soft-stargazing-biscuit.md) -- NOT the same as the initially proposed
+// edgeMap, which had a bug caught during derivation.
+//
+// A corner is not resolved to "real node or nothing" -- a q-space point
+// outside the real grid is treated as a fixed VIRTUAL node (background
+// label 0, potential 1.0, everything else absent) rather than making the
+// whole tet/cube invalid. This means every dispatched tet is always
+// meaningful (uniformly computed, no per-cube valid/invalid branch), at
+// the cost of some genuinely wasted work on tets far outside the domain --
+// an explicit, accepted tradeoff (see the plan).
+static const int3 CubeVertexOffsets[6][2] = {
+    { int3(1, 0, 0), int3(1, 0, 1) }, // slot0
+    { int3(1, 0, 0), int3(1, 1, 0) }, // slot1
+    { int3(0, 1, 0), int3(1, 1, 0) }, // slot2
+    { int3(0, 1, 0), int3(0, 1, 1) }, // slot3
+    { int3(0, 0, 1), int3(0, 1, 1) }, // slot4
+    { int3(0, 0, 1), int3(1, 0, 1) }, // slot5
+};
+
+// Ring vertex shared between slot i and slot (i+1)%6 -- a node sitting at
+// this local offset relative to a cube origin is a corner of exactly those
+// 2 tets (used by GatherIncidentTets below).
+static const int3 RingBetween[6] = {
+    int3(1, 0, 0), int3(1, 1, 0), int3(0, 1, 0), int3(0, 1, 1), int3(0, 0, 1), int3(1, 0, 1)
+};
+
+// Cross-cube ("cap") neighbors: tet slot i's D0-cap face crosses to the
+// neighbor cube at D0CapOffset[i] (always -1 along one axis), landing on
+// slot D0CapTargetSlot[i] there; its D1-cap face crosses to D1CapOffset[i]
+// (always +1), landing on D1CapTargetSlot[i]. The two target-slot tables
+// are exact inverse permutations of each other -- the consistency check
+// that caught the original edgeMap's bug (crossing to the neighbor and
+// back must return you to where you started).
+static const int3 D0CapOffset[6] = {
+    int3(0, -1, 0), int3(0, 0, -1), int3(0, 0, -1), int3(-1, 0, 0), int3(-1, 0, 0), int3(0, -1, 0)
+};
+static const uint D0CapTargetSlot[6] = { 2, 5, 4, 1, 0, 3 };
+
+static const int3 D1CapOffset[6] = {
+    int3(1, 0, 0), int3(1, 0, 0), int3(0, 1, 0), int3(0, 1, 0), int3(0, 0, 1), int3(0, 0, 1)
+};
+static const uint D1CapTargetSlot[6] = { 4, 3, 0, 5, 2, 1 };
+
+// Cube-origin bounding box for q-space dispatch: every candidate cube
+// origin in this box gets a permanent 6-tet slot (tetBase=6*linearIndex)
+// whether or not it's fully "interior" -- corners outside the real grid
+// resolve to virtual background nodes (ResolveCorner below) rather than
+// excluding the cube. The box only needs to be wide enough that every cube
+// touching AT LEAST ONE real corner is included (a cube touching zero real
+// corners just contributes harmless all-background tets if included, so
+// there's no need to trim tightly -- only to never miss a cube that DOES
+// touch real data).
+//
+// Checking each of the 8 corner-offset types' reach: the lowest an origin
+// can be and still touch the real q=0 minimum is -1 (via a +1-offset
+// corner, e.g. D1); the highest an origin can be and still touch the real
+// q=2*GridRes-2 maximum is 2*GridRes-2 itself (via a +0-offset corner,
+// i.e. D0). So origin range [-1, 2*GridRes-2] (width 2*GridRes) is exactly
+// sufficient -- also verified empirically (every real node has >=1
+// incident tet), see the approved plan. CubeOriginMin/CubeBoundDim/
+// TotalCubeCandidates/TetCount are computed from GridRes once on the CPU
+// side (DistanceApp.h's EnsureGridBuffersSized) and uploaded via
+// DistanceGridCb.hlsli, rather than recomputed here every invocation --
+// this also keeps them exactly in sync with each buffer's actual allocated
+// size, which is what really matters.
+
+// Linear index of a cube origin into the (widened, negative-capable) q-
+// space bounding box -- out of range means this cube has no addressable
+// tet-slot at all (outside the deliberately-oversized search space, see
+// CubeOriginMin/CubeBoundDim above -- this can only happen right at the
+// very edge of the box, never for a cube anywhere near real data).
+bool CubeLinearIndex(int3 C, out uint idx)
+{
+    idx = 0;
+    int3 shifted = C - int3(CubeOriginMin, CubeOriginMin, CubeOriginMin);
+    if (any(shifted < 0) || any(shifted >= CubeBoundDim)) return false;
+    idx = (uint)shifted.x + (uint)shifted.y * (uint)CubeBoundDim + (uint)shifted.z * (uint)CubeBoundDim * (uint)CubeBoundDim;
+    return true;
+}
+
+// Decodes a flat cube-candidate dispatch index back into its q-space
+// origin -- inverse of CubeLinearIndex.
+int3 CubeOriginFromLinear(uint lin)
+{
+    uint cd = (uint)CubeBoundDim;
+    uint z = lin / (cd * cd);
+    uint rem = lin % (cd * cd);
+    uint y = rem / cd;
+    uint x = rem % cd;
+    return int3((int)x + CubeOriginMin, (int)y + CubeOriginMin, (int)z + CubeOriginMin);
+}
+
+// Resolves a q-space point to its global node index -- SENTINEL_LABEL if
+// it falls outside the real grid (a "virtual" corner, see GetCornerPotential
+// /GetCornerTopLabel below for how those are treated). Every integer q
+// decodes to *some* integer (i,j,k) via this inverse transform (exact, no
+// rounding -- p's coordinate sum is always even by construction of the isB
+// branch below, which is exactly the condition needed for all 3 divisions
+// to be exact); only the final index-range check can fail.
+uint ResolveCorner(int3 q)
+{
+    bool isB = ((q.x + q.y + q.z) & 1) != 0;
+    int3 p = isB ? (q - int3(1, 1, 1)) : q;
+    int i = (p.x + p.y - p.z) / 2;
+    int j = (p.x - p.y + p.z) / 2;
+    int k = (-p.x + p.y + p.z) / 2;
+    if (!isB) {
+        if (i < 0 || j < 0 || k < 0 || i >= (int)GridRes || j >= (int)GridRes || k >= (int)GridRes) return SENTINEL_LABEL;
+        return AIdx((uint)i, (uint)j, (uint)k);
+    } else {
+        if (i < 0 || j < 0 || k < 0 || i >= (int)BDim || j >= (int)BDim || k >= (int)BDim) return SENTINEL_LABEL;
+        return BIdx((uint)i, (uint)j, (uint)k);
+    }
+}
+
+// World position of a q-space point -- always succeeds, no range check
+// (extrapolates past the real grid for a virtual corner using the exact
+// same formula as a real one, so there's no special case at all here).
+// Same inverse transform as ResolveCorner, evaluated in float since a
+// virtual corner's (i,j,k) is only used geometrically, never as a buffer
+// index.
+float3 QWorldPos(int3 q)
+{
+    bool isB = ((q.x + q.y + q.z) & 1) != 0;
+    int3 p = isB ? (q - int3(1, 1, 1)) : q;
+    float i = (float)(p.x + p.y - p.z) * 0.5;
+    float j = (float)(p.x - p.y + p.z) * 0.5;
+    float k = (float)(-p.x + p.y + p.z) * 0.5;
+    float3 base = float3(i, j, k);
+    return (isB ? (base + 0.5) : base) * CELL_SIZE;
+}
+
+// The 4 q-space corners of a tet -- D0, D1, and the slot's ring edge
+// (U0,U1). Pure arithmetic from tetIndex, no data read.
+void GetTetCornerQs(uint tetIndex, out int3 q0, out int3 q1, out int3 q2, out int3 q3)
+{
+    uint cubeLin = tetIndex / 6u;
+    uint slot = tetIndex % 6u;
+    int3 C = CubeOriginFromLinear(cubeLin);
+    q0 = C;
+    q1 = C + int3(1, 1, 1);
+    q2 = C + CubeVertexOffsets[slot][0];
+    q3 = C + CubeVertexOffsets[slot][1];
+}
+
+// Convenience wrapper for callers that only need corner IDENTITY (not
+// position), e.g. assignInterfacePairsCS.hlsl's label vote.
+uint4 GetTetCornerRefs(uint tetIndex)
+{
+    int3 q0, q1, q2, q3;
+    GetTetCornerQs(tetIndex, q0, q1, q2, q3);
+    return uint4(ResolveCorner(q0), ResolveCorner(q1), ResolveCorner(q2), ResolveCorner(q3));
+}
+
+// Packed candidate-label accessor: nodeCandidateLabelBuffer stores ONE uint
+// per node (not per slot) -- MAX_CANDIDATES(6) 5-bit fields packed into the
+// low 30 bits, see DistanceConfig.hlsli's SENTINEL_CANDIDATE comment. Safe
+// as a plain (non-atomic) bitfield because every node's candidate slots are
+// written exactly once, by exactly one thread, in buildCandidatesCS.hlsl --
+// no cross-thread read-modify-write ever touches this buffer afterward
+// (only NodePotential/NodePotentialScratch, which stay one float per slot,
+// change during the solve).
+uint GetCandidateLabelAt(RWStructuredBuffer<uint> buf, uint node, uint slot)
+{
+    return (buf[node] >> (slot * 5u)) & 0x1Fu;
+}
+
+// Candidate-label potential lookup for a tet corner, real or virtual.
+// Virtual corners (cornerRef==SENTINEL_LABEL) are a fixed background node:
+// label 0 with potential 1.0, everything else "missing" -- missingFallback
+// stays a parameter rather than a hardcoded constant because
+// smoothnessJacobiCS.hlsl and extractSurfaceCS.hlsl already use different
+// fallback values (0.0 vs -10.0) for a real node's genuinely absent
+// candidate, for reasons documented in each file; a virtual corner falls
+// back the same way each caller already does for "label not present here".
+float GetCornerPotential(uint cornerRef, uint label, RWStructuredBuffer<uint> candLabel, RWStructuredBuffer<float> candPot, float missingFallback)
+{
+    if (cornerRef == SENTINEL_LABEL) return (label == 0u) ? 1.0 : missingFallback;
+    for (uint s = 0; s < MAX_CANDIDATES; s++) {
+        if (GetCandidateLabelAt(candLabel, cornerRef, s) == label) return candPot[cornerRef * MAX_CANDIDATES + s];
+    }
+    return missingFallback;
+}
+
+// Top (argmax) candidate label at a tet corner, real or virtual.
+void GetCornerTopLabel(uint cornerRef, RWStructuredBuffer<uint> candLabel, RWStructuredBuffer<float> candPot, out uint label, out float pot)
+{
+    if (cornerRef == SENTINEL_LABEL) { label = 0u; pot = 1.0; return; }
+    label = SENTINEL_CANDIDATE;
+    pot = -1.0e30;
+    for (uint s = 0; s < MAX_CANDIDATES; s++) {
+        uint l = GetCandidateLabelAt(candLabel, cornerRef, s);
+        if (l == SENTINEL_CANDIDATE) continue;
+        float p = candPot[cornerRef * MAX_CANDIDATES + s];
+        if (p > pot) { pot = p; label = l; }
+    }
+}
+
+// Gathers this node's incident tet indices (<=MAX_INCIDENT_TETS), computed
+// directly from its q-space coordinate -- mirrors the disphenoid corner
+// enumeration in reverse: for each of the 8 candidate cube origins where
+// this node could be a corner (D0, D1, or one of the 6 ring positions), if
+// that origin has an addressable tet-slot at all (CubeLinearIndex), its
+// tets are incident -- all 6 for the D0/D1 case, exactly 2 for a ring
+// position (via RingBetween's slot pairing). No data read/validity check
+// beyond the bounds test: every in-box cube's tets are always meaningful
+// now (see the header comment above), so there's nothing else to check.
+uint GatherIncidentTets(uint node, out uint tets[MAX_INCIDENT_TETS])
+{
+    for (uint z = 0; z < MAX_INCIDENT_TETS; z++) tets[z] = SENTINEL_LABEL;
+
+    bool isB; uint3 idx;
+    DecodeNodeIndex(node, isB, idx);
+    int3 q = isB
+        ? int3((int)idx.x + (int)idx.y + 1, (int)idx.x + (int)idx.z + 1, (int)idx.y + (int)idx.z + 1)
+        : int3((int)idx.x + (int)idx.y, (int)idx.x + (int)idx.z, (int)idx.y + (int)idx.z);
+
+    uint count = 0;
+    {
+        uint lin;
+        if (CubeLinearIndex(q, lin)) { // this node as D0
+            uint tetBase = lin * 6;
+            for (uint s = 0; s < 6 && count < MAX_INCIDENT_TETS; s++) tets[count++] = tetBase + s;
+        }
+    }
+    {
+        uint lin;
+        if (CubeLinearIndex(q - int3(1, 1, 1), lin)) { // this node as D1
+            uint tetBase = lin * 6;
+            for (uint s = 0; s < 6 && count < MAX_INCIDENT_TETS; s++) tets[count++] = tetBase + s;
+        }
+    }
+    for (uint i = 0; i < 6; i++) {
+        uint lin;
+        if (CubeLinearIndex(q - RingBetween[i], lin)) { // this node as a ring vertex
+            uint tetBase = lin * 6;
+            if (count < MAX_INCIDENT_TETS) tets[count++] = tetBase + i;
+            if (count < MAX_INCIDENT_TETS) tets[count++] = tetBase + (i + 1) % 6;
+        }
+    }
+    return count;
+}
+
+// Cross-cube ("cap") neighbor tets of a tet, computed directly -- no
+// TetFaceNeighbors buffer. SENTINEL_LABEL means the neighbor cube's origin
+// falls outside the (deliberately oversized) dispatch box entirely -- the
+// only remaining "doesn't exist" case, confined to the very edge of the
+// box, never affecting a tet anywhere near real data.
+uint2 GetCrossNeighbors(uint tetIndex)
+{
+    uint cubeLin = tetIndex / 6u;
+    uint slot = tetIndex % 6u;
+    int3 C = CubeOriginFromLinear(cubeLin);
+
+    uint lin0, lin1;
+    uint cross0 = CubeLinearIndex(C + D0CapOffset[slot], lin0) ? (lin0 * 6 + D0CapTargetSlot[slot]) : SENTINEL_LABEL;
+    uint cross1 = CubeLinearIndex(C + D1CapOffset[slot], lin1) ? (lin1 * 6 + D1CapTargetSlot[slot]) : SENTINEL_LABEL;
+    return uint2(cross0, cross1);
+}
 
 // Standard affine/barycentric shape-function gradients for a tetrahedron:
 // for any scalar field affine over the tet with corner values phi_c,

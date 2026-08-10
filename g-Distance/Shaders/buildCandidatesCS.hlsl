@@ -1,7 +1,10 @@
 #include "DistanceCb.hlsli"
+#define DISTANCE_GRID_CB_REGISTER b2
 #include "DistanceLattice.hlsli"
 
-// Per-node candidate label arrays (<=8 slots) + initial raw potentials.
+// Per-node candidate label arrays (<=MAX_CANDIDATES(6) slots, packed 5 bits
+// each into a single uint -- see DistanceConfig.hlsli's SENTINEL_CANDIDATE
+// comment) + initial raw potentials.
 //   B-node candidates = the distinct input labels among its own cube's 8
 //     A-corners AND its 6 face-neighbor cubes' corners (a 1-cube halo, not
 //     just its own cube as originally planned) -- confirmed necessary by
@@ -18,18 +21,19 @@
 //     a corner whose 3 real-2-candidate neighbors all sat around 0.19-0.27).
 //   A-node candidates = its own input label (always slot 0, never evicted)
 //     union the distinct labels found among its same-sublattice 26-neighbor
-//     A-nodes, capped at 8 -- needed so a neighboring tet's interface
+//     A-nodes, capped at 6 -- needed so a neighboring tet's interface
 //     computation always has *some* potential value for a competing label at
 //     this A-node's corner, even though its own winner is fixed.
 // Dispatched twice (Mode root constant): once over ACount threads, once over
-// BCount -- unused slots are written as SENTINEL_LABEL, masked out by every
-// consumer (FindSlot-style helpers never match SENTINEL_LABEL).
+// BCount -- unused slots are written as SENTINEL_CANDIDATE, masked out by
+// every consumer (FindSlot-style helpers never match SENTINEL_CANDIDATE).
 #define BuildCandidatesSig "RootFlags(0)," \
     "RootConstants(num32BitConstants=2, b1)," \
     "CBV(b0)," \
     "UAV(u0)," \
     "UAV(u1)," \
-    "UAV(u2)"
+    "UAV(u2)," \
+    "CBV(b2)"
 
 cbuffer ModeConsts : register(b1) {
     uint Mode;          // 0 = A-nodes, 1 = B-nodes
@@ -44,9 +48,9 @@ RWStructuredBuffer<float> NodePotential : register(u2);
 [numthreads(THREAD_GROUP_SIZE, 1, 1)]
 void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
 {
-    uint labels[8] = {
-        SENTINEL_LABEL, SENTINEL_LABEL, SENTINEL_LABEL, SENTINEL_LABEL,
-        SENTINEL_LABEL, SENTINEL_LABEL, SENTINEL_LABEL, SENTINEL_LABEL
+    uint labels[6] = {
+        SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE,
+        SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE
     };
     uint count = 0;
     uint node;
@@ -65,7 +69,7 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
         labels[0] = ownLabel;
         count = 1;
 
-        for (uint n = 0; n < 26 && count < 8; n++) {
+        for (uint n = 0; n < 26 && count < 6; n++) {
             int3 nb = int3((int)i, (int)j, (int)k) + SameLatticeOffsets[n];
             if (any(nb < 0) || any(nb >= (int)GridRes)) continue;
             uint nLabel = RasterLabel[AIdx((uint)nb.x, (uint)nb.y, (uint)nb.z)];
@@ -89,7 +93,7 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
         // plus some edge/corner-adjacent cubes for free -- harmless, capped
         // at 8 slots and nowhere near that cap with only a couple of labels
         // actually present in the scene.
-        uint freq[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        uint freq[6] = { 0, 0, 0, 0, 0, 0 };
         for (int dz = -1; dz <= 2; dz++) {
             for (int dy = -1; dy <= 2; dy++) {
                 for (int dx = -1; dx <= 2; dx++) {
@@ -98,7 +102,7 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
                     uint aLabel = RasterLabel[(uint)ai + (uint)aj * GridRes + (uint)ak * GridRes * GridRes];
                     bool found = false;
                     for (uint s = 0; s < count; s++) if (labels[s] == aLabel) { freq[s]++; found = true; break; }
-                    if (!found && count < 8) { labels[count] = aLabel; freq[count] = 1; count++; }
+                    if (!found && count < 6) { labels[count] = aLabel; freq[count] = 1; count++; }
                 }
             }
         }
@@ -133,17 +137,24 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
         if (NeutralBSeed == 0) {
             for (uint s = 1; s < count; s++) if (freq[s] > freq[seedSlot]) seedSlot = s;
         } else {
-            seedSlot = 8; // no valid slot index -- isSeed below never matches
+            seedSlot = 6; // no valid slot index -- isSeed below never matches
         }
     }
 
-    for (uint s = 0; s < 8; s++) {
-        NodeCandidateLabel[node * 8 + s] = labels[s];
+    // Pack all 6 labels (5 bits each) into a single uint -- see
+    // SENTINEL_CANDIDATE/GetCandidateLabelAt. Safe as a non-atomic
+    // read-modify-write-free write: this thread owns this node's whole
+    // candidate word exclusively, written here once and never again.
+    uint packed = 0;
+    for (uint s = 0; s < 6; s++) packed |= (labels[s] & 0x1Fu) << (s * 5u);
+    NodeCandidateLabel[node] = packed;
+
+    for (uint s = 0; s < 6; s++) {
         float pot = 0.0;
         if (s < count) {
             bool isSeed = (Mode == 0 && s == 0) || (Mode == 1 && s == seedSlot);
             pot = isSeed ? OwnLabelSeed : (DistanceJitter(node, s) * SeedJitter);
         }
-        NodePotential[node * 8 + s] = pot;
+        NodePotential[node * 6 + s] = pot;
     }
 }

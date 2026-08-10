@@ -11,8 +11,11 @@
 RWStructuredBuffer<SurfaceVertex> SurfaceVertices : register(u0);
 
 struct VsOut {
-    float4 pos    : SV_POSITION;
-    float3 normal : TEXCOORD0;
+    float4 pos      : SV_POSITION;
+    float3 worldPos : TEXCOORD0;
+    float3 normal   : TEXCOORD1;
+    nointerpolation uint labelI : TEXCOORD2;
+    nointerpolation uint labelJ : TEXCOORD3;
 };
 
 [RootSignature(SurfaceSig)]
@@ -21,6 +24,9 @@ VsOut surfaceVS(uint vid : SV_VertexID)
     VsOut o;
     SurfaceVertex v = SurfaceVertices[vid];
     o.pos = mul(float4(v.pos, 1), viewProjTransform);
+    o.worldPos = v.pos;
     o.normal = v.normal;
+    o.labelI = v.labelI;
+    o.labelJ = v.labelJ;
     return o;
 }

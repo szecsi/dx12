@@ -1,4 +1,5 @@
 #include "DistanceFrameCb.hlsli"
+#define DISTANCE_GRID_CB_REGISTER b1
 #include "DistanceLattice.hlsli"
 
 // Billboard point-sprite per node (A + B together), colored by each node's
@@ -20,7 +21,8 @@
 #define NodePointSig "RootFlags(0)," \
     "CBV(b0)," \
     "UAV(u0)," \
-    "UAV(u1)"
+    "UAV(u1)," \
+    "CBV(b1)"
 
 RWStructuredBuffer<uint>  NodeCandidateLabel : register(u0);
 RWStructuredBuffer<float> NodePotential : register(u1);
@@ -37,12 +39,12 @@ static const float2 QuadCorners[4] = { float2(-1, -1), float2(1, -1), float2(-1,
 
 uint TopLabelAndPot(uint node, out float bestPot)
 {
-    uint bestLabel = SENTINEL_LABEL;
+    uint bestLabel = SENTINEL_CANDIDATE;
     bestPot = -1.0e30;
-    for (uint s = 0; s < 8; s++) {
-        uint l = NodeCandidateLabel[node * 8 + s];
-        if (l == SENTINEL_LABEL) continue;
-        float p = NodePotential[node * 8 + s];
+    for (uint s = 0; s < MAX_CANDIDATES; s++) {
+        uint l = GetCandidateLabelAt(NodeCandidateLabel, node, s);
+        if (l == SENTINEL_CANDIDATE) continue;
+        float p = NodePotential[node * MAX_CANDIDATES + s];
         if (p > bestPot) { bestPot = p; bestLabel = l; }
     }
     return bestLabel;
@@ -89,7 +91,7 @@ VsOut nodePointVS(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     o.isB = (node >= ACount) ? 1 : 0;
 
     bool hideUniform = pointParams.w > 0.5;
-    bool hide = (bestLabel == SENTINEL_LABEL) ||
+    bool hide = (bestLabel == SENTINEL_CANDIDATE) ||
                 (hideUniform && HasOnlySameLabelNeighbors(node, bestLabel));
 
     if (hide) {
