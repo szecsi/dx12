@@ -36,7 +36,12 @@ DistanceCb
     // Row 1 -- Jacobi solve mechanics + candidate seeding
     float JacobiDiagEpsilon;  // denominator floor, same role as g-Aequor's MinSystemDiagonal
     float SeedJitter;         // amplitude of buildCandidatesCS's symmetry-breaking jitter
-    float OwnLabelSeed;       // initial raw potential for an A-node's own/input label slot
+    // UNUSED (kept, not deleted, per this project's "leave dead
+    // infrastructure in place" convention): initial raw potential for an
+    // A-node's own/input label slot. Superseded by JFA-based seeding
+    // (NodeFootDist, buildCandidatesCS.hlsl) -- see that file's potential-
+    // seeding block.
+    float OwnLabelSeed;
     // Hard per-sweep clamp on |newPhi-phi| for every (node,slot) unknown --
     // without this, naive per-unknown-diagonal Jacobi on this coupled system
     // overshoots and diverges (confirmed: potentials blew up ~2000x/round
@@ -51,11 +56,26 @@ DistanceCb
     // node pinning).
     float VolumeWeight;  // term 4 weight: how hard to push a connecting node's volume back up when it dips below VolumeFloor
     float VolumeFloor;   // the floor itself, in tet-volume units (default 1 -- see the isolated-point geometric derivation in project memory)
-    float _pad2a;
+    // Term 1's TetFieldGrad missing-candidate fallback (smoothnessJacobiCS.hlsl's
+    // GetCornerPotential call) -- the potential value assumed for a real tet
+    // corner that genuinely doesn't carry a given label as one of its own
+    // candidates. GUI slider, range -2..1.
+    float MissingFallback;
     // Term 1 pair-listing method, GUI checkbox: 1 = edge-walking (GatherEdgeTets
     // over this node's 14 neighbor edges), 0 = check all node-adjacent tets
     // (GatherIncidentTets + GetFaceAdjacentPartner) -- see smoothnessJacobiCS.hlsl.
     uint UseEdgeWalkTraversal;
+
+    // Row 3 -- distance/Eikonal shaping (energy term 5, smoothnessJacobiCS.hlsl).
+    // Pushes a same-label potential difference along a real geometric edge
+    // toward that edge's actual Euclidean length -- shapes each candidate's
+    // potential into an approximate unit-gradient distance field, the
+    // consistency term a future JFA-footvector-length potential init will
+    // need to not just decay back toward Term 3's sum-to-0 pull.
+    float DistanceWeight;  // term 5 weight -- 0 disables the term entirely
+    float _pad3a;
+    float _pad3b;
+    float _pad3c;
 }
 #ifndef __HLSL_VERSION
 ;

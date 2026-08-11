@@ -49,6 +49,12 @@ enum DistanceTestShape {
 	// 1-Li" assumption) without any 3+-label ambiguity in the way -- made
 	// the default test shape for that reason.
 	TestShape_SingleTorus = 7,
+	// A single fully-filled A-cube: the 8 A-nodes at grid-midpoint +{0,1} on
+	// every axis all get label 1 -- the smallest possible genuinely-3D solid
+	// feature (one whole cube's worth of tets uniformly interior), as
+	// opposed to Line/DiagonalLine3D's 1-node-wide curves or Slab's 1-node-
+	// thick sheet.
+	TestShape_Box2x2x2 = 8,
 };
 
 // g-Distance: replaces g-Aequor's particle relaxation with a direct scalar
@@ -86,7 +92,7 @@ class DistanceApp : public Egg::SimpleApp {
 	// WindowCubeDim=40 (today's whole-domain q-dispatch size) at the default
 	// GridRes=20 via the 2*W+8 formula below (2*16+8=40), so the default
 	// case stays a true no-op.
-	int windowCubeDimSetting = 16;  // GUI: "Render Window Size" (real grid units, applied on Reinitialize)
+	int windowCubeDimSetting = 21;  // GUI: "Render Window Size" (real grid units, applied on Reinitialize)
 
 	uint GridRes = 20, BDim = 19, ACount = 8000, BCount = 6859, NodeCount = 14859;
 	// Rhombohedral cube-based tet indexing -- computed on the fly
@@ -135,6 +141,15 @@ protected:
 	// GatherIncidentTets/GetCrossNeighbors.
 	com_ptr<ID3D12Resource> rasterLabelBuffer;          // ACount uint: ground-truth A-node label
 	com_ptr<ID3D12Resource> nodeIsConnectingBuffer;     // ACount uint (0/1): sole local connector of its same-label neighborhood, see computeConnectingNodesCS.hlsl
+	// JFA (Jump Flooding) feature transform over the A-sublattice -- ping-pong
+	// seed-node-index buffers (jfaInitCS/jfaStepCS.hlsl) finalized into a
+	// per-A-node distance ("footvector length" to the nearest differently-
+	// labeled A-node, jfaFinalizeCS.hlsl), read by buildCandidatesCS.hlsl to
+	// seed initial candidate potentials. Init-only, same cadence as
+	// rasterLabelBuffer/nodeIsConnectingBuffer.
+	com_ptr<ID3D12Resource> jfaSeedBufferA;             // ACount uint
+	com_ptr<ID3D12Resource> jfaSeedBufferB;             // ACount uint
+	com_ptr<ID3D12Resource> nodeFootDistBuffer;         // ACount float
 
 	// -- per-node candidate/potential state, (re)seeded at init, evolved by the outer loop --
 	com_ptr<ID3D12Resource> nodeCandidateLabelBuffer;   // NodeCount*2 uint, MAX_CANDIDATES(8) 8-bit labels packed per node (SENTINEL_CANDIDATE = unused slot)
@@ -153,6 +168,9 @@ protected:
 
 	Egg::Compute::ComputeShader rasterLabelCS;
 	Egg::Compute::ComputeShader computeConnectingNodesCS;
+	Egg::Compute::ComputeShader jfaInitCS;
+	Egg::Compute::ComputeShader jfaStepCS;
+	Egg::Compute::ComputeShader jfaFinalizeCS;
 	Egg::Compute::ComputeShader buildCandidatesCS;
 	Egg::Compute::ComputeShader snapshotWinnerCS;
 	Egg::Compute::ComputeShader smoothnessJacobiCS;
@@ -181,8 +199,8 @@ protected:
 	bool needsContinue = false;
 	bool dataValid = false; // true once a Reinit/Continue has actually produced node data
 
-	int iterations = 8;          // outer Lloyd-loop rounds on Reinitialize
-	int continueIterations = 8;  // outer Lloyd-loop rounds on Continue
+	int iterations = 0;          // outer Lloyd-loop rounds on Reinitialize
+	int continueIterations = 1;  // outer Lloyd-loop rounds on Continue
 	int jacobiSweepsPerRound = 4; // inner linear-solve depth per outer round
 
 	float smoothnessWeight = 1.0f;
@@ -197,7 +215,9 @@ protected:
 	float maxPotentialStep = 0.002f; // hard per-sweep step clamp, see DistanceCb.hlsli -- user-confirmed stable value; 0.1 was not, likely because the all-edges connectivity change couples each unknown to more neighbors than the original fan-only gather did
 	float volumeWeight = 5000.0f; // energy term 4 weight, see DistanceCb.hlsli -- needs to be this large (not ~1 like the other weights) to actually outweigh smoothness's gradient at a topologically point-like feature; see "Volume Weight" slider comment
 	float volumeFloor = 1.0f; // the floor itself for connecting nodes, see DistanceCb.hlsli
-	bool useEdgeWalkTraversal = true; // Term 1 pair-listing method: edge-walking vs. node-adjacent-tets, see smoothnessJacobiCS.hlsl
+	bool useEdgeWalkTraversal = false; // Term 1 pair-listing method: edge-walking vs. node-adjacent-tets, see smoothnessJacobiCS.hlsl
+	float missingFallback = -0.75f; // TetFieldGrad's GetCornerPotential missing-candidate fallback, see DistanceCb.hlsli
+	float distanceWeight = 0.0f; // term 5 (distance/Eikonal shaping) weight, see DistanceCb.hlsli -- default 0, off until tuned
 	float pointRadiusPx = 3.0f;
 	float potentialSizeScale = 1.0f; // winning-potential reference value that maps to full-size sprites, see nodePointVS.hlsl
 	float nodeFadeExponent = 1.0f;      // exponential depth-fade rate for distant nodes, see nodePointVS.hlsl
@@ -216,7 +236,7 @@ protected:
 	float pickedCornerCurrentVolume[4] = {};   // NodeCurrentVolume, written by smoothnessJacobiCS's Term 4
 	uint pickedCornerIsConnecting[4] = {};     // NodeIsConnecting (A-nodes only; 0 for B corners), computeConnectingNodesCS
 
-	bool showNodes = true;
+	bool showNodes = false;
 	bool showSurface = true;
 	bool showReference = true;
 	bool hideUniformNodes = false; // hide nodes whose structural neighbors all share its current label
@@ -312,8 +332,12 @@ protected:
 		distanceCb.data.MaxPotentialStep = maxPotentialStep;
 		distanceCb.data.VolumeWeight = volumeWeight;
 		distanceCb.data.VolumeFloor = volumeFloor;
-		distanceCb.data._pad2a = 0.0f;
+		distanceCb.data.MissingFallback = missingFallback;
 		distanceCb.data.UseEdgeWalkTraversal = useEdgeWalkTraversal ? 1u : 0u;
+		distanceCb.data.DistanceWeight = distanceWeight;
+		distanceCb.data._pad3a = 0.0f;
+		distanceCb.data._pad3b = 0.0f;
+		distanceCb.data._pad3c = 0.0f;
 		distanceCb.Upload();
 	}
 
@@ -454,6 +478,9 @@ protected:
 		if (gridChanged) {
 			rasterLabelBuffer          = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"rasterLabelBuffer");
 			nodeIsConnectingBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"nodeIsConnectingBuffer");
+			jfaSeedBufferA             = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"jfaSeedBufferA");
+			jfaSeedBufferB             = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"jfaSeedBufferB");
+			nodeFootDistBuffer         = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(float), L"nodeFootDistBuffer");
 			nodeCandidateLabelBuffer   = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * 2 * sizeof(UINT), L"nodeCandidateLabelBuffer");
 			nodePotentialBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialBuffer");
 			nodePotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialScratchBuffer");
@@ -497,6 +524,49 @@ protected:
 		cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(rasterLabelBuffer.Get()));
 
+		// JFA (Jump Flooding) footvector-length pass: seeds = A-nodes touching
+		// a differently-labeled neighbor; propagate nearest seed via halving
+		// power-of-two steps (classic JFA schedule, starting from the
+		// smallest power of two >= GridRes), ping-ponging jfaSeedBufferA/B;
+		// finalize into nodeFootDistBuffer (distance to nearest boundary
+		// A-node), read by buildCandidatesCS below to seed initial candidate
+		// potentials. See jfaInitCS/jfaStepCS/jfaFinalizeCS.hlsl.
+		cmd->SetComputeRootSignature(jfaInitCS.rootSig.Get());
+		cmd->SetPipelineState(jfaInitCS.pso.Get());
+		cmd->SetComputeRootUnorderedAccessView(0, rasterLabelBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(1, jfaSeedBufferA->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+		cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
+		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(jfaSeedBufferA.Get()));
+
+		uint32_t jfaN = 1;
+		while (jfaN < GridRes) jfaN *= 2; // smallest power of two >= GridRes
+		bool jfaCurrentIsA = true; // jfaInitCS just wrote into jfaSeedBufferA
+		for (uint32_t step = jfaN / 2; step >= 1; step /= 2) {
+			com_ptr<ID3D12Resource>& src = jfaCurrentIsA ? jfaSeedBufferA : jfaSeedBufferB;
+			com_ptr<ID3D12Resource>& dst = jfaCurrentIsA ? jfaSeedBufferB : jfaSeedBufferA;
+			cmd->SetComputeRootSignature(jfaStepCS.rootSig.Get());
+			cmd->SetPipelineState(jfaStepCS.pso.Get());
+			cmd->SetComputeRoot32BitConstant(0, step, 0);
+			cmd->SetComputeRootUnorderedAccessView(1, src->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, dst->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+			cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
+			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(dst.Get()));
+			jfaCurrentIsA = !jfaCurrentIsA;
+		}
+
+		{
+			com_ptr<ID3D12Resource>& finalSeed = jfaCurrentIsA ? jfaSeedBufferA : jfaSeedBufferB;
+			cmd->SetComputeRootSignature(jfaFinalizeCS.rootSig.Get());
+			cmd->SetPipelineState(jfaFinalizeCS.pso.Get());
+			cmd->SetComputeRootUnorderedAccessView(0, finalSeed->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodeFootDistBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+			cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
+			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeFootDistBuffer.Get()));
+		}
+
 		cmd->SetComputeRootSignature(computeConnectingNodesCS.rootSig.Get());
 		cmd->SetPipelineState(computeConnectingNodesCS.pso.Get());
 		cmd->SetComputeRoot32BitConstant(0, edgeConnectivityOnly ? 1u : 0u, 0);
@@ -512,7 +582,8 @@ protected:
 		cmd->SetComputeRootUnorderedAccessView(2, rasterLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(3, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(4, nodePotentialBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(5, nodeFootDistBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(6, distanceGridCb.GetGPUVirtualAddress());
 		cmd->SetComputeRoot32BitConstant(0, 0u, 0); // Mode = A-nodes
 		cmd->SetComputeRoot32BitConstant(0, neutralBSeed ? 1u : 0u, 1); // NeutralBSeed
 		cmd->Dispatch(BuildCandidatesAGroups, 1, 1);
@@ -1053,7 +1124,7 @@ protected:
 		ImGui::SetNextWindowSize(ImVec2(280, 0), ImGuiCond_FirstUseEver);
 		ImGui::Begin("g-Distance Controls");
 		static const char* testShapeItems[] = {
-			"3 Tori (multi-label)", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D", "Slab", "Single Torus (2-label)"
+			"3 Tori (multi-label)", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D", "Slab", "Single Torus (2-label)", "2x2x2 Box"
 		};
 		ImGui::Combo("Test Shape", &testShapeKind, testShapeItems, IM_ARRAYSIZE(testShapeItems));
 		ImGui::SliderInt("Grid Resolution", &gridResSetting, 4, 256, "%d", ImGuiSliderFlags_Logarithmic);
@@ -1191,6 +1262,12 @@ protected:
 			// connecting node's own volume is at or above Volume Floor.
 			ImGui::SliderFloat("Volume Weight", &volumeWeight, 0.0f, 10000.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
 			ImGui::SliderFloat("Volume Floor", &volumeFloor, 0.0f, 2.0f);
+			ImGui::SliderFloat("Missing Candidate Fallback", &missingFallback, -2.0f, 1.0f);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(TetFieldGrad's GetCornerPotential fallback, Term 1)");
+			ImGui::SliderFloat("Distance Term Weight", &distanceWeight, 0.0f, 10.0f);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(term 5: same-label edge diff ~= edge length, see smoothnessJacobiCS.hlsl)");
 		}
 
 		ImGui::SliderFloat("Point Radius", &pointRadiusPx, 0.5f, 10.0f);
@@ -1266,6 +1343,9 @@ public:
 
 		rasterLabelCS.createResources(device, "Shaders/rasterLabelCS.cso");
 		computeConnectingNodesCS.createResources(device, "Shaders/computeConnectingNodesCS.cso");
+		jfaInitCS.createResources(device, "Shaders/jfaInitCS.cso");
+		jfaStepCS.createResources(device, "Shaders/jfaStepCS.cso");
+		jfaFinalizeCS.createResources(device, "Shaders/jfaFinalizeCS.cso");
 		buildCandidatesCS.createResources(device, "Shaders/buildCandidatesCS.cso");
 		snapshotWinnerCS.createResources(device, "Shaders/snapshotWinnerCS.cso");
 		smoothnessJacobiCS.createResources(device, "Shaders/smoothnessJacobiCS.cso");

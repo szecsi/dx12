@@ -74,6 +74,9 @@
   <ItemGroup>
     <FxCompile Include="Shaders\rasterLabelCS.hlsl" />
     <FxCompile Include="Shaders\computeConnectingNodesCS.hlsl" />
+    <FxCompile Include="Shaders\jfaInitCS.hlsl" />
+    <FxCompile Include="Shaders\jfaStepCS.hlsl" />
+    <FxCompile Include="Shaders\jfaFinalizeCS.hlsl" />
     <FxCompile Include="Shaders\buildCandidatesCS.hlsl" />
     <FxCompile Include="Shaders\snapshotWinnerCS.hlsl" />
     <FxCompile Include="Shaders\smoothnessJacobiCS.hlsl" />

@@ -313,6 +313,78 @@ uint GatherIncidentTets(uint node, out uint tets[MAX_INCIDENT_TETS])
     return count;
 }
 
+// Spatial (GridRes-agnostic) cap tables for a tet slot's two OUT-OF-CUBE
+// face-adjacent partners -- D0-cap and D1-cap cross into a NEIGHBORING
+// cube's tet; fanNext/fanPrev ((slot+1)%6 / (slot+5)%6) stay within the SAME
+// cube, no table needed. Cube-ORIGIN offsets + a target slot, not flat
+// tet-index offsets -- unlike the flat PartnerOffset table this project
+// briefly used (removed once GridRes became a runtime GUI value: flat
+// tet-index strides depend on CubeBoundDim, these spatial offsets don't).
+// Re-derived from GetTetCornerQs' own per-slot corner assignment, verified
+// via a standalone reciprocity check (D0-cap[s] and D1-cap[D0CapTargetSlot[s]]
+// are exact negations of each other).
+static const int3 D0CapOffset[6] = { { 0, -1, 0 }, { 0, 0, -1 }, { 0, 0, -1 }, { -1, 0, 0 }, { -1, 0, 0 }, { 0, -1, 0 } };
+static const uint D0CapTargetSlot[6] = { 2, 5, 4, 1, 0, 3 };
+static const int3 D1CapOffset[6] = { { 1, 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0, 0, 1 } };
+static const uint D1CapTargetSlot[6] = { 4, 3, 0, 5, 2, 1 };
+
+// The 4 face-adjacent partners of tet `tetX`: relation 0=fanNext,
+// 1=fanPrev (same cube), 2=D0cap, 3=D1cap (neighboring cube, via the tables
+// above). Returns false if the partner cube falls outside the current
+// grid's bounding box (edge of the domain), same convention CubeLinearIndex
+// itself uses.
+bool GetFaceAdjacentPartner(uint tetX, uint relation, out uint P)
+{
+    P = 0u;
+    uint cubeLin = tetX / 6u, slot = tetX % 6u;
+    if (relation == 0u) { P = cubeLin * 6u + (slot + 1u) % 6u; return true; }
+    if (relation == 1u) { P = cubeLin * 6u + (slot + 5u) % 6u; return true; }
+    int3 C = CubeOriginFromLinear(cubeLin);
+    uint lin;
+    if (relation == 2u) {
+        if (!CubeLinearIndex(C + D0CapOffset[slot], lin)) return false;
+        P = lin * 6u + D0CapTargetSlot[slot];
+        return true;
+    }
+    if (!CubeLinearIndex(C + D1CapOffset[slot], lin)) return false;
+    P = lin * 6u + D1CapTargetSlot[slot];
+    return true;
+}
+
+// 2-ring incident-tet gather: this node's own incident tets (ring 1, via
+// GatherIncidentTets above) plus every tet FACE-ADJACENT to a ring-1 tet
+// (ring 2, via GetFaceAdjacentPartner's 4 relations per tet), each tet
+// listed at most once overall. Note ring 2 is NOT "every tet incident to a
+// ring-1 corner node" (that would pull in a much wider, node-incidence-based
+// set) -- only tets sharing an actual face (3 corners) with a ring-1 tet
+// qualify. 3 of a ring-1 tet's 4 face-adjacent partners share the face that
+// includes `node` itself, so they're already in ring 1; only the partner
+// across the ONE face opposite `node`'s own corner is genuinely new -- so
+// ring 2 contributes at most 1 new tet per ring-1 tet in practice (<=~24),
+// which is what the 48 cap (MAX_INCIDENT_TETS2, DistanceConfig.hlsli) is
+// sized around.
+uint GatherIncidentTets2(uint node, out uint tets[MAX_INCIDENT_TETS2])
+{
+    for (uint z = 0; z < MAX_INCIDENT_TETS2; z++) tets[z] = SENTINEL_LABEL;
+    uint count = 0;
+
+    uint ring1[MAX_INCIDENT_TETS];
+    uint ring1Count = GatherIncidentTets(node, ring1);
+    for (uint r1 = 0; r1 < ring1Count && count < MAX_INCIDENT_TETS2; r1++) tets[count++] = ring1[r1];
+
+    for (uint t = 0; t < ring1Count; t++) {
+        for (uint rel = 0; rel < 4; rel++) {
+            uint P;
+            if (!GetFaceAdjacentPartner(ring1[t], rel, P)) continue;
+            bool found = false;
+            for (uint e = 0; e < count; e++) if (tets[e] == P) { found = true; break; }
+            if (!found && count < MAX_INCIDENT_TETS2) tets[count++] = P;
+        }
+    }
+
+    return count;
+}
+
 // Edge-centric connectivity: the 14 actual geometric neighbors of any node
 // (opposite-sublattice near + same-sublattice far), and -- for a given such
 // edge -- the tets that actually contain it. Replaces the old per-cube

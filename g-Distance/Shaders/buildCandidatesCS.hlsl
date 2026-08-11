@@ -4,7 +4,12 @@
 
 // Per-node candidate label arrays (<=MAX_CANDIDATES(8) slots, packed 8 bits
 // each into two uints -- see DistanceConfig.hlsli's SENTINEL_CANDIDATE
-// comment) + initial raw potentials.
+// comment) + initial raw potentials, seeded from NodeFootDist (a JFA-
+// computed per-A-node distance to the nearest differently-labeled A-node --
+// see jfaInitCS/jfaStepCS/jfaFinalizeCS.hlsl, dispatched earlier in
+// RunTopologyBuild) rather than a flat OwnLabelSeed constant -- see the
+// potential-seeding block near the end of this file for the exact A/B
+// formulas.
 //   B-node candidates = the distinct input labels among its own cube's 8
 //     A-corners AND its 6 face-neighbor cubes' corners (a 1-cube halo, not
 //     just its own cube as originally planned) -- confirmed necessary by
@@ -33,16 +38,23 @@
     "UAV(u0)," \
     "UAV(u1)," \
     "UAV(u2)," \
+    "UAV(u3)," \
     "CBV(b2)"
 
 cbuffer ModeConsts : register(b1) {
     uint Mode;          // 0 = A-nodes, 1 = B-nodes
-    uint NeutralBSeed;  // 1 = B-nodes get pure jitter (no majority-vote seed slot), see GUI checkbox
+    uint NeutralBSeed;  // 1 = B-nodes get pure jitter (no majority-vote seed slot), see GUI checkbox -- UNUSED by potential seeding now, see the JFA-based seeding block below; candidate label DISCOVERY (freq[]/labels[] above) is unaffected either way.
 };
 
 RWStructuredBuffer<uint>  RasterLabel : register(u0);
 RWStructuredBuffer<uint>  NodeCandidateLabel : register(u1);
 RWStructuredBuffer<float> NodePotential : register(u2);
+// ACount-sized: distance from an A-node to the nearest A-node with a
+// DIFFERENT ground-truth label ("footvector length"), precomputed by
+// jfaInitCS/jfaStepCS/jfaFinalizeCS.hlsl earlier in RunTopologyBuild. Only
+// ever indexed with a real A-node index (this thread's own `node` in Mode 0,
+// or a halo A-corner index in Mode 1) -- never B, which JFA doesn't cover.
+RWStructuredBuffer<float> NodeFootDist : register(u3);
 
 [RootSignature(BuildCandidatesSig)]
 [numthreads(THREAD_GROUP_SIZE, 1, 1)]
@@ -54,7 +66,13 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
     };
     uint count = 0;
     uint node;
-    uint seedSlot = 0; // which slot (if any beyond A's fixed slot 0) gets OwnLabelSeed instead of jitter
+    uint seedSlot = 0; // which slot (if any beyond A's fixed slot 0) got the old majority-vote seed -- UNUSED by potential seeding now, see below
+    // Mode==1 (B) only: per-slot corner-count / summed footvector length
+    // over the halo scan below, for the uniform-halo averaging case in the
+    // potential-seeding block further down. Declared here (not inside the
+    // else block) so they're still in scope there.
+    uint freq[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    float sumDist[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
     if (Mode == 0) {
         if (tid.x >= ACount) return;
@@ -93,16 +111,20 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
         // plus some edge/corner-adjacent cubes for free -- harmless, capped
         // at 8 slots and nowhere near that cap with only a couple of labels
         // actually present in the scene.
-        uint freq[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        // freq/sumDist declared above (outer scope) -- per-slot corner count
+        // and summed footvector length, freq[s] doubling as sumDist[s]'s
+        // divisor for the uniform-halo averaging case further below.
         for (int dz = -1; dz <= 2; dz++) {
             for (int dy = -1; dy <= 2; dy++) {
                 for (int dx = -1; dx <= 2; dx++) {
                     int ai = (int)i + dx, aj = (int)j + dy, ak = (int)k + dz;
                     if (ai < 0 || aj < 0 || ak < 0 || ai >= (int)GridRes || aj >= (int)GridRes || ak >= (int)GridRes) continue;
-                    uint aLabel = RasterLabel[(uint)ai + (uint)aj * GridRes + (uint)ak * GridRes * GridRes];
+                    uint aIdx = (uint)ai + (uint)aj * GridRes + (uint)ak * GridRes * GridRes;
+                    uint aLabel = RasterLabel[aIdx];
+                    float aDist = NodeFootDist[aIdx];
                     bool found = false;
-                    for (uint s = 0; s < count; s++) if (labels[s] == aLabel) { freq[s]++; found = true; break; }
-                    if (!found && count < 8) { labels[count] = aLabel; freq[count] = 1; count++; }
+                    for (uint s = 0; s < count; s++) if (labels[s] == aLabel) { freq[s]++; sumDist[s] += aDist; found = true; break; }
+                    if (!found && count < 8) { labels[count] = aLabel; freq[count] = 1; sumDist[count] = aDist; count++; }
                 }
             }
         }
@@ -134,10 +156,13 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
         //     actually start near the "B ~ 0 weight" condition its natural
         //     volume ceiling assumes, instead of starting pre-committed
         //     against it.
+        // UNUSED by potential seeding now -- see the JFA-based block below,
+        // which branches on whether the halo is uniform (count==1) instead
+        // of NeutralBSeed. Left in place; only seedSlot itself goes unread.
         if (NeutralBSeed == 0) {
             for (uint s = 1; s < count; s++) if (freq[s] > freq[seedSlot]) seedSlot = s;
         } else {
-            seedSlot = 8; // no valid slot index -- isSeed below never matches
+            seedSlot = 8; // no valid slot index
         }
     }
 
@@ -151,27 +176,49 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
     NodeCandidateLabel[node * 2u + 0u] = packed0;
     NodeCandidateLabel[node * 2u + 1u] = packed1;
 
-    // Non-seed slots are seeded with a NEGATIVE share of OwnLabelSeed (not
-    // plain zero-centered jitter) so the node's candidate sum starts near 0
-    // instead of near +OwnLabelSeed -- the regularizer (Term 3,
-    // smoothnessJacobiCS.hlsl) previously had to walk the whole gap down
-    // from scratch every Reinit. Split evenly across however many non-seed
-    // slots are actually valid (count-1); for the common 2-candidate case
-    // this makes the second slot start as the EXACT negation of the first
-    // (before jitter), matching Term 1/Term 2's already-exact antisymmetry
-    // between a 2-candidate node's slots -- see the two-label sum-to-zero
-    // discussion. Only applies where a seed slot actually exists: A-nodes
-    // always have one (slot 0); B-nodes only when NeutralBSeed=0 (majority-
-    // vote seed) -- NeutralBSeed=1's pure-jitter B-nodes have no seed to
-    // offset against, so they're left as zero-centered jitter, unchanged.
-    bool hasSeed = (Mode == 0) || (Mode == 1 && NeutralBSeed == 0);
-    float negShare = (hasSeed && count > 1) ? (-OwnLabelSeed / (float)(count - 1)) : 0.0;
-    for (uint s = 0; s < MAX_CANDIDATES; s++) {
-        float pot = 0.0;
-        if (s < count) {
-            bool isSeed = (Mode == 0 && s == 0) || (Mode == 1 && s == seedSlot);
-            pot = isSeed ? OwnLabelSeed : (negShare + DistanceJitter(node, s) * SeedJitter);
+    // Initial candidate potentials -- JFA-based distance-field seeding
+    // (NodeFootDist, from jfaInitCS/jfaStepCS/jfaFinalizeCS.hlsl earlier in
+    // RunTopologyBuild), replacing the old flat OwnLabelSeed/negShare-jitter
+    // scheme entirely:
+    //   A-nodes: this node's own footvector length (distance to the nearest
+    //     A-node with a DIFFERENT ground-truth label) seeds its own/input
+    //     label (slot 0) POSITIVE -- "this far inside my own region" -- and
+    //     every OTHER candidate (a label found nearby but not this node's
+    //     own) the same magnitude NEGATIVE, plus a small jitter to break
+    //     ties among multiple competing candidates. Matches the existing
+    //     own-positive/others-negative convention Term 3/the margin hinge
+    //     already assume, and naturally seeds everything near 0 right at a
+    //     boundary node (myDist==0 there), where no candidate should start
+    //     with an unearned advantage.
+    //   B-nodes: no ground truth, no OwnLabelSeed slot -- averaged instead,
+    //     over the SAME 1-cube-halo scan used to discover B's candidate
+    //     labels above (freq[]/sumDist[]). If that whole halo is uniformly
+    //     ONE label (count==1 -- this B-node sits deep inside a single
+    //     region, nowhere near a boundary), its one candidate seeds to the
+    //     AVERAGE of those neighboring A-nodes' own footvector lengths --
+    //     inheriting their "how deep inside" estimate directly, no jitter
+    //     needed (nothing to break a tie against). Otherwise (count>1,
+    //     genuinely near a boundary/junction, JFA has no single clean
+    //     distance answer for this halo) every candidate seeds to plain
+    //     zero-centered jitter -- deliberately no majority-vote/negShare
+    //     confidence bias here, unlike the old scheme.
+    if (Mode == 0) {
+        float myDist = NodeFootDist[node];
+        for (uint s = 0; s < MAX_CANDIDATES; s++) {
+            float pot = 0.0;
+            if (s < count) {
+                pot = (s == 0) ? myDist : (-myDist + DistanceJitter(node, s) * SeedJitter);
+            }
+            NodePotential[node * MAX_CANDIDATES + s] = pot;
         }
-        NodePotential[node * MAX_CANDIDATES + s] = pot;
+    } else {
+        bool isUniform = (count == 1);
+        for (uint s = 0; s < MAX_CANDIDATES; s++) {
+            float pot = 0.0;
+            if (s < count) {
+                pot = isUniform ? (sumDist[s] / (float)freq[s]) : (DistanceJitter(node, s) * SeedJitter);
+            }
+            NodePotential[node * MAX_CANDIDATES + s] = pot;
+        }
     }
 }

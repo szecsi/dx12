@@ -33,4 +33,16 @@
 // 32 leaves headroom without meaningfully growing the local array size.
 #define MAX_INCIDENT_TETS 32u
 
+// Capacity for GatherIncidentTets2 (DistanceLattice.hlsli): a node's own
+// incident tets (ring 1, <=MAX_INCIDENT_TETS) plus every tet FACE-ADJACENT
+// to a ring-1 tet (ring 2, via GetFaceAdjacentPartner) not already in ring
+// 1, each tet listed once. Since 3 of a ring-1 tet's 4 face-adjacent
+// partners already lie in ring 1 (they share the face containing `node`
+// itself), ring 2 contributes at most ~1 new tet per ring-1 tet -- so
+// ring1+ring2 lands around 2*MAX_INCIDENT_TETS in the worst case; 48 is a
+// practical cap, not a proven exact bound -- GatherIncidentTets2 stops
+// early (silently truncated) rather than overflowing if a config ever
+// exceeds it.
+#define MAX_INCIDENT_TETS2 48u
+
 #endif
