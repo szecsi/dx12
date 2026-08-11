@@ -149,11 +149,26 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
     for (uint s = 0; s < 6; s++) packed |= (labels[s] & 0x1Fu) << (s * 5u);
     NodeCandidateLabel[node] = packed;
 
+    // Non-seed slots are seeded with a NEGATIVE share of OwnLabelSeed (not
+    // plain zero-centered jitter) so the node's candidate sum starts near 0
+    // instead of near +OwnLabelSeed -- the regularizer (Term 3,
+    // smoothnessJacobiCS.hlsl) previously had to walk the whole gap down
+    // from scratch every Reinit. Split evenly across however many non-seed
+    // slots are actually valid (count-1); for the common 2-candidate case
+    // this makes the second slot start as the EXACT negation of the first
+    // (before jitter), matching Term 1/Term 2's already-exact antisymmetry
+    // between a 2-candidate node's slots -- see the two-label sum-to-zero
+    // discussion. Only applies where a seed slot actually exists: A-nodes
+    // always have one (slot 0); B-nodes only when NeutralBSeed=0 (majority-
+    // vote seed) -- NeutralBSeed=1's pure-jitter B-nodes have no seed to
+    // offset against, so they're left as zero-centered jitter, unchanged.
+    bool hasSeed = (Mode == 0) || (Mode == 1 && NeutralBSeed == 0);
+    float negShare = (hasSeed && count > 1) ? (-OwnLabelSeed / (float)(count - 1)) : 0.0;
     for (uint s = 0; s < 6; s++) {
         float pot = 0.0;
         if (s < count) {
             bool isSeed = (Mode == 0 && s == 0) || (Mode == 1 && s == seedSlot);
-            pot = isSeed ? OwnLabelSeed : (DistanceJitter(node, s) * SeedJitter);
+            pot = isSeed ? OwnLabelSeed : (negShare + DistanceJitter(node, s) * SeedJitter);
         }
         NodePotential[node * 6 + s] = pot;
     }

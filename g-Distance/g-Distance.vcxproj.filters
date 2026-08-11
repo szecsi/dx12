@@ -34,7 +34,7 @@
     <FxCompile Include="Shaders\buildCandidatesCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\assignInterfacePairsCS.hlsl">
+    <FxCompile Include="Shaders\snapshotWinnerCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\smoothnessJacobiCS.hlsl">

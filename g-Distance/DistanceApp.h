@@ -41,6 +41,14 @@ enum DistanceTestShape {
 	TestShape_DiagonalLine2D = 4,
 	TestShape_DiagonalLine3D = 5,
 	TestShape_Slab = 6,
+	// Single torus, exactly 2 labels (0=background, 1=torus) anywhere in the
+	// domain -- reuses the SAME analytic-SDF raymarch path as TestShape_Torus
+	// on the GPU (ShapeKind<=1), just with only 1 entry in torusCb.data.torii
+	// instead of 3. Added specifically to test smoothnessJacobiCS.hlsl's
+	// current two-label-only Term 1 simplification (the "other label is
+	// 1-Li" assumption) without any 3+-label ambiguity in the way -- made
+	// the default test shape for that reason.
+	TestShape_SingleTorus = 7,
 };
 
 // g-Distance: replaces g-Aequor's particle relaxation with a direct scalar
@@ -105,7 +113,7 @@ class DistanceApp : public Egg::SimpleApp {
 	int lastAppliedGridRes = 0, lastAppliedWindowCubeDim = 0;
 
 	uint RasterGroups = 0, BuildCandidatesAGroups = 0, BuildCandidatesBGroups = 0,
-		AssignPairsGroups = 0, ExtractSurfaceGroups = 0, SmoothnessGroups = 0, CommitGroups = 0;
+		ExtractSurfaceGroups = 0, SmoothnessGroups = 0, CommitGroups = 0;
 
 	float MaxMarchDist = 60.0f;
 	static constexpr int MaxMarchSteps = 256;
@@ -132,8 +140,13 @@ protected:
 	com_ptr<ID3D12Resource> nodeCandidateLabelBuffer;   // NodeCount uint, MAX_CANDIDATES(6) 5-bit labels packed per node (SENTINEL_CANDIDATE = unused slot)
 	com_ptr<ID3D12Resource> nodePotentialBuffer;        // NodeCount*MAX_CANDIDATES float, "current" (Jacobi read buffer)
 	com_ptr<ID3D12Resource> nodePotentialScratchBuffer; // NodeCount*MAX_CANDIDATES float, Jacobi write buffer
-	com_ptr<ID3D12Resource> tetInterfacePairBuffer;     // TetCount uint2: current active (labelI,labelJ) per tet
 	com_ptr<ID3D12Resource> surfaceVertexBuffer;        // TetCount*6 SurfaceVertex (pos+normal+labelI+labelJ), render-only
+	// Snapshot of each node's winning candidate label, taken once at the
+	// start of each outer round (snapshotWinnerCS.hlsl) -- Term 1's edge
+	// activity/pair determination reads this FROZEN value, not the live
+	// (every-sweep-changing) winner, matching the old TetInterfacePair
+	// scheme's "freeze combinatorics for one round" cadence.
+	com_ptr<ID3D12Resource> nodeFrozenWinnerBuffer;     // NodeCount uint
 
 	// -- volume floor (connecting nodes only, see smoothnessJacobiCS.hlsl) --
 	com_ptr<ID3D12Resource> nodeCurrentVolumeBuffer;    // NodeCount float: node's own winning-label reconstructed volume, written by smoothnessJacobiCS every sweep
@@ -141,7 +154,7 @@ protected:
 	Egg::Compute::ComputeShader rasterLabelCS;
 	Egg::Compute::ComputeShader computeConnectingNodesCS;
 	Egg::Compute::ComputeShader buildCandidatesCS;
-	Egg::Compute::ComputeShader assignInterfacePairsCS;
+	Egg::Compute::ComputeShader snapshotWinnerCS;
 	Egg::Compute::ComputeShader smoothnessJacobiCS;
 	Egg::Compute::ComputeShader commitPotentialCS;
 	Egg::Compute::ComputeShader extractSurfaceCS;
@@ -163,7 +176,7 @@ protected:
 
 	com_ptr<ID3D12DescriptorHeap> imguiSrvHeap;
 
-	int testShapeKind = TestShape_Torus;
+	int testShapeKind = TestShape_SingleTorus;
 	bool needsReinit = false;
 	bool needsContinue = false;
 	bool dataValid = false; // true once a Reinit/Continue has actually produced node data
@@ -217,6 +230,21 @@ protected:
 
 		torusCb.data.ShapeKind = (uint)testShapeKind;
 
+		if (testShapeKind == TestShape_SingleTorus) {
+			// Reuses the exact ShapeKind<=1 analytic-SDF raymarch path --
+			// the GPU doesn't care how many torii are in the list, so no
+			// new rasterLabelCS.hlsl branch is needed, just override the
+			// uploaded ShapeKind to the value that path actually checks for.
+			torusCb.data.ShapeKind = (uint)TestShape_Torus;
+			torusCb.data.nTorii = 1;
+			torusCb.data.torii[0].center      = center;
+			torusCb.data.torii[0].axis        = float3(0, 1, 0).Normalize();
+			torusCb.data.torii[0].majorRadius = 6.0f;
+			torusCb.data.torii[0].minorRadius = 2.5f;
+			torusCb.data.torii[0].label       = 1;
+			return;
+		}
+
 		if (testShapeKind == TestShape_Ellipsoid) {
 			torusCb.data.nTorii = 1;
 			torusCb.data.torii[0].center      = center;
@@ -248,12 +276,13 @@ protected:
 		// single-torus default exactly, torus 1/2 keep g-BCC's relative
 		// proportions rather than an exact rescale.
 		//
-		// Note (multi-label caveat, see mwd.tex's Discussion): the outer
-		// combinatorics loop (assignInterfacePairsCS.hlsl) only ever tracks
-		// the top-2 most frequent labels per grid face as a v1
-		// simplification -- at a genuine 3-label junction like torus 0/1's
-		// crossing, this may bias which 2 of the 3 locally-present labels
-		// get an active, smoothness-optimized interface at any given face.
+		// Note (multi-label caveat, see mwd.tex's Discussion): each tet's
+		// active pair is only ever its own top-2 most frequent corner
+		// labels (smoothnessJacobiCS.hlsl Term 1's per-edge derivation,
+		// extractSurfaceCS.hlsl's independent per-tet rendering pick) as a
+		// v1 simplification -- at a genuine 3-label junction like torus
+		// 0/1's crossing, no single pair can represent all 3 simultaneously
+		// present labels at once.
 		struct { float3 offset, axis; float major, minor; uint label; } list[] = {
 			{ float3(0, 0, 0),  float3(0, 1, 0), 6.0f, 2.5f, 1 },
 			{ float3(0, 0, 0),  float3(1, 0, 0), 4.5f, 2.0f, 2 },
@@ -392,15 +421,31 @@ protected:
 		// same physical center BuildShapeList() places test shapes at
 		// (i=j=k=GridRes/2 in real grid coordinates maps to
 		// q=(GridRes,GridRes,GridRes) via the bccToRhombo transform).
+		// Clamped into the valid cube-origin box [CubeOriginMin,
+		// CubeOriginMin+CubeBoundDim) -- the naive centerQ-centered offset
+		// alone is wrong specifically because that box is NOT symmetric
+		// around centerQ (CubeOriginMin=-1 pads only the low side, see
+		// DistanceLattice.hlsli's bounding-box comment). At the default
+		// GridRes=20 (WindowCubeDim clamped equal to CubeBoundDim, i.e. the
+		// window IS the whole domain), the unclamped formula placed the
+		// window at [0,40) instead of the valid [-1,39) -- silently
+		// skipping the one real layer at origin=-1 while spilling into the
+		// invalid origin=39, which CubeLinearIndex rejects, so
+		// GlobalTetIndexFromWindowLocal degenerates that whole end -- a
+		// permanent hole at exactly one end of every axis, present even
+		// at 0 iterations (unrelated to any solve/seeding issue).
 		int centerQ = (int)GridRes;
-		windowOriginCubeX = centerQ - (int)(WindowCubeDim / 2);
-		windowOriginCubeY = centerQ - (int)(WindowCubeDim / 2);
-		windowOriginCubeZ = centerQ - (int)(WindowCubeDim / 2);
+		int lo = CubeOriginMin;
+		int hi = CubeOriginMin + (int)CubeBoundDim - (int)WindowCubeDim;
+		int rawOrigin = centerQ - (int)(WindowCubeDim / 2);
+		int clampedOrigin = (rawOrigin < lo) ? lo : ((rawOrigin > hi) ? hi : rawOrigin);
+		windowOriginCubeX = clampedOrigin;
+		windowOriginCubeY = clampedOrigin;
+		windowOriginCubeZ = clampedOrigin;
 
 		RasterGroups = (GridRes + 3) / 4;
 		BuildCandidatesAGroups = (ACount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
 		BuildCandidatesBGroups = (BCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
-		AssignPairsGroups = (TotalCubeCandidates + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
 		ExtractSurfaceGroups = (WindowTetCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
 		SmoothnessGroups = (NodeCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
 		CommitGroups = (NodeCount * MAX_CANDIDATES + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
@@ -411,7 +456,7 @@ protected:
 			nodeCandidateLabelBuffer   = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeCandidateLabelBuffer");
 			nodePotentialBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialBuffer");
 			nodePotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialScratchBuffer");
-			tetInterfacePairBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)TetCount * sizeof(UINT) * 2, L"tetInterfacePairBuffer");
+			nodeFrozenWinnerBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeFrozenWinnerBuffer");
 			nodeCurrentVolumeBuffer    = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeCurrentVolumeBuffer");
 		}
 		if (gridChanged || windowChanged) {
@@ -483,30 +528,41 @@ protected:
 
 	}
 
-	// One outer Lloyd-loop round: fix combinatorics (assignInterfacePairsCS),
-	// then relax the resulting quadratic energy for jacobiSweepsPerRound
-	// Jacobi sweeps (smoothnessJacobiCS + commitPotentialCS), then repeat.
+	// One outer Lloyd-loop round: snapshot each node's current winning label
+	// (snapshotWinnerCS, into NodeFrozenWinner) once, then relax the
+	// smoothness/margin/regularizer/volume-floor energy for
+	// jacobiSweepsPerRound Jacobi sweeps (smoothnessJacobiCS +
+	// commitPotentialCS) against that FROZEN snapshot, then repeat. No
+	// per-cube combinatorics vote anymore -- smoothnessJacobiCS.hlsl derives
+	// each active label pair locally, per edge, from the two endpoints'
+	// frozen winners (see its header comment) -- assignInterfacePairsCS.hlsl
+	// /TetInterfacePair are gone entirely, which also means `iterations=0`
+	// now genuinely shows the raw, unsmoothed seed (no stale/uninitialized
+	// combinatorics buffer to read). NodeFrozenWinner still must be
+	// snapshotted once even at iterations=0's zero rounds? No -- with zero
+	// rounds this loop body (and thus the snapshot) never runs at all, which
+	// is correct: there's no smoothing pass to feed a frozen winner to.
 	void RunOneRound(com_ptr<ID3D12GraphicsCommandList>& cmd) {
-		cmd->SetComputeRootSignature(assignInterfacePairsCS.rootSig.Get());
-		cmd->SetPipelineState(assignInterfacePairsCS.pso.Get());
+		cmd->SetComputeRootSignature(snapshotWinnerCS.rootSig.Get());
+		cmd->SetPipelineState(snapshotWinnerCS.pso.Get());
 		cmd->SetComputeRootUnorderedAccessView(0, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(2, tetInterfacePairBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(2, nodeFrozenWinnerBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
-		cmd->Dispatch(AssignPairsGroups, 1, 1); // one thread per rhombohedral cube (TetCount/6 == TotalCubeCandidates), not per tet -- see assignInterfacePairsCS.hlsl
-		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(tetInterfacePairBuffer.Get()));
+		cmd->Dispatch(SmoothnessGroups, 1, 1); // NodeCount-based, same bound as smoothnessJacobiCS
+		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeFrozenWinnerBuffer.Get()));
 
 		int sweeps = jacobiSweepsPerRound > 0 ? jacobiSweepsPerRound : 1;
 		for (int s = 0; s < sweeps; s++) {
 			cmd->SetComputeRootSignature(smoothnessJacobiCS.rootSig.Get());
 			cmd->SetPipelineState(smoothnessJacobiCS.pso.Get());
 			cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(1, tetInterfacePairBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(3, nodePotentialBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(4, nodePotentialScratchBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(5, nodeCurrentVolumeBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(6, nodeIsConnectingBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(3, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(4, nodeCurrentVolumeBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(5, nodeIsConnectingBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(6, nodeFrozenWinnerBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootConstantBufferView(7, distanceGridCb.GetGPUVirtualAddress());
 			cmd->Dispatch(SmoothnessGroups, 1, 1);
 			{
@@ -539,11 +595,10 @@ protected:
 	void RunExtractSurface(com_ptr<ID3D12GraphicsCommandList>& cmd) {
 		cmd->SetComputeRootSignature(extractSurfaceCS.rootSig.Get());
 		cmd->SetPipelineState(extractSurfaceCS.pso.Get());
-		cmd->SetComputeRootUnorderedAccessView(0, tetInterfacePairBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootUnorderedAccessView(3, surfaceVertexBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(0, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(2, surfaceVertexBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
 		cmd->Dispatch(ExtractSurfaceGroups, 1, 1); // one thread per WINDOW tet slot (WindowTetCount), not the whole domain
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(surfaceVertexBuffer.Get()));
 	}
@@ -746,8 +801,8 @@ protected:
 	// CpuGlobalTetIndexFromWindowLocal) rather than the whole domain --
 	// nothing outside the rendered window is ever visible to click on, and
 	// at large GridRes the whole domain is far too big to brute-force scan
-	// interactively. Returns a GLOBAL tetIndex (needed to index
-	// tetInterfacePairBuffer, which is sized for the whole domain).
+	// interactively. Returns a GLOBAL tetIndex (needed by CpuGetTetCornerQs
+	// to recover the tet's 4 corner nodes for the Picked Tet panel).
 	// Skips slots with no real corner at all (a fully virtual/background
 	// tet, nothing meaningful to pick there).
 	uint FindEnclosingTet(const Egg::Math::float3& point) {
@@ -878,18 +933,19 @@ protected:
 		UploadPickedTetCb();
 	}
 
-	// Reads back the assigned interface pair, full 8-slot candidate/
-	// potential arrays, and the volume-floor fields (CurrentVolume,
-	// IsConnecting) for the picked tet's 4 corners, for the "Picked Tet"
-	// GUI panel -- lets you directly inspect the actual solved numbers at a
-	// specific wedge inset/outcrop instead of guessing from the picture.
+	// Reads back the full 6-slot candidate/potential arrays and the volume-
+	// floor fields (CurrentVolume, IsConnecting) for the picked tet's 4
+	// corners, for the "Picked Tet" GUI panel -- lets you directly inspect
+	// the actual solved numbers at a specific wedge inset/outcrop instead of
+	// guessing from the picture. No TetInterfacePair buffer anymore --
+	// pickedInterfaceLabelI/J are derived the same way extractSurfaceCS.hlsl
+	// now derives a tet's dominant pair: frequency-vote over the 4 corners'
+	// own top (argmax) candidate, independently, right here on the CPU.
 	void ReadBackPickedTetDiagnostics() {
-		UINT64 pairBytes = (UINT64)TetCount * sizeof(UINT) * 2;
 		UINT64 candBytes = (UINT64)NodeCount * sizeof(UINT);
 		UINT64 potBytes = (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float);
 		UINT64 nodeFloatBytes = (UINT64)NodeCount * sizeof(float);
 		UINT64 connectingBytes = (UINT64)ACount * sizeof(UINT);
-		com_ptr<ID3D12Resource> rbPair = CreateReadbackBuffer(device.Get(), pairBytes);
 		com_ptr<ID3D12Resource> rbCand = CreateReadbackBuffer(device.Get(), candBytes);
 		com_ptr<ID3D12Resource> rbPot = CreateReadbackBuffer(device.Get(), potBytes);
 		com_ptr<ID3D12Resource> rbCurVol = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
@@ -898,7 +954,6 @@ protected:
 		DX_API("reset upload allocator (pick diag)") uploadAllocator->Reset();
 		DX_API("reset upload command list (pick diag)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
 		auto& cmd = uploadCommandList;
-		cmd->CopyBufferRegion(rbPair.Get(), 0, tetInterfacePairBuffer.Get(), 0, pairBytes);
 		cmd->CopyBufferRegion(rbCand.Get(), 0, nodeCandidateLabelBuffer.Get(), 0, candBytes);
 		cmd->CopyBufferRegion(rbPot.Get(), 0, nodePotentialBuffer.Get(), 0, potBytes);
 		cmd->CopyBufferRegion(rbCurVol.Get(), 0, nodeCurrentVolumeBuffer.Get(), 0, nodeFloatBytes);
@@ -911,19 +966,15 @@ protected:
 		uploadFence.signal(commandQueue, ++uploadFenceValue);
 		uploadFence.cpuWait();
 
-		UINT* pair = nullptr;
 		UINT* cand = nullptr;
 		float* pot = nullptr;
 		float* curVol = nullptr;
 		UINT* connecting = nullptr;
-		rbPair->Map(0, nullptr, (void**)&pair);
 		rbCand->Map(0, nullptr, (void**)&cand);
 		rbPot->Map(0, nullptr, (void**)&pot);
 		rbCurVol->Map(0, nullptr, (void**)&curVol);
 		rbConnecting->Map(0, nullptr, (void**)&connecting);
 
-		pickedInterfaceLabelI = pair[pickedTetIndex * 2 + 0];
-		pickedInterfaceLabelJ = pair[pickedTetIndex * 2 + 1];
 		for (uint c = 0; c < 4; c++) {
 			uint node = pickedTetNodes[c];
 			if (node == 0xFFFFFFFFu) {
@@ -948,9 +999,45 @@ protected:
 			pickedCornerCurrentVolume[c] = curVol[node];
 			pickedCornerIsConnecting[c] = (node < ACount) ? connecting[node] : 0;
 		}
+
+		// Independent per-tet dominant pair -- same frequency-vote rule as
+		// extractSurfaceCS.hlsl, over this tet's own 4 corners' top label.
+		{
+			uint cornerTop[4];
+			for (uint c = 0; c < 4; c++) {
+				uint bestLabel = SENTINEL_CANDIDATE; float bestPot = -1.0e30f;
+				for (uint s = 0; s < MAX_CANDIDATES; s++) {
+					uint l = pickedCornerLabels[c][s];
+					if (l == SENTINEL_CANDIDATE) continue;
+					float p = pickedCornerPots[c][s];
+					if (p > bestPot) { bestPot = p; bestLabel = l; }
+				}
+				cornerTop[c] = bestLabel;
+			}
+			uint uniqueLabels[4] = { SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE };
+			int freq[4] = { 0, 0, 0, 0 };
+			uint nUnique = 0;
+			for (uint c = 0; c < 4; c++) {
+				uint l = cornerTop[c];
+				bool found = false;
+				for (uint u = 0; u < nUnique; u++) if (uniqueLabels[u] == l) { freq[u]++; found = true; break; }
+				if (!found) { uniqueLabels[nUnique] = l; freq[nUnique] = 1; nUnique++; }
+			}
+			for (uint p = 0; p < 4; p++) {
+				for (uint s = 0; s < 3; s++) {
+					bool doSwap = (freq[s] < freq[s + 1]) || (freq[s] == freq[s + 1] && uniqueLabels[s] > uniqueLabels[s + 1]);
+					if (doSwap) {
+						int tf = freq[s]; freq[s] = freq[s + 1]; freq[s + 1] = tf;
+						uint tl = uniqueLabels[s]; uniqueLabels[s] = uniqueLabels[s + 1]; uniqueLabels[s + 1] = tl;
+					}
+				}
+			}
+			pickedInterfaceLabelI = uniqueLabels[0];
+			pickedInterfaceLabelJ = (freq[1] > 0) ? uniqueLabels[1] : pickedInterfaceLabelI;
+			if (pickedInterfaceLabelJ < pickedInterfaceLabelI) { uint tmp = pickedInterfaceLabelI; pickedInterfaceLabelI = pickedInterfaceLabelJ; pickedInterfaceLabelJ = tmp; }
+		}
 		pickedDiagnosticsValid = true;
 
-		rbPair->Unmap(0, nullptr);
 		rbCand->Unmap(0, nullptr);
 		rbPot->Unmap(0, nullptr);
 		rbCurVol->Unmap(0, nullptr);
@@ -965,20 +1052,23 @@ protected:
 		ImGui::SetNextWindowSize(ImVec2(280, 0), ImGuiCond_FirstUseEver);
 		ImGui::Begin("g-Distance Controls");
 		static const char* testShapeItems[] = {
-			"3 Tori (multi-label)", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D", "Slab"
+			"3 Tori (multi-label)", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D", "Slab", "Single Torus (2-label)"
 		};
 		ImGui::Combo("Test Shape", &testShapeKind, testShapeItems, IM_ARRAYSIZE(testShapeItems));
 		ImGui::SliderInt("Grid Resolution", &gridResSetting, 4, 256, "%d", ImGuiSliderFlags_Logarithmic);
 		ImGui::SliderInt("Render Window Size", &windowCubeDimSetting, 8, 48);
 		ImGui::TextDisabled("(real grid units, GridRes-independent -- only this much of the domain, centered, is ever extracted/rendered)");
 		{
-			// ~0.50 KB * GridRes^3 for the per-node arrays + tetInterfacePairBuffer
-			// (both scale with the whole solved domain, not just the render
-			// window -- see the approved plan's memory-scaling discussion).
-			// Recomputed for the packed candidate-label buffer (nodeCandidateLabelBuffer:
-			// 1 packed uint/node instead of MAX_CANDIDATES separate uints;
-			// nodePotential(Scratch): MAX_CANDIDATES(6, was 8) floats/node) --
-			// was ~590 before packing.
+			// ~0.125 KB * GridRes^3 for the per-node arrays (scale with the
+			// whole solved domain, not just the render window -- see the
+			// approved plan's memory-scaling discussion). tetInterfacePairBuffer
+			// is gone entirely (assignInterfacePairsCS.hlsl removed along with
+			// the cube-vote combinatorics -- see the edge-centric design
+			// discussion), which is why this dropped from ~504 to ~128: that
+			// buffer alone was 384 of the old 504 KB/GridRes^3 (the remaining
+			// +8 vs. an earlier ~120 estimate is nodeFrozenWinnerBuffer, added
+			// to restore the old "freeze combinatorics for one round" cadence
+			// -- see snapshotWinnerCS.hlsl).
 			// surfaceVertexBuffer's actual q-space dispatch size is
 			// 2*windowCubeDimSetting+8 (clamped to the domain's own bounding
 			// box) -- see EnsureGridBuffersSized's comment on why a q-space
@@ -988,7 +1078,7 @@ protected:
 			double cubeBoundDimEst = 2.0 * gr;
 			double qDispatch = 2.0 * (double)windowCubeDimSetting + 8.0;
 			if (qDispatch > cubeBoundDimEst) qDispatch = cubeBoundDimEst;
-			double solveBytes = 504.0 * gr * gr * gr;
+			double solveBytes = 128.0 * gr * gr * gr;
 			double windowBytes = qDispatch * qDispatch * qDispatch * 6.0 * 192.0;
 			double totalMB = (solveBytes + windowBytes) / (1024.0 * 1024.0);
 			ImGui::TextDisabled("Estimated buffer memory at these settings: ~%.1f MB", totalMB);
@@ -1164,16 +1254,16 @@ public:
 			device->CreateDescriptorHeap(&imguiHeapDesc, IID_PPV_ARGS(imguiSrvHeap.GetAddressOf()));
 
 		// rasterLabelBuffer/nodeIsConnectingBuffer/nodeCandidateLabelBuffer/
-		// nodePotentialBuffer(+scratch)/tetInterfacePairBuffer/
-		// surfaceVertexBuffer/nodeCurrentVolumeBuffer are all sized by the
-		// runtime grid resolution -- created (and resized on later grid-
-		// resolution changes) by EnsureGridBuffersSized(), called from the
-		// first RunReinit() rather than here.
+		// nodePotentialBuffer(+scratch)/surfaceVertexBuffer/
+		// nodeCurrentVolumeBuffer are all sized by the runtime grid
+		// resolution -- created (and resized on later grid-resolution
+		// changes) by EnsureGridBuffersSized(), called from the first
+		// RunReinit() rather than here.
 
 		rasterLabelCS.createResources(device, "Shaders/rasterLabelCS.cso");
 		computeConnectingNodesCS.createResources(device, "Shaders/computeConnectingNodesCS.cso");
 		buildCandidatesCS.createResources(device, "Shaders/buildCandidatesCS.cso");
-		assignInterfacePairsCS.createResources(device, "Shaders/assignInterfacePairsCS.cso");
+		snapshotWinnerCS.createResources(device, "Shaders/snapshotWinnerCS.cso");
 		smoothnessJacobiCS.createResources(device, "Shaders/smoothnessJacobiCS.cso");
 		commitPotentialCS.createResources(device, "Shaders/commitPotentialCS.cso");
 		extractSurfaceCS.createResources(device, "Shaders/extractSurfaceCS.cso");
@@ -1505,7 +1595,7 @@ public:
 		nodeCandidateLabelBuffer.Reset();
 		nodePotentialBuffer.Reset();
 		nodePotentialScratchBuffer.Reset();
-		tetInterfacePairBuffer.Reset();
+		nodeFrozenWinnerBuffer.Reset();
 		surfaceVertexBuffer.Reset();
 		nodeCurrentVolumeBuffer.Reset();
 		imguiSrvHeap.Reset();
