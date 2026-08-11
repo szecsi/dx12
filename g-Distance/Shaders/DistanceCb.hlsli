@@ -52,7 +52,10 @@ DistanceCb
     float VolumeWeight;  // term 4 weight: how hard to push a connecting node's volume back up when it dips below VolumeFloor
     float VolumeFloor;   // the floor itself, in tet-volume units (default 1 -- see the isolated-point geometric derivation in project memory)
     float _pad2a;
-    float _pad2b;
+    // Term 1 pair-listing method, GUI checkbox: 1 = edge-walking (GatherEdgeTets
+    // over this node's 14 neighbor edges), 0 = check all node-adjacent tets
+    // (GatherIncidentTets + GetFaceAdjacentPartner) -- see smoothnessJacobiCS.hlsl.
+    uint UseEdgeWalkTraversal;
 }
 #ifndef __HLSL_VERSION
 ;

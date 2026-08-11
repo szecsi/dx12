@@ -2,8 +2,8 @@
 #define DISTANCE_GRID_CB_REGISTER b2
 #include "DistanceLattice.hlsli"
 
-// Per-node candidate label arrays (<=MAX_CANDIDATES(6) slots, packed 5 bits
-// each into a single uint -- see DistanceConfig.hlsli's SENTINEL_CANDIDATE
+// Per-node candidate label arrays (<=MAX_CANDIDATES(8) slots, packed 8 bits
+// each into two uints -- see DistanceConfig.hlsli's SENTINEL_CANDIDATE
 // comment) + initial raw potentials.
 //   B-node candidates = the distinct input labels among its own cube's 8
 //     A-corners AND its 6 face-neighbor cubes' corners (a 1-cube halo, not
@@ -21,7 +21,7 @@
 //     a corner whose 3 real-2-candidate neighbors all sat around 0.19-0.27).
 //   A-node candidates = its own input label (always slot 0, never evicted)
 //     union the distinct labels found among its same-sublattice 26-neighbor
-//     A-nodes, capped at 6 -- needed so a neighboring tet's interface
+//     A-nodes, capped at 8 -- needed so a neighboring tet's interface
 //     computation always has *some* potential value for a competing label at
 //     this A-node's corner, even though its own winner is fixed.
 // Dispatched twice (Mode root constant): once over ACount threads, once over
@@ -48,9 +48,9 @@ RWStructuredBuffer<float> NodePotential : register(u2);
 [numthreads(THREAD_GROUP_SIZE, 1, 1)]
 void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
 {
-    uint labels[6] = {
-        SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE,
-        SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE
+    uint labels[8] = {
+        SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE,
+        SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE
     };
     uint count = 0;
     uint node;
@@ -69,7 +69,7 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
         labels[0] = ownLabel;
         count = 1;
 
-        for (uint n = 0; n < 26 && count < 6; n++) {
+        for (uint n = 0; n < 26 && count < 8; n++) {
             int3 nb = int3((int)i, (int)j, (int)k) + SameLatticeOffsets[n];
             if (any(nb < 0) || any(nb >= (int)GridRes)) continue;
             uint nLabel = RasterLabel[AIdx((uint)nb.x, (uint)nb.y, (uint)nb.z)];
@@ -93,7 +93,7 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
         // plus some edge/corner-adjacent cubes for free -- harmless, capped
         // at 8 slots and nowhere near that cap with only a couple of labels
         // actually present in the scene.
-        uint freq[6] = { 0, 0, 0, 0, 0, 0 };
+        uint freq[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
         for (int dz = -1; dz <= 2; dz++) {
             for (int dy = -1; dy <= 2; dy++) {
                 for (int dx = -1; dx <= 2; dx++) {
@@ -102,7 +102,7 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
                     uint aLabel = RasterLabel[(uint)ai + (uint)aj * GridRes + (uint)ak * GridRes * GridRes];
                     bool found = false;
                     for (uint s = 0; s < count; s++) if (labels[s] == aLabel) { freq[s]++; found = true; break; }
-                    if (!found && count < 6) { labels[count] = aLabel; freq[count] = 1; count++; }
+                    if (!found && count < 8) { labels[count] = aLabel; freq[count] = 1; count++; }
                 }
             }
         }
@@ -137,17 +137,19 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
         if (NeutralBSeed == 0) {
             for (uint s = 1; s < count; s++) if (freq[s] > freq[seedSlot]) seedSlot = s;
         } else {
-            seedSlot = 6; // no valid slot index -- isSeed below never matches
+            seedSlot = 8; // no valid slot index -- isSeed below never matches
         }
     }
 
-    // Pack all 6 labels (5 bits each) into a single uint -- see
+    // Pack all 8 labels (8 bits each, 4 per word) into two uints -- see
     // SENTINEL_CANDIDATE/GetCandidateLabelAt. Safe as a non-atomic
     // read-modify-write-free write: this thread owns this node's whole
-    // candidate word exclusively, written here once and never again.
-    uint packed = 0;
-    for (uint s = 0; s < 6; s++) packed |= (labels[s] & 0x1Fu) << (s * 5u);
-    NodeCandidateLabel[node] = packed;
+    // candidate words exclusively, written here once and never again.
+    uint packed0 = 0, packed1 = 0;
+    for (uint s = 0; s < 4; s++) packed0 |= (labels[s] & 0xFFu) << (s * 8u);
+    for (uint s = 4; s < 8; s++) packed1 |= (labels[s] & 0xFFu) << ((s - 4) * 8u);
+    NodeCandidateLabel[node * 2u + 0u] = packed0;
+    NodeCandidateLabel[node * 2u + 1u] = packed1;
 
     // Non-seed slots are seeded with a NEGATIVE share of OwnLabelSeed (not
     // plain zero-centered jitter) so the node's candidate sum starts near 0
@@ -164,12 +166,12 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
     // offset against, so they're left as zero-centered jitter, unchanged.
     bool hasSeed = (Mode == 0) || (Mode == 1 && NeutralBSeed == 0);
     float negShare = (hasSeed && count > 1) ? (-OwnLabelSeed / (float)(count - 1)) : 0.0;
-    for (uint s = 0; s < 6; s++) {
+    for (uint s = 0; s < MAX_CANDIDATES; s++) {
         float pot = 0.0;
         if (s < count) {
             bool isSeed = (Mode == 0 && s == 0) || (Mode == 1 && s == seedSlot);
             pot = isSeed ? OwnLabelSeed : (negShare + DistanceJitter(node, s) * SeedJitter);
         }
-        NodePotential[node * 6 + s] = pot;
+        NodePotential[node * MAX_CANDIDATES + s] = pot;
     }
 }

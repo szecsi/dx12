@@ -11,27 +11,45 @@
 // read-stable/write-scratch/commit split as every other relaxation in this
 // codebase).
 //
-// Term 1 (smoothness) is SIMPLIFIED FOR TESTING, hardcoded to GridRes==20:
-// no active-label bookkeeping, no per-node exclusions, no runtime
-// face-adjacency verification -- just the two fixed fields (label 0,
-// label 1) smoothed everywhere in the domain, unconditionally, via a
-// static tet-index partner table (PartnerOffset, below) valid only at
-// CubeBoundDim=40. This deliberately strips out everything the
-// edge-centric redesign (and the several rounds of guards/fixes layered on
-// top of it) added, to re-verify the CORE gradient-mismatch math in
-// isolation before re-introducing any of that complexity. `NodeFrozenWinner`
-// /snapshotWinnerCS.hlsl are consequently UNUSED by Term 1 now (nothing
-// here reads a node's own winning label at all) -- left wired up
-// (buffer/root-sig slot still present) rather than ripped out, since nothing
-// else currently depends on removing them.
+// Term 1 (smoothness) lists face-adjacent tet pairs one of TWO ways, picked
+// by a GUI checkbox (UseEdgeWalkTraversal, DistanceCb.hlsli) -- both feed
+// the same AccumulateEdgePair per pair found, just discover pairs
+// differently:
+//   EDGE-WALKING (UseEdgeWalkTraversal!=0): for each of a node's up to 14
+//     actual geometric neighbors (GatherEdgeTets's NodeNeighborOffsets,
+//     DistanceLattice.hlsli), GatherEdgeTets finds the (up to 6) tets
+//     actually containing that edge, and every genuinely FACE-ADJACENT pair
+//     within that set (sharing 3 of 4 corners, verified directly) gets the
+//     gradient-mismatch penalty.
+//   NODE-ADJACENT-TETS (UseEdgeWalkTraversal==0): walk this node's own
+//     ~24 incident tets (GatherIncidentTets) directly and check every PAIR
+//     of them for the same 3-vertex coincidence -- no edges involved at
+//     all. See that block's own comment for how this differs from
+//     edge-walking (misses the 2 "outlier" corners edge-walking also
+//     misses, for the same underlying reason).
+// assignInterfacePairsCS.hlsl/TetInterfacePair (the old cube-vote scheme)
+// are gone entirely either way.
 //
-// The traversal itself is back to the ORIGINAL (pre-edge-centric) shape:
-// per node, walk its own incident tets (GatherIncidentTets, unchanged,
-// still fully general/GridRes-agnostic), and for each one look up its 4
-// face-adjacent partners via the static table -- with the same tetX<P /
-// "not already in my incident list" dedup the original AccumulatePair
-// used, so each face-adjacent pair is counted exactly once, no correction
-// weight needed.
+// This is the fix for the old design's core failure mode: a cube-level
+// vote could make two face-adjacent tets from DIFFERENT cubes disagree on
+// which pair was "active", silently dropping the smoothness constraint
+// between them.
+//
+// Li is this node's own LIVE winner (myLabel, recomputed every sweep from
+// the current NodePotential snapshot) -- the once-per-round FROZEN snapshot
+// (NodeFrozenWinner, snapshotWinnerCS.hlsl) has been removed from Term 1.
+// NodeFrozenWinner/snapshotWinnerCS.hlsl are consequently UNUSED again
+// (buffer/root-sig slot/dispatch left wired up, not ripped out, same as
+// every other "leave dead infrastructure in place" call this project has
+// made) -- nothing here reads a frozen label anymore.
+//
+// There is no bail-out on the neighbor's own label anymore -- see the Term 1
+// body's own comment for why (in short: the old scheme never actually
+// gated on a tet's own corners agreeing either). Lj is read live, not
+// hardcoded: for the edge-walking traversal it's the edge's other
+// endpoint's own current winner; for the alternate node-adjacent-tets
+// traversal (GUI checkbox, UseEdgeWalkTraversal) it's this node's own
+// runner-up candidate. Works for any number of labels, not just 2.
 //
 // Term 4 (volume floor) took the OTHER approach on purpose (per design
 // discussion): a per-node SYNTHETIC field F(corner) = +winnerPotential if
@@ -43,28 +61,9 @@
 // for phi_li-phi_lj; the "positive" (F>=0) side is this node's own approximate
 // volume share.
 //
-// SINGLE-POTENTIAL SCHEME (2-label testing only): rather than tracking
-// phi(label0) and phi(label1) as two independently-relaxed unknowns kept
-// near-mirrored by a SOFT sum-to-0 spring (the old Term 3), phi(label0) is
-// now HARD-DEFINED as -phi(label1) every sweep -- one real degree of
-// freedom per node, not two. Term 1 and Term 4 below are left completely
-// UNCHANGED: they still independently write gradient/diagonal into
-// whichever slot holds label0 and whichever holds label1 (cheap, and nice
-// existing antisymmetry: Term 1's dK contributes +w to one slot and -w to
-// the other by construction, same shape for Term 4's ownSlot/otherSlot
-// pushback). What changed is how that dual output gets CONSUMED: the
-// final-write block below folds both slots' (grad,diag) into a single
-// combined (gradPhi,diagPhi) via the chain rule (phi1=phi, phi0=-phi =>
-// dE/dphi = dE/dphi1 - dE/dphi0, d2E/dphi2 = d2E/dphi1^2 + d2E/dphi0^2,
-// cross terms ignored same as every other diagonal-Jacobi term here), takes
-// ONE Newton step, and mirrors the result into both slots -- exactly, not
-// approximately. Term 3 (the old soft regularizer) is consequently
-// redundant and commented out below, not deleted. Term 2 (margin hinge) WAS
-// rewritten: instead of comparing an A-node's own slot against a runner-up
-// slot, it pushes phi (the label-1 slot's value) past +MarginTarget/2 if
-// this node's ground-truth label is 1, or past -MarginTarget/2 if it's 0 --
-// an exact re-derivation of the old two-slot margin under phiOther=-phi0
-// (old: phi0-phiOther>=MarginTarget => 2*phi0>=MarginTarget).
+// Term 2 (margin hinge) and Term 3 (regularizer) are unchanged -- both
+// operate purely on this node's own candidate slots, never needed the
+// combinatorics vote at all.
 #define SmoothnessSig "RootFlags(0)," \
     "CBV(b0)," \
     "UAV(u0)," \
@@ -84,15 +83,18 @@ RWStructuredBuffer<float>  NodeCurrentVolume : register(u3);
 // ACount-sized (computeConnectingNodesCS.hlsl) -- only ever index with
 // node<ACount.
 RWStructuredBuffer<uint>   NodeIsConnecting : register(u4);
-// Read-only here -- written once per outer round by snapshotWinnerCS.hlsl,
-// see Term 1's header comment above.
+// Written once per outer round by snapshotWinnerCS.hlsl -- UNUSED here now,
+// see Term 1's header comment above (frozen winner removed, back to live).
 RWStructuredBuffer<uint>   NodeFrozenWinner : register(u5);
 
-// Finds the CURRENT (always-real, dispatched) node's own slot for a label
-// -- distinct from DistanceLattice.hlsli's GetCornerPotential/
-// GetCornerTopLabel, which resolve an arbitrary (possibly virtual) OTHER
-// tet corner; this is specifically "where does MY OWN candidate array
-// carry this label", needed for writing into grad[]/diag[] by slot index.
+// Finds a REAL node's own slot for a label (works for any real node index,
+// not just the dispatched thread's own -- it's a plain NodeCandidateLabel
+// lookup) -- distinct from DistanceLattice.hlsli's GetCornerPotential/
+// GetCornerTopLabel, which also handle an arbitrary (possibly virtual)
+// corner; this is specifically "where does THIS node's own candidate array
+// carry this label", needed both for writing into grad[]/diag[] by slot
+// index (always called with the dispatched thread's own node for that) and
+// for CornerTracksLabel below (called with an arbitrary tet corner).
 int FindSlot(uint node, uint label)
 {
     if (label == SENTINEL_LABEL) return -1;
@@ -101,52 +103,99 @@ int FindSlot(uint node, uint label)
     return -1;
 }
 
+// Whether a tet CORNER (real node ref or virtual/SENTINEL_LABEL) genuinely
+// tracks `label` as a real candidate, real potential value -- not the
+// GetCornerPotential/TetFieldGrad missing-candidate 0.0 fallback. A virtual
+// corner tracks only label 0 (the fixed background convention), nothing
+// else.
+bool CornerTracksLabel(uint cornerRef, uint label)
+{
+    if (cornerRef == SENTINEL_LABEL) return label == 0u;
+    return FindSlot(cornerRef, label) >= 0;
+}
+
 float3 TetFieldGrad(uint refs[4], float3 w[4], uint label)
 {
     if (label == SENTINEL_LABEL) return float3(0, 0, 0);
     float3 g = float3(0, 0, 0);
     for (uint c = 0; c < 4; c++) {
-        g += GetCornerPotential(refs[c], label, NodeCandidateLabel, NodePotential, 0.0) * w[c];
+        g += GetCornerPotential(refs[c], label, NodeCandidateLabel, NodePotential, -1.0) * w[c];
     }
     return g;
 }
 
-// SIMPLIFIED-FOR-TESTING static partner table: for tet slot s (0-5), the 4
-// FLAT TET-INDEX offsets (not spatial offsets) to its face-adjacent
-// partners -- {fanNext, fanPrev, D0-cap, D1-cap} -- hardcoded for
-// GridRes==20 specifically (CubeBoundDim=40). This is possible ONLY
-// because CubeBoundDim is now assumed fixed: cubeLinearIndex's own strides
-// are (X:1, Y:CubeBoundDim, Z:CubeBoundDim^2) tet-slots, i.e. (X:6,
-// Y:240, Z:9600) flat tet-index units at CubeBoundDim=40 -- NOT
-// compile-time constants in general (see the design discussion on why a
-// node's Q doesn't reduce to a single static tet-index table for any
-// GridRes). Derived from the exact same spatial D0CapOffset/
-// D0CapTargetSlot/D1CapOffset/D1CapTargetSlot tables used before their
-// removal, converted via those fixed strides -- cross-checked here by
-// confirming D0-cap[s] and D1-cap[D0CapTargetSlot[s]] are exact negations
-// of each other (the same round-trip consistency check that caught the
-// original edgeMap's bug, still holds). NOT VALID at any other GridRes --
-// would need recomputing, or reverting to GatherEdgeTets's general
-// CubeLinearIndex-based approach, if GridRes changes again.
-static const int PartnerOffset[6][4] = {
-    // fanNext, fanPrev,  D0-cap, D1-cap
-    {       1,       5,    -238,    10 }, // slot 0
-    {       1,      -1,   -9596,     8 }, // slot 1
-    {       1,      -1,   -9598,   238 }, // slot 2
-    {       1,      -1,      -8,   242 }, // slot 3
-    {       1,      -1,     -10,  9598 }, // slot 4
-    {      -5,      -1,    -242,  9596 }, // slot 5
-};
+// UNUSED (kept, not deleted): Term 1's node-adjacent-tets traversal now uses
+// a brute all-pairs scan over GatherIncidentTets instead of this table-based
+// lookup, so nothing calls GetFaceAdjacentPartner below anymore. Left in
+// place in case a future traversal wants direct partner lookup again rather
+// than an O(n^2) scan.
+//
+// Spatial (GridRes-agnostic) cap tables for a tet slot's two OUT-OF-CUBE
+// face-adjacent partners -- D0-cap and D1-cap cross into a NEIGHBORING
+// cube's tet; fanNext/fanPrev ((slot+1)%6 / (slot+5)%6) stay within the SAME
+// cube, no table needed. Cube-ORIGIN offsets + a target slot, not flat
+// tet-index offsets -- unlike the flat PartnerOffset table this project
+// briefly used (removed once GridRes became a runtime GUI value: flat
+// tet-index strides depend on CubeBoundDim, these spatial offsets don't).
+// Re-derived from GetTetCornerQs' own per-slot corner assignment, verified
+// via a standalone reciprocity check (D0-cap[s] and D1-cap[D0CapTargetSlot[s]]
+// are exact negations of each other).
+static const int3 D0CapOffset[6] = { { 0, -1, 0 }, { 0, 0, -1 }, { 0, 0, -1 }, { -1, 0, 0 }, { -1, 0, 0 }, { 0, -1, 0 } };
+static const uint D0CapTargetSlot[6] = { 2, 5, 4, 1, 0, 3 };
+static const int3 D1CapOffset[6] = { { 1, 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0, 0, 1 } };
+static const uint D1CapTargetSlot[6] = { 4, 3, 0, 5, 2, 1 };
+
+// The 4 face-adjacent partners of tet `tetX`: relation 0=fanNext,
+// 1=fanPrev (same cube), 2=D0cap, 3=D1cap (neighboring cube, via the tables
+// above). Returns false if the partner cube falls outside the current
+// grid's bounding box (edge of the domain), same convention CubeLinearIndex
+// itself uses. UNUSED -- see the comment above.
+bool GetFaceAdjacentPartner(uint tetX, uint relation, out uint P)
+{
+    P = 0u;
+    uint cubeLin = tetX / 6u, slot = tetX % 6u;
+    if (relation == 0u) { P = cubeLin * 6u + (slot + 1u) % 6u; return true; }
+    if (relation == 1u) { P = cubeLin * 6u + (slot + 5u) % 6u; return true; }
+    int3 C = CubeOriginFromLinear(cubeLin);
+    uint lin;
+    if (relation == 2u) {
+        if (!CubeLinearIndex(C + D0CapOffset[slot], lin)) return false;
+        P = lin * 6u + D0CapTargetSlot[slot];
+        return true;
+    }
+    if (!CubeLinearIndex(C + D1CapOffset[slot], lin)) return false;
+    P = lin * 6u + D1CapTargetSlot[slot];
+    return true;
+}
 
 // Accumulates node's gradient/diagonal contribution from the smoothness
-// term of exactly one face-adjacent tet-pair (tetA,tetB), for the fixed
-// (li,lj) pair -- called once per pair (dedup via the caller's tetX<P /
-// "not already in my own incident list" check, same as the original
-// pre-edge-centric AccumulatePair). node is guaranteed to be a corner of
-// both tetA and tetB (both are drawn from this node's own incident-tet
-// list).
-void AccumulateEdgePair(uint node, uint tetA, uint tetB, uint li, uint lj, inout float grad[6], inout float diag[6])
+// term of exactly one face-adjacent tet-pair (tetA,tetB), for the (li,lj)
+// pair the caller determined. Two callers, two guarantees: the edge-walking
+// traversal's GatherEdgeTets only ever returns tets containing both of an
+// edge's endpoints (one of which is this node), so node is guaranteed a
+// corner of BOTH tetA and tetB there; the node-adjacent-tets traversal only
+// guarantees node is a corner of whichever side came from its own
+// GatherIncidentTets list (the other side's cA/cB below just resolves to
+// -1, deltaW 0 -- a smaller, still-correct contribution, not an error).
+//
+// pairWeight corrects for a real double-counting bug in the outer edge
+// loop: a face-adjacent pair (tetA,tetB) shares exactly 3 corners with
+// node -- node itself, plus the two OTHER vertices Y,Z of the shared face
+// {node,Y,Z} -- so this exact pair gets rediscovered once from the Y-edge
+// iteration AND once from the Z-edge iteration whenever BOTH are active
+// (proven combinatorially: the two tets' only common vertices are
+// {node,Y,Z}, so those are the only 2 of node's edges that can ever find
+// both tets at once). The caller determines, per pair, whether the OTHER
+// discovering edge is also active and passes 0.5 in that case (so the two
+// discoveries sum to exactly 1x) or 1.0 if this is the pair's only
+// discovery -- NOT a flat weight, since near a thin/curved label boundary
+// the 2x-vs-1x split correlates with local label majority, which is
+// exactly what was producing the asymmetric erosion toward whichever label
+// has more locally-active edges.
+void AccumulateEdgePair(uint node, uint tetA, uint tetB, uint li, uint lj, float pairWeight, inout float grad[8], inout float diag[8])
 {
+    //if(li == lj) return;
+            
     int3 qA0, qA1, qA2, qA3; GetTetCornerQs(tetA, qA0, qA1, qA2, qA3);
     int3 qB0, qB1, qB2, qB3; GetTetCornerQs(tetB, qB0, qB1, qB2, qB3);
     uint refA[4] = { ResolveCorner(qA0), ResolveCorner(qA1), ResolveCorner(qA2), ResolveCorner(qA3) };
@@ -173,7 +222,7 @@ void AccumulateEdgePair(uint node, uint tetA, uint tetB, uint li, uint lj, inout
     float dK = dot(diff, K);
     float kk = dot(K, K);
 
-    float w = 2.0 * SmoothnessWeight;
+    float w = pairWeight * 2.0 * SmoothnessWeight;
     if (si >= 0) {
         grad[si] += w * dK;
         diag[si] += w * kk;
@@ -191,32 +240,53 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     uint node = tid.x;
     if (node >= NodeCount) return;
 
-    float grad[6] = { 0,0,0,0,0,0 };
-    float diag[6] = { 0,0,0,0,0,0 };
+    float grad[8] = { 0,0,0,0,0,0,0,0 };
+    float diag[8] = { 0,0,0,0,0,0,0,0 };
 
-    // This node's own current winner -- needed by Term 4 (defines the
-    // synthetic field's sign convention and which slot receives the volume
-    // floor) and NodeCurrentVolume's bookkeeping. NOT used by Term 1
-    // anymore (see its own header comment -- hardcoded to labels 0/1
-    // unconditionally now). Computed once, up front.
+    // This node's own current winner -- needed by Term 1 (defines Li for
+    // every edge), Term 4 (defines the synthetic field's sign convention
+    // and which slot receives the volume floor), and NodeCurrentVolume's
+    // bookkeeping. Computed once, up front (unlike the old per-tet-vote
+    // version, nothing here depends on any other term running first).
     uint myLabel = SENTINEL_CANDIDATE;
+    uint myOtherLabel = SENTINEL_CANDIDATE;            
     float myPot = -1.0e30;
+    float myOtherPot = -1.0e30;
     int ownSlot = -1;
-    for (uint s0 = 0; s0 < MAX_CANDIDATES; s0++) {
+    uint myValidCount = 0;
+    for (uint s0 = 0; s0 < MAX_CANDIDATES; s0++)
+    {
         uint l = GetCandidateLabelAt(NodeCandidateLabel, node, s0);
-        if (l == SENTINEL_CANDIDATE) continue;
+        if (l == SENTINEL_CANDIDATE)
+            continue;
+        myValidCount++;
         float p = NodePotential[node * MAX_CANDIDATES + s0];
-        if (p > myPot) { myPot = p; myLabel = l; ownSlot = (int)s0; }
+        if (p > myPot)
+        {
+            myOtherLabel = myLabel;
+            myOtherPot = myPot;
+            myPot = p;
+            myLabel = l;
+            ownSlot = (int) s0;
+        }
+        else if (p > myOtherPot)
+        {
+            myOtherLabel = l;
+            myOtherPot = p;
+        }
     }
+            
+    if(myValidCount == 0) return;
 
-    // Term 3 (sum-to-0 regularizer): SUPERSEDED by the single-potential
-    // scheme (see header comment) -- phi(label0)=-phi(label1) is now a hard
-    // identity enforced in the final-write block, not a soft spring. Kept
-    // here, commented out, in case multi-label support (where "the other
-    // potential is always the opposite" doesn't apply -- 3+ candidates have
-    // no single antipode) comes back and this softer approach is needed
-    // again.
-    /*
+    // Term 3: sum-to-0 regularizer -- pushes the SUM of this node's valid
+    // candidate potentials toward 0, instead of shrinking each slot toward
+    // 0 independently. For the (current) 2-label case this makes
+    // phi_i-phi_j exactly 2*phi_i (since phi_j=-phi_i), i.e. the interface
+    // is exactly the zero-level-set of phi_i itself -- no affine shift
+    // needed, unlike a sum-to-1 target -- and whichever candidate is
+    // actually winning at a node is guaranteed positive (phi_i>phi_j=-phi_i
+    // implies phi_i>0). Just as importantly, it gives every node, A or B
+    // alike, the same fixed potential "budget" centered at 0.
     {
         float sumPhi = 0.0;
         uint validCount = 0;
@@ -234,31 +304,154 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             }
         }
     }
-    */
 
-    // Term 1: SIMPLIFIED FOR TESTING -- see header comment. No active-pair
-    // determination, no per-node exclusion, no face-adjacency verification:
-    // every one of this node's own incident tets gets compared against its
-    // 4 static-offset partners (PartnerOffset), unconditionally, always for
-    // the fixed pair (label 0, label 1). Dedup (tetX<P, or "not already in
-    // my own incident list" otherwise) is the same bookkeeping the original
-    // pre-edge-centric AccumulatePair used, so each face-adjacent pair is
-    // counted exactly once.
-    {
+    // Term 1: edge-centric smoothness -- see header comment. For each of
+    // this node's up to 14 real geometric neighbors, an active edge (Li !=
+    // Lj, using the FROZEN per-round snapshot, not the live winner) gets
+    // its tet-fan gathered on the fly. Only genuinely FACE-ADJACENT pairs
+    // within that fan (sharing 3 of 4 corners, not just the edge's own 2
+    // endpoints) get the gradient-mismatch penalty -- verified directly by
+    // comparing each pair's resolved corners, not by trusting any derived
+    // ordering.
+    //
+    // Single-candidate nodes (myValidCount==1, e.g. an A-node deep enough
+    // in its own ground-truth region that buildCandidatesCS never found a
+    // competing label nearby) do NOT participate as the acting node here at
+    // all -- they have no second hypothesis to smooth against in the first
+    // place, and every "active" edge they'd process would evaluate
+    // TetFieldGrad for a label they don't track, falling into
+    // GetCornerPotential's 0.0 missing-candidate fallback and corrupting
+    // the whole tet's computed gradient (the same failure mode this project
+    // already found and fixed once for B-nodes, by widening their candidate
+    // halo -- see buildCandidatesCS.hlsl's own header comment). Unlike a
+    // multi-candidate node, a single-candidate node also has zero Term 2
+    // margin-hinge defense (nothing to compare its one slot against), so
+    // nothing was ever stopping that corrupted gradient from persistently
+    // dragging its own ground-truth label negative every sweep -- confirmed
+    // directly via a per-sweep probe (term1Grad0 was large and
+    // consistently positive from sweep 1 onward, never flipping sign).
+    // No bail-out on Li==Lj -- an edge's two endpoints agreeing doesn't mean
+    // there's nothing to keep smooth, it means the OLD per-tet "uniform, no
+    // crossing" case (which the old cube-vote scheme still fed a real
+    // energy contribution whenever some OTHER corner of the same cube
+    // disagreed -- see the design discussion's confirmation that the old
+    // scheme never actually gated on a tet's own corners' agreement at
+    // all). Every edge is processed unconditionally; Lj is this edge's
+    // OTHER endpoint's own live winner (GetCornerTopLabel at myQ+D, same
+    // helper Term 4 already uses), not a hardcoded `1-Li` -- works for any
+    // number of labels, not just the current 2-label test domain. Li==Lj is
+    // harmless when it happens: AccumulateEdgePair resolves both to the
+    // SAME slot, so its +w*dK/-w*dK contributions land in the same grad[]
+    // entry and cancel exactly (diag[] still grows, just a slightly more
+    // conservative step that sweep -- no wrong bias).
+    //
+    // Because literally every edge is now processed (never skipped), every
+    // face-adjacent pair is discovered from BOTH of its two discovering
+    // edges unconditionally (the combinatorial proof in AccumulateEdgePair's
+    // header comment: a pair's only common corners with node are the two
+    // edge endpoints of its shared face) -- so the correction weight is a
+    // flat, unconditional 0.5 for every pair, no per-pair "is the other
+    // edge also active" check needed anymore.
+    if (UseEdgeWalkTraversal != 0 && myValidCount > 1) {
+        int3 myQ = NodeQ(node);
+        for (uint ne = 0; ne < 14; ne++) {
+            int3 D = NodeNeighborOffsets[ne];
+            uint neighborRef = ResolveCorner(myQ + D);
+            uint otherLabel; float otherPot;
+            GetCornerTopLabel(neighborRef, NodeCandidateLabel, NodePotential, otherLabel, otherPot);
+            //if(myLabel == otherLabel){
+                otherLabel = myOtherLabel;
+            //}
+
+            uint edgeTets[6];
+            uint n = GatherEdgeTets(myQ, D, edgeTets);
+
+            uint fanRefs[6][4];
+            for (uint t = 0; t < n; t++) {
+                int3 tq0, tq1, tq2, tq3; GetTetCornerQs(edgeTets[t], tq0, tq1, tq2, tq3);
+                fanRefs[t][0] = ResolveCorner(tq0); fanRefs[t][1] = ResolveCorner(tq1);
+                fanRefs[t][2] = ResolveCorner(tq2); fanRefs[t][3] = ResolveCorner(tq3);
+            }
+
+            for (uint a = 0; a < n; a++) {
+                for (uint b = a + 1; b < n; b++) {
+                    uint sharedCount = 0;
+                    for (uint ca = 0; ca < 4; ca++)
+                        for (uint cb = 0; cb < 4; cb++)
+                            if (fanRefs[a][ca] == fanRefs[b][cb]) sharedCount++;
+                    if (sharedCount != 3) continue; // not a true face-adjacent pair
+
+                    // Whole-pair protection, matching the OLD scheme's
+                    // whole-TET exclusion (a bailed cube's tets were never
+                    // read by ANYONE's Term 1, from any direction) -- if
+                    // any of the 8 corner-slots across tetA/tetB doesn't
+                    // genuinely track both labels, skip this pair entirely
+                    // rather than silently mixing in GetCornerPotential's
+                    // 0.0 missing-candidate fallback. Without this, a
+                    // single-candidate node (excluded from ACTING in Term 1,
+                    // decaying toward 0 via Term 3 alone with nothing
+                    // opposing it) still gets its decayed value READ here
+                    // whenever it's a shared corner of an active
+                    // neighbor's tet-pair, leaking that decay into the
+                    // actively-smoothed region via gradient-matching.
+               /*     bool allTrack = true;
+                    for (uint ct = 0; ct < 4 && allTrack; ct++) {
+                        if (!CornerTracksLabel(fanRefs[a][ct], myLabel) || !CornerTracksLabel(fanRefs[a][ct], otherLabel)) allTrack = false;
+                    }
+                    for (uint ct2 = 0; ct2 < 4 && allTrack; ct2++) {
+                        if (!CornerTracksLabel(fanRefs[b][ct2], myLabel) || !CornerTracksLabel(fanRefs[b][ct2], otherLabel)) allTrack = false;
+                    }
+                    if (!allTrack) continue;*/
+
+                    AccumulateEdgePair(node, edgeTets[a], edgeTets[b], myLabel, otherLabel, 0.5, grad, diag);
+                }
+            }
+        }
+    }
+
+    // Term 1, ALTERNATE traversal (UseEdgeWalkTraversal==0, GUI checkbox):
+    // instead of walking this node's 14 geometric edges, walk its own
+    // ~24 incident tets directly (GatherIncidentTets, same helper Term 4
+    // uses below) and check EVERY PAIR of them for the SAME 3-vertex
+    // coincidence the edge-walking traversal uses (sharedCount==3) -- no
+    // GetFaceAdjacentPartner/cap tables, no relation enumeration, just the
+    // brute all-pairs scan already proven correct by the edge-walking
+    // block's own inner loop. Node-centric, not edge-centric -- there's no
+    // per-edge "other endpoint" to read a live winner from here, so
+    // otherLabel is simply this node's own runner-up candidate
+    // (myOtherLabel), matching Term 2/Term 4's already node-local-only
+    // quantities.
+    //
+    // Because a pair only ever shows up here when BOTH tets are ALSO in
+    // node's own incident list (by construction of the all-pairs scan),
+    // this traversal reaches the same 3 shared-face nodes per pair that
+    // edge-walking does -- it can no longer reach the 2 "outlier" corners
+    // (each a corner of only ONE of the pair's two tets) the
+    // GetFaceAdjacentPartner version could, since an outlier's other tet is
+    // by definition absent from ITS OWN incident list. Each pair appears
+    // exactly once in the a<b scan (no duplicate entries in incidentTets),
+    // so pairWeight is always 1.0 -- no 0.5 correction needed, unlike
+    // edge-walking's two-discovering-edges-per-pair.
+    if (UseEdgeWalkTraversal == 0 && myValidCount > 1) {
         uint incidentTets[MAX_INCIDENT_TETS];
         uint incCount = GatherIncidentTets(node, incidentTets);
+
+        uint incRefs[MAX_INCIDENT_TETS][4];
         for (uint e = 0; e < incCount; e++) {
-            uint tetX = incidentTets[e];
-            uint slot = tetX % 6;
-            for (uint pi = 0; pi < 4; pi++) {
-                uint P = (uint)((int)tetX + PartnerOffset[slot][pi]);
-                if (tetX < P) {
-                    AccumulateEdgePair(node, tetX, P, 0u, 1u, grad, diag);
-                } else if (tetX > P) {
-                    bool inMyList = false;
-                    for (uint ee = 0; ee < incCount; ee++) if (incidentTets[ee] == P) { inMyList = true; break; }
-                    if (!inMyList) AccumulateEdgePair(node, P, tetX, 0u, 1u, grad, diag);
-                }
+            int3 tq0, tq1, tq2, tq3; GetTetCornerQs(incidentTets[e], tq0, tq1, tq2, tq3);
+            incRefs[e][0] = ResolveCorner(tq0); incRefs[e][1] = ResolveCorner(tq1);
+            incRefs[e][2] = ResolveCorner(tq2); incRefs[e][3] = ResolveCorner(tq3);
+        }
+
+        for (uint a = 0; a < incCount; a++) {
+            for (uint b = a + 1; b < incCount; b++) {
+                uint sharedCount = 0;
+                for (uint ca = 0; ca < 4; ca++)
+                    for (uint cb = 0; cb < 4; cb++)
+                        if (incRefs[a][ca] == incRefs[b][cb]) sharedCount++;
+                if (sharedCount != 3) continue; // not a true face-adjacent pair
+
+                AccumulateEdgePair(node, incidentTets[a], incidentTets[b], myLabel, myOtherLabel, 1.0, grad, diag);
             }
         }
     }
@@ -356,26 +549,25 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
         }
     }
 
-    // Term 2: margin hinge, reformulated for the single-potential scheme
-    // (see header comment). A-nodes only (correctness anchor pulling a
-    // wrong current winner back toward ground truth) -- push phi (this
-    // node's stored value at the label-1 slot) past +MarginTarget/2 if its
-    // own ground-truth label is 1, past -MarginTarget/2 if it's 0. Writes
-    // ONLY grad[s1]/diag[s1] -- label-0's slot (if present) is mirrored,
-    // not independently stepped, in the final-write block below.
+    // Term 2: margin hinge. A-nodes: own/input label (slot 0) must stay
+    // above every other candidate by MarginTarget -- this is a correctness
+    // anchor (corrects a wrong current winner back toward ground truth).
+    // B-nodes get the analogous but weaker claim: whichever candidate is
+    // CURRENTLY winning must stay ahead of the runner-up by MarginTarget.
     if (node < ACount) {
-        int s1 = FindSlot(node, 1u);
-        if (s1 >= 0) {
-            uint ownLabel = GetCandidateLabelAt(NodeCandidateLabel, node, 0);
-            float sign = (ownLabel == 1u) ? 1.0 : -1.0;
-            float phi = NodePotential[node * MAX_CANDIDATES + (uint)s1];
-            float violation = 0.5 * MarginTarget - sign * phi;
+        float phi0 = NodePotential[node * MAX_CANDIDATES + 0];
+        for (uint s = 1; s < MAX_CANDIDATES; s++) {
+            if (GetCandidateLabelAt(NodeCandidateLabel, node, s) == SENTINEL_CANDIDATE) continue;
+            float phiS = NodePotential[node * MAX_CANDIDATES + s];
+            float violation = MarginTarget - (phi0 - phiS);
             if (violation > 0.0) {
-                grad[s1] += -2.0 * MarginWeight * violation * sign;
-                diag[s1] += 2.0 * MarginWeight;
+                grad[0] += -2.0 * MarginWeight * violation;
+                diag[0] += 2.0 * MarginWeight;
+                grad[s] += 2.0 * MarginWeight * violation;
+                diag[s] += 2.0 * MarginWeight;
             }
         }
-    } /*else {
+    } else {
         if (ownSlot >= 0) {
             for (uint s = 0; s < MAX_CANDIDATES; s++) {
                 if ((int)s == ownSlot) continue;
@@ -390,49 +582,21 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
                 }
             }
         }
-    }*/
+    }
 
-    // Final write: SINGLE-POTENTIAL SCHEME (see header comment). Fold the
-    // label-0/label-1 slots' independently-computed (grad,diag) into one
-    // combined (gradPhi,diagPhi) via the chain rule (phi1=phi, phi0=-phi),
-    // take a single Newton step, and mirror it into both slots exactly --
-    // hard-enforcing phi0=-phi1 every sweep instead of Term 3's old soft
-    // spring. Any slot beyond {label0,label1} (dormant under the current
-    // 2-label testing setup; label 0/1 has no room for a third candidate
-    // anyway, but kept for when multi-label support returns) falls back to
-    // the original independent per-slot Jacobi step, unchanged.
-    {
-        bool mirrored[6] = { false, false, false, false, false, false };
-        int s0 = FindSlot(node, 0u);
-        int s1 = FindSlot(node, 1u);
-        if (s1 >= 0) {
-            float gradPhi = grad[s1] - ((s0 >= 0) ? grad[s0] : 0.0);
-            float diagPhi = diag[s1] + ((s0 >= 0) ? diag[s0] : 0.0);
-            float step = -gradPhi / (diagPhi + JacobiDiagEpsilon);
+    for (uint s = 0; s < MAX_CANDIDATES; s++) {
+        float phi = NodePotential[node * MAX_CANDIDATES + s];
+        float newPhi = phi;
+        if (GetCandidateLabelAt(NodeCandidateLabel, node, s) != SENTINEL_CANDIDATE) {
+            // Hard step clamp -- plain per-unknown-diagonal Jacobi on this
+            // coupled system (each unknown's diagonal ignores that the other
+            // unknowns feeding the same residual are moving simultaneously
+            // this same sweep) overshoots and diverges without one. Same
+            // role/necessity as g-Aequor's MaxStep.
+            float step = -grad[s] / (diag[s] + JacobiDiagEpsilon);
             step = clamp(step, -MaxPotentialStep, MaxPotentialStep);
-            float newPhi1 = NodePotential[node * MAX_CANDIDATES + (uint)s1] + step;
-            NodePotentialScratch[node * MAX_CANDIDATES + (uint)s1] = newPhi1;
-            mirrored[s1] = true;
-            if (s0 >= 0) {
-                NodePotentialScratch[node * MAX_CANDIDATES + (uint)s0] = -newPhi1;
-                mirrored[s0] = true;
-            }
+            newPhi = phi + step;
         }
-        for (uint s = 0; s < MAX_CANDIDATES; s++) {
-            if (mirrored[s]) continue;
-            float phi = NodePotential[node * MAX_CANDIDATES + s];
-            float newPhi = phi;
-            if (GetCandidateLabelAt(NodeCandidateLabel, node, s) != SENTINEL_CANDIDATE) {
-                // Hard step clamp -- plain per-unknown-diagonal Jacobi on this
-                // coupled system (each unknown's diagonal ignores that the other
-                // unknowns feeding the same residual are moving simultaneously
-                // this same sweep) overshoots and diverges without one. Same
-                // role/necessity as g-Aequor's MaxStep.
-                float step = -grad[s] / (diag[s] + JacobiDiagEpsilon);
-                step = clamp(step, -MaxPotentialStep, MaxPotentialStep);
-                newPhi = phi + step;
-            }
-            NodePotentialScratch[node * MAX_CANDIDATES + s] = newPhi;
-        }
+        NodePotentialScratch[node * MAX_CANDIDATES + s] = newPhi;
     }
 }

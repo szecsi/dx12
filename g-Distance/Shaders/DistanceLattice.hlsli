@@ -215,17 +215,18 @@ void GetTetCornerQs(uint tetIndex, out int3 q0, out int3 q1, out int3 q2, out in
     q3 = C + CubeVertexOffsets[slot][1];
 }
 
-// Packed candidate-label accessor: nodeCandidateLabelBuffer stores ONE uint
-// per node (not per slot) -- MAX_CANDIDATES(6) 5-bit fields packed into the
-// low 30 bits, see DistanceConfig.hlsli's SENTINEL_CANDIDATE comment. Safe
-// as a plain (non-atomic) bitfield because every node's candidate slots are
-// written exactly once, by exactly one thread, in buildCandidatesCS.hlsl --
-// no cross-thread read-modify-write ever touches this buffer afterward
-// (only NodePotential/NodePotentialScratch, which stay one float per slot,
-// change during the solve).
+// Packed candidate-label accessor: nodeCandidateLabelBuffer stores TWO
+// uints per node -- MAX_CANDIDATES(8) 8-bit fields, 4 packed per word (word
+// = slot/4, shift = (slot%4)*8), see DistanceConfig.hlsli's
+// SENTINEL_CANDIDATE comment. Safe as a plain (non-atomic) bitfield because
+// every node's candidate slots are written exactly once, by exactly one
+// thread, in buildCandidatesCS.hlsl -- no cross-thread read-modify-write
+// ever touches this buffer afterward (only NodePotential/
+// NodePotentialScratch, which stay one float per slot, change during the
+// solve).
 uint GetCandidateLabelAt(RWStructuredBuffer<uint> buf, uint node, uint slot)
 {
-    return (buf[node] >> (slot * 5u)) & 0x1Fu;
+    return (buf[node * 2u + slot / 4u] >> ((slot % 4u) * 8u)) & 0xFFu;
 }
 
 // Candidate-label potential lookup for a tet corner, real or virtual.
@@ -238,7 +239,7 @@ uint GetCandidateLabelAt(RWStructuredBuffer<uint> buf, uint node, uint slot)
 // back the same way each caller already does for "label not present here".
 float GetCornerPotential(uint cornerRef, uint label, RWStructuredBuffer<uint> candLabel, RWStructuredBuffer<float> candPot, float missingFallback)
 {
-    if (cornerRef == SENTINEL_LABEL) return (label == 0u) ? 1.0 : missingFallback;
+    if (cornerRef == SENTINEL_LABEL) return (label == 0u) ? 0.0 : missingFallback;
     for (uint s = 0; s < MAX_CANDIDATES; s++) {
         if (GetCandidateLabelAt(candLabel, cornerRef, s) == label) return candPot[cornerRef * MAX_CANDIDATES + s];
     }

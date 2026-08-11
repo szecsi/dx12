@@ -137,7 +137,7 @@ protected:
 	com_ptr<ID3D12Resource> nodeIsConnectingBuffer;     // ACount uint (0/1): sole local connector of its same-label neighborhood, see computeConnectingNodesCS.hlsl
 
 	// -- per-node candidate/potential state, (re)seeded at init, evolved by the outer loop --
-	com_ptr<ID3D12Resource> nodeCandidateLabelBuffer;   // NodeCount uint, MAX_CANDIDATES(6) 5-bit labels packed per node (SENTINEL_CANDIDATE = unused slot)
+	com_ptr<ID3D12Resource> nodeCandidateLabelBuffer;   // NodeCount*2 uint, MAX_CANDIDATES(8) 8-bit labels packed per node (SENTINEL_CANDIDATE = unused slot)
 	com_ptr<ID3D12Resource> nodePotentialBuffer;        // NodeCount*MAX_CANDIDATES float, "current" (Jacobi read buffer)
 	com_ptr<ID3D12Resource> nodePotentialScratchBuffer; // NodeCount*MAX_CANDIDATES float, Jacobi write buffer
 	com_ptr<ID3D12Resource> surfaceVertexBuffer;        // TetCount*6 SurfaceVertex (pos+normal+labelI+labelJ), render-only
@@ -197,6 +197,7 @@ protected:
 	float maxPotentialStep = 0.002f; // hard per-sweep step clamp, see DistanceCb.hlsli -- user-confirmed stable value; 0.1 was not, likely because the all-edges connectivity change couples each unknown to more neighbors than the original fan-only gather did
 	float volumeWeight = 5000.0f; // energy term 4 weight, see DistanceCb.hlsli -- needs to be this large (not ~1 like the other weights) to actually outweigh smoothness's gradient at a topologically point-like feature; see "Volume Weight" slider comment
 	float volumeFloor = 1.0f; // the floor itself for connecting nodes, see DistanceCb.hlsli
+	bool useEdgeWalkTraversal = true; // Term 1 pair-listing method: edge-walking vs. node-adjacent-tets, see smoothnessJacobiCS.hlsl
 	float pointRadiusPx = 3.0f;
 	float potentialSizeScale = 1.0f; // winning-potential reference value that maps to full-size sprites, see nodePointVS.hlsl
 	float nodeFadeExponent = 1.0f;      // exponential depth-fade rate for distant nodes, see nodePointVS.hlsl
@@ -312,7 +313,7 @@ protected:
 		distanceCb.data.VolumeWeight = volumeWeight;
 		distanceCb.data.VolumeFloor = volumeFloor;
 		distanceCb.data._pad2a = 0.0f;
-		distanceCb.data._pad2b = 0.0f;
+		distanceCb.data.UseEdgeWalkTraversal = useEdgeWalkTraversal ? 1u : 0u;
 		distanceCb.Upload();
 	}
 
@@ -453,7 +454,7 @@ protected:
 		if (gridChanged) {
 			rasterLabelBuffer          = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"rasterLabelBuffer");
 			nodeIsConnectingBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"nodeIsConnectingBuffer");
-			nodeCandidateLabelBuffer   = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeCandidateLabelBuffer");
+			nodeCandidateLabelBuffer   = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * 2 * sizeof(UINT), L"nodeCandidateLabelBuffer");
 			nodePotentialBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialBuffer");
 			nodePotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialScratchBuffer");
 			nodeFrozenWinnerBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeFrozenWinnerBuffer");
@@ -942,7 +943,7 @@ protected:
 	// now derives a tet's dominant pair: frequency-vote over the 4 corners'
 	// own top (argmax) candidate, independently, right here on the CPU.
 	void ReadBackPickedTetDiagnostics() {
-		UINT64 candBytes = (UINT64)NodeCount * sizeof(UINT);
+		UINT64 candBytes = (UINT64)NodeCount * 2 * sizeof(UINT);
 		UINT64 potBytes = (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float);
 		UINT64 nodeFloatBytes = (UINT64)NodeCount * sizeof(float);
 		UINT64 connectingBytes = (UINT64)ACount * sizeof(UINT);
@@ -993,7 +994,7 @@ protected:
 				continue;
 			}
 			for (uint s = 0; s < MAX_CANDIDATES; s++) {
-				pickedCornerLabels[c][s] = (cand[node] >> (s * 5u)) & 0x1Fu;
+				pickedCornerLabels[c][s] = (cand[node * 2u + s / 4u] >> ((s % 4u) * 8u)) & 0xFFu;
 				pickedCornerPots[c][s] = pot[node * MAX_CANDIDATES + s];
 			}
 			pickedCornerCurrentVolume[c] = curVol[node];
@@ -1165,6 +1166,9 @@ protected:
 		}
 
 		if (ImGui::CollapsingHeader("Energy Weights")) {
+			ImGui::Checkbox("Term 1: Edge-Walk Traversal", &useEdgeWalkTraversal);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(off = node-adjacent-tets, see smoothnessJacobiCS.hlsl)");
 			ImGui::SliderFloat("Smoothness Weight", &smoothnessWeight, 0.0f, 10.0f);
 			ImGui::SliderFloat("Margin Weight", &marginWeight, 0.0f, 10.0f);
 			ImGui::SliderFloat("Margin Target", &marginTarget, 0.0f, 2.0f);
