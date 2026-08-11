@@ -67,12 +67,19 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
     uint count = 0;
     uint node;
     uint seedSlot = 0; // which slot (if any beyond A's fixed slot 0) got the old majority-vote seed -- UNUSED by potential seeding now, see below
-    // Mode==1 (B) only: per-slot corner-count / summed footvector length
-    // over the halo scan below, for the uniform-halo averaging case in the
-    // potential-seeding block further down. Declared here (not inside the
-    // else block) so they're still in scope there.
+    // Mode==1 (B) only: per-slot corner count over the wide halo scan below
+    // (candidate DISCOVERY only now, see the tight own-cube scan inside the
+    // else block for the actual identity/averaging decision). Declared here
+    // (not inside the else block) so it's still in scope in the majority-
+    // vote block below (itself unused by potential seeding).
     uint freq[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-    float sumDist[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    // Mode==1 (B) only: whether this B-node's OWN cube's 8 corners (not the
+    // wider halo) all agree on one label, that label, and the average of
+    // just those 8 corners' footvector lengths -- see the tight scan at the
+    // top of the else block and the potential-seeding block further down.
+    bool bOwnCubeUniform = false;
+    uint bOwnLabel = SENTINEL_CANDIDATE;
+    float bOwnAvgDist = 0.0;
 
     if (Mode == 0) {
         if (tid.x >= ACount) return;
@@ -105,15 +112,43 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
         uint j = rem / BDim;
         uint i = rem % BDim;
 
-        // Own cube is A-range [i,i+1]x[j,j+1]x[k,k+1]; scanning [i-1,i+2] in
-        // each axis additionally covers all 6 face-neighbor cubes (e.g. the
-        // -X neighbor cube needs x in {i-1,i}, already within this range)
-        // plus some edge/corner-adjacent cubes for free -- harmless, capped
-        // at 8 slots and nowhere near that cap with only a couple of labels
-        // actually present in the scene.
-        // freq/sumDist declared above (outer scope) -- per-slot corner count
-        // and summed footvector length, freq[s] doubling as sumDist[s]'s
-        // divisor for the uniform-halo averaging case further below.
+        // Tight scan: this B-node's OWN cube corners only -- exactly 8,
+        // always in-bounds (i,j,k range over [0,BDim), BDim=GridRes-1, so
+        // i+1<=GridRes-1 is always a valid A index). If they all agree on
+        // one label, this B-node assumes that label with the SAME
+        // confidence an A-node has in its own ground truth -- forced into
+        // slot 0 exactly like A's own/input label, below -- regardless of
+        // what a neighboring cube's corners say (that only matters for
+        // candidate DISCOVERY, the wide scan right after this). Narrower
+        // than the wide halo on purpose: a B-node dead center of a single-
+        // label cube should confidently assume that label even if some
+        // face-neighbor cube touches a different one.
+        {
+            uint ownLabel0 = RasterLabel[AIdx(i, j, k)];
+            float ownSum = 0.0;
+            bool ownUniform = true;
+            for (uint c = 0; c < 8; c++) {
+                uint aIdx0 = AIdx(i + (c & 1u), j + ((c >> 1) & 1u), k + ((c >> 2) & 1u));
+                if (RasterLabel[aIdx0] != ownLabel0) ownUniform = false;
+                ownSum += NodeFootDist[aIdx0];
+            }
+            bOwnCubeUniform = ownUniform;
+            bOwnLabel = ownLabel0;
+            bOwnAvgDist = ownSum * 0.125; // /8
+        }
+        if (bOwnCubeUniform) { labels[0] = bOwnLabel; count = 1; }
+
+        // Wide scan, candidate DISCOVERY only now (the tight scan above
+        // already decided identity/averaging): own cube is A-range
+        // [i,i+1]x[j,j+1]x[k,k+1]; scanning [i-1,i+2] in each axis
+        // additionally covers all 6 face-neighbor cubes (e.g. the -X
+        // neighbor cube needs x in {i-1,i}, already within this range) plus
+        // some edge/corner-adjacent cubes for free -- harmless, capped at 8
+        // slots and nowhere near that cap with only a couple of labels
+        // actually present in the scene. If bOwnCubeUniform pre-seeded
+        // labels[0]/count=1 above, this loop's own dedup (checking s<count)
+        // naturally folds any wide-scan match of that same label into
+        // freq[0] instead of adding a duplicate slot.
         for (int dz = -1; dz <= 2; dz++) {
             for (int dy = -1; dy <= 2; dy++) {
                 for (int dx = -1; dx <= 2; dx++) {
@@ -121,10 +156,9 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
                     if (ai < 0 || aj < 0 || ak < 0 || ai >= (int)GridRes || aj >= (int)GridRes || ak >= (int)GridRes) continue;
                     uint aIdx = (uint)ai + (uint)aj * GridRes + (uint)ak * GridRes * GridRes;
                     uint aLabel = RasterLabel[aIdx];
-                    float aDist = NodeFootDist[aIdx];
                     bool found = false;
-                    for (uint s = 0; s < count; s++) if (labels[s] == aLabel) { freq[s]++; sumDist[s] += aDist; found = true; break; }
-                    if (!found && count < 8) { labels[count] = aLabel; freq[count] = 1; sumDist[count] = aDist; count++; }
+                    for (uint s = 0; s < count; s++) if (labels[s] == aLabel) { freq[s]++; found = true; break; }
+                    if (!found && count < 8) { labels[count] = aLabel; freq[count] = 1; count++; }
                 }
             }
         }
@@ -190,18 +224,20 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
     //     already assume, and naturally seeds everything near 0 right at a
     //     boundary node (myDist==0 there), where no candidate should start
     //     with an unearned advantage.
-    //   B-nodes: no ground truth, no OwnLabelSeed slot -- averaged instead,
-    //     over the SAME 1-cube-halo scan used to discover B's candidate
-    //     labels above (freq[]/sumDist[]). If that whole halo is uniformly
-    //     ONE label (count==1 -- this B-node sits deep inside a single
-    //     region, nowhere near a boundary), its one candidate seeds to the
-    //     AVERAGE of those neighboring A-nodes' own footvector lengths --
-    //     inheriting their "how deep inside" estimate directly, no jitter
-    //     needed (nothing to break a tie against). Otherwise (count>1,
-    //     genuinely near a boundary/junction, JFA has no single clean
-    //     distance answer for this halo) every candidate seeds to plain
-    //     zero-centered jitter -- deliberately no majority-vote/negShare
-    //     confidence bias here, unlike the old scheme.
+    //   B-nodes: no ground truth, no OwnLabelSeed slot -- driven instead by
+    //     the tight own-cube scan above (bOwnCubeUniform/bOwnLabel/
+    //     bOwnAvgDist). If this B-node's own 8 A-corners all agree on one
+    //     label, it ASSUMES that label exactly like an A-node assumes its
+    //     ground truth: slot 0 (=bOwnLabel) seeds POSITIVE to the average
+    //     of those 8 corners' footvector lengths, and every OTHER candidate
+    //     (found only by the wider halo scan, e.g. a neighboring cube
+    //     touching a different label) seeds to that SAME magnitude
+    //     NEGATIVE plus jitter -- exactly A's own-positive/others-negative
+    //     convention. Otherwise (own cube itself already mixed -- no single
+    //     confident answer even before looking at neighbors) every
+    //     candidate seeds to plain zero-centered jitter, deliberately no
+    //     majority-vote/negShare confidence bias here, unlike the old
+    //     scheme.
     if (Mode == 0) {
         float myDist = NodeFootDist[node];
         for (uint s = 0; s < MAX_CANDIDATES; s++) {
@@ -212,11 +248,12 @@ void buildCandidatesCS(uint3 tid : SV_DispatchThreadID)
             NodePotential[node * MAX_CANDIDATES + s] = pot;
         }
     } else {
-        bool isUniform = (count == 1);
         for (uint s = 0; s < MAX_CANDIDATES; s++) {
             float pot = 0.0;
             if (s < count) {
-                pot = isUniform ? (sumDist[s] / (float)freq[s]) : (DistanceJitter(node, s) * SeedJitter);
+                pot = bOwnCubeUniform
+                    ? ((s == 0) ? bOwnAvgDist : (-bOwnAvgDist + DistanceJitter(node, s) * SeedJitter))
+                    : (DistanceJitter(node, s) * SeedJitter);
             }
             NodePotential[node * MAX_CANDIDATES + s] = pot;
         }
