@@ -120,6 +120,7 @@ class DistanceApp : public Egg::SimpleApp {
 
 	uint RasterGroups = 0, BuildCandidatesAGroups = 0, BuildCandidatesBGroups = 0,
 		ExtractSurfaceGroups = 0, SmoothnessGroups = 0, CommitGroups = 0;
+	uint BlockSmoothingTilesPerAxis = 0; // ceil(GridRes/2) -- smoothnessJacobiBlockCS.hlsl's 2x2x2(A)+2x2x2(B) tile dispatch, one tile per axis-group
 
 	float MaxMarchDist = 60.0f;
 	static constexpr int MaxMarchSteps = 256;
@@ -175,6 +176,7 @@ protected:
 	Egg::Compute::ComputeShader buildCandidatesCS;
 	Egg::Compute::ComputeShader snapshotWinnerCS;
 	Egg::Compute::ComputeShader smoothnessJacobiCS;
+	Egg::Compute::ComputeShader smoothnessJacobiBlockCS; // Term-1-only tile/groupshared reimplementation, see smoothnessJacobiBlockCS.hlsl
 	Egg::Compute::ComputeShader commitPotentialCS;
 	Egg::Compute::ComputeShader extractSurfaceCS;
 
@@ -219,6 +221,8 @@ protected:
 	float volumeWeight = 5000.0f; // energy term 4 weight, see DistanceCb.hlsli -- needs to be this large (not ~1 like the other weights) to actually outweigh smoothness's gradient at a topologically point-like feature; see "Volume Weight" slider comment
 	float volumeFloor = 1.0f; // the floor itself for connecting nodes, see DistanceCb.hlsli
 	bool useEdgeWalkTraversal = false; // Term 1 pair-listing method: edge-walking vs. node-adjacent-tets, see smoothnessJacobiCS.hlsl
+	bool useBlockSmoothing = false; // experimental: replace smoothnessJacobiCS entirely with the tile/groupshared Term-1-only smoothnessJacobiBlockCS.hlsl for the Jacobi sweep loop (Terms 2-5 are NOT applied while this is on)
+	int blockSmoothingSweepCounter = 0; // advances every block-smoothing sweep; RotationOffset = counter % 8 (see smoothnessJacobiBlockCS.hlsl Stage 1)
 	float missingFallback = -0.75f; // TetFieldGrad's GetCornerPotential missing-candidate fallback, see DistanceCb.hlsli
 	float distanceWeight = 0.0f; // term 5 (distance/Eikonal shaping) weight, see DistanceCb.hlsli -- default 0, off until tuned
 	float pointRadiusPx = 3.0f;
@@ -489,6 +493,7 @@ protected:
 		ExtractSurfaceGroups = (WindowTetCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
 		SmoothnessGroups = (NodeCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
 		CommitGroups = (NodeCount * MAX_CANDIDATES + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
+		BlockSmoothingTilesPerAxis = (GridRes + 1u) / 2u;
 
 		if (gridChanged) {
 			rasterLabelBuffer          = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"rasterLabelBuffer");
@@ -643,23 +648,43 @@ protected:
 
 		int sweeps = jacobiSweepsPerRound > 0 ? jacobiSweepsPerRound : 1;
 		for (int s = 0; s < sweeps; s++) {
-			cmd->SetComputeRootSignature(smoothnessJacobiCS.rootSig.Get());
-			cmd->SetPipelineState(smoothnessJacobiCS.pso.Get());
-			cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(3, nodePotentialScratchBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(4, nodeCurrentVolumeBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(5, nodeIsConnectingBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(6, nodeFrozenWinnerBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootConstantBufferView(7, distanceGridCb.GetGPUVirtualAddress());
-			cmd->Dispatch(SmoothnessGroups, 1, 1);
-			{
-				D3D12_RESOURCE_BARRIER b[] = {
-					CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()),
-					CD3DX12_RESOURCE_BARRIER::UAV(nodeCurrentVolumeBuffer.Get()),
-				};
-				cmd->ResourceBarrier(_countof(b), b);
+			if (useBlockSmoothing) {
+				// Experimental Term-1-only tile/groupshared path -- see
+				// smoothnessJacobiBlockCS.hlsl. Terms 2-5 are NOT applied
+				// here; NodeCurrentVolume/NodeIsConnecting are left
+				// untouched by this path (Term 4's volume readback will show
+				// stale/zero values while this is enabled).
+				uint32_t rotationOffset = (uint32_t)(blockSmoothingSweepCounter % 8);
+				blockSmoothingSweepCounter++;
+				cmd->SetComputeRootSignature(smoothnessJacobiBlockCS.rootSig.Get());
+				cmd->SetPipelineState(smoothnessJacobiBlockCS.pso.Get());
+				cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(3, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRoot32BitConstant(4, rotationOffset, 0);
+				cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
+				cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()));
+			} else {
+				cmd->SetComputeRootSignature(smoothnessJacobiCS.rootSig.Get());
+				cmd->SetPipelineState(smoothnessJacobiCS.pso.Get());
+				cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(3, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(4, nodeCurrentVolumeBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(5, nodeIsConnectingBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(6, nodeFrozenWinnerBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootConstantBufferView(7, distanceGridCb.GetGPUVirtualAddress());
+				cmd->Dispatch(SmoothnessGroups, 1, 1);
+				{
+					D3D12_RESOURCE_BARRIER b[] = {
+						CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()),
+						CD3DX12_RESOURCE_BARRIER::UAV(nodeCurrentVolumeBuffer.Get()),
+					};
+					cmd->ResourceBarrier(_countof(b), b);
+				}
 			}
 
 			cmd->SetComputeRootSignature(commitPotentialCS.rootSig.Get());
@@ -1304,9 +1329,12 @@ protected:
 		}
 
 		if (ImGui::CollapsingHeader("Energy Weights")) {
+			ImGui::Checkbox("Use Block Smoothing (experimental)", &useBlockSmoothing);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(Term 1 ONLY, tile/groupshared, see smoothnessJacobiBlockCS.hlsl -- Terms 2-5 off while enabled)");
 			ImGui::Checkbox("Term 1: Edge-Walk Traversal", &useEdgeWalkTraversal);
 			ImGui::SameLine();
-			ImGui::TextDisabled("(off = node-adjacent-tets, see smoothnessJacobiCS.hlsl)");
+			ImGui::TextDisabled("(off = node-adjacent-tets, see smoothnessJacobiCS.hlsl; ignored by Block Smoothing)");
 			ImGui::SliderFloat("Smoothness Weight", &smoothnessWeight, 0.0f, 10.0f);
 			ImGui::SliderFloat("Margin Weight", &marginWeight, 0.0f, 10.0f);
 			ImGui::SliderFloat("Margin Target", &marginTarget, 0.0f, 2.0f);
@@ -1416,6 +1444,7 @@ public:
 		buildCandidatesCS.createResources(device, "Shaders/buildCandidatesCS.cso");
 		snapshotWinnerCS.createResources(device, "Shaders/snapshotWinnerCS.cso");
 		smoothnessJacobiCS.createResources(device, "Shaders/smoothnessJacobiCS.cso");
+		smoothnessJacobiBlockCS.createResources(device, "Shaders/smoothnessJacobiBlockCS.cso");
 		commitPotentialCS.createResources(device, "Shaders/commitPotentialCS.cso");
 		extractSurfaceCS.createResources(device, "Shaders/extractSurfaceCS.cso");
 

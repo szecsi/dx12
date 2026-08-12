@@ -80,6 +80,7 @@
     <FxCompile Include="Shaders\buildCandidatesCS.hlsl" />
     <FxCompile Include="Shaders\snapshotWinnerCS.hlsl" />
     <FxCompile Include="Shaders\smoothnessJacobiCS.hlsl" />
+    <FxCompile Include="Shaders\smoothnessJacobiBlockCS.hlsl" />
     <FxCompile Include="Shaders\commitPotentialCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl" />
     <FxCompile Include="Shaders\raymarchVS.hlsl">
