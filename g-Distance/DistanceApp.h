@@ -140,7 +140,7 @@ protected:
 	// node index via DistanceLattice.hlsli's GetTetCornerQs/ResolveCorner/
 	// GatherIncidentTets/GetCrossNeighbors.
 	com_ptr<ID3D12Resource> rasterLabelBuffer;          // ACount uint: ground-truth A-node label
-	com_ptr<ID3D12Resource> nodeIsConnectingBuffer;     // ACount uint (0/1): sole local connector of its same-label neighborhood, see computeConnectingNodesCS.hlsl
+	com_ptr<ID3D12Resource> nodeIsConnectingBuffer;     // ACount uint, 2-bit flags: bit0=sole local connector of its same-label neighborhood, bit1=local max of same-label NodeFootDist (ties count), see computeConnectingNodesCS.hlsl
 	// JFA (Jump Flooding) feature transform over the A-sublattice -- ping-pong
 	// seed-node-index buffers (jfaInitCS/jfaStepCS.hlsl) finalized into a
 	// per-A-node distance ("footvector length" to the nearest differently-
@@ -149,6 +149,7 @@ protected:
 	// rasterLabelBuffer/nodeIsConnectingBuffer.
 	com_ptr<ID3D12Resource> jfaSeedBufferA;             // ACount uint
 	com_ptr<ID3D12Resource> jfaSeedBufferB;             // ACount uint
+	bool jfaFinalIsBufferA = false;                     // which of jfaSeedBufferA/B held the last Reinit's converged seeds -- set by RunTopologyBuild, read by ReadBackPickedTetDiagnostics for debug purposes
 	com_ptr<ID3D12Resource> nodeFootDistBuffer;         // ACount float
 
 	// -- per-node candidate/potential state, (re)seeded at init, evolved by the outer loop --
@@ -185,6 +186,8 @@ protected:
 	com_ptr<ID3D12PipelineState> surfacePso;
 	com_ptr<ID3D12RootSignature> wireframeRootSig;
 	com_ptr<ID3D12PipelineState> wireframePso;
+	com_ptr<ID3D12RootSignature> footSliceRootSig;
+	com_ptr<ID3D12PipelineState> footSlicePso;
 
 	Egg::ConstantBuffer<DistanceFrameCb> frameCb;
 	Egg::ConstantBuffer<DistanceCb>      distanceCb;
@@ -235,11 +238,23 @@ protected:
 	float pickedCornerPots[4][MAX_CANDIDATES] = {};
 	float pickedCornerCurrentVolume[4] = {};   // NodeCurrentVolume, written by smoothnessJacobiCS's Term 4
 	uint pickedCornerIsConnecting[4] = {};     // NodeIsConnecting (A-nodes only; 0 for B corners), computeConnectingNodesCS
+	float pickedCornerFootDist[4] = {};        // NodeFootDist (A-nodes only; -1 for B corners), jfaFinalizeCS -- raw, unlike pot[]'s own/suppressed sign convention
+	uint pickedCornerFootSeed[4] = {};         // raw converged JFA seed node index (A-nodes only), the input jfaFinalizeCS turned into pickedCornerFootDist -- SENTINEL_LABEL or self-index here is the smoking gun for a JFA propagation bug
 
 	bool showNodes = false;
 	bool showSurface = true;
 	bool showReference = true;
 	bool hideUniformNodes = false; // hide nodes whose structural neighbors all share its current label
+
+	// Debug: cross-sectional plane colored by NodePotential's candidate slots
+	// #0 (red channel) / #1 (green channel), see footSliceVS.hlsl/
+	// footSlicePS.hlsl -- lets you directly SEE the solved potential field
+	// instead of only reading numbers back one tet at a time via the Picked
+	// Tet panel. Originally a NodeFootDist/JFA view, repurposed.
+	bool showPotentialSlice = false;
+	int sliceAxis = 2;             // 0=X, 1=Y, 2=Z
+	int sliceIndex = 10;           // grid index along sliceAxis, clamped to [0,GridRes-1] at draw time
+	float potentialColorScale = 1.0f; // potential value mapped to full channel brightness
 
 	// Test shape: same torus/ellipsoid scene as g-BCC/g-Aequor, centered in
 	// the middle of the (positive-only) BCC lattice index space rather than
@@ -555,6 +570,7 @@ protected:
 			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(dst.Get()));
 			jfaCurrentIsA = !jfaCurrentIsA;
 		}
+		jfaFinalIsBufferA = jfaCurrentIsA;
 
 		{
 			com_ptr<ID3D12Resource>& finalSeed = jfaCurrentIsA ? jfaSeedBufferA : jfaSeedBufferB;
@@ -572,7 +588,8 @@ protected:
 		cmd->SetComputeRoot32BitConstant(0, edgeConnectivityOnly ? 1u : 0u, 0);
 		cmd->SetComputeRootUnorderedAccessView(1, rasterLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(2, nodeIsConnectingBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(3, nodeFootDistBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
 		cmd->Dispatch(BuildCandidatesAGroups, 1, 1); // ACount-based, same as buildCandidatesCS's A dispatch
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeIsConnectingBuffer.Get()));
 
@@ -1018,10 +1035,14 @@ protected:
 		UINT64 potBytes = (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float);
 		UINT64 nodeFloatBytes = (UINT64)NodeCount * sizeof(float);
 		UINT64 connectingBytes = (UINT64)ACount * sizeof(UINT);
+		UINT64 footDistBytes = (UINT64)ACount * sizeof(float);
+		UINT64 footSeedBytes = (UINT64)ACount * sizeof(UINT);
 		com_ptr<ID3D12Resource> rbCand = CreateReadbackBuffer(device.Get(), candBytes);
 		com_ptr<ID3D12Resource> rbPot = CreateReadbackBuffer(device.Get(), potBytes);
 		com_ptr<ID3D12Resource> rbCurVol = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
 		com_ptr<ID3D12Resource> rbConnecting = CreateReadbackBuffer(device.Get(), connectingBytes);
+		com_ptr<ID3D12Resource> rbFootDist = CreateReadbackBuffer(device.Get(), footDistBytes);
+		com_ptr<ID3D12Resource> rbFootSeed = CreateReadbackBuffer(device.Get(), footSeedBytes);
 
 		DX_API("reset upload allocator (pick diag)") uploadAllocator->Reset();
 		DX_API("reset upload command list (pick diag)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
@@ -1030,6 +1051,8 @@ protected:
 		cmd->CopyBufferRegion(rbPot.Get(), 0, nodePotentialBuffer.Get(), 0, potBytes);
 		cmd->CopyBufferRegion(rbCurVol.Get(), 0, nodeCurrentVolumeBuffer.Get(), 0, nodeFloatBytes);
 		cmd->CopyBufferRegion(rbConnecting.Get(), 0, nodeIsConnectingBuffer.Get(), 0, connectingBytes);
+		cmd->CopyBufferRegion(rbFootDist.Get(), 0, nodeFootDistBuffer.Get(), 0, footDistBytes);
+		cmd->CopyBufferRegion(rbFootSeed.Get(), 0, (jfaFinalIsBufferA ? jfaSeedBufferA : jfaSeedBufferB).Get(), 0, footSeedBytes);
 		DX_API("close upload command list (pick diag)") cmd->Close();
 		{
 			ID3D12CommandList* lists[] = { cmd.Get() };
@@ -1042,10 +1065,14 @@ protected:
 		float* pot = nullptr;
 		float* curVol = nullptr;
 		UINT* connecting = nullptr;
+		float* footDist = nullptr;
+		UINT* footSeed = nullptr;
 		rbCand->Map(0, nullptr, (void**)&cand);
 		rbPot->Map(0, nullptr, (void**)&pot);
 		rbCurVol->Map(0, nullptr, (void**)&curVol);
 		rbConnecting->Map(0, nullptr, (void**)&connecting);
+		rbFootDist->Map(0, nullptr, (void**)&footDist);
+		rbFootSeed->Map(0, nullptr, (void**)&footSeed);
 
 		for (uint c = 0; c < 4; c++) {
 			uint node = pickedTetNodes[c];
@@ -1062,6 +1089,8 @@ protected:
 				}
 				pickedCornerCurrentVolume[c] = 0.0f;
 				pickedCornerIsConnecting[c] = 0;
+				pickedCornerFootDist[c] = -1.0f;
+				pickedCornerFootSeed[c] = SENTINEL_LABEL;
 				continue;
 			}
 			for (uint s = 0; s < MAX_CANDIDATES; s++) {
@@ -1070,6 +1099,8 @@ protected:
 			}
 			pickedCornerCurrentVolume[c] = curVol[node];
 			pickedCornerIsConnecting[c] = (node < ACount) ? connecting[node] : 0;
+			pickedCornerFootDist[c] = (node < ACount) ? footDist[node] : -1.0f;
+			pickedCornerFootSeed[c] = (node < ACount) ? footSeed[node] : SENTINEL_LABEL;
 		}
 
 		// Independent per-tet dominant pair -- same frequency-vote rule as
@@ -1182,6 +1213,16 @@ protected:
 		ImGui::Checkbox("Show Reference Shape", &showReference);
 		ImGui::Checkbox("Hide Uniform-Neighborhood Nodes", &hideUniformNodes);
 
+		ImGui::Checkbox("Show Potential Slice", &showPotentialSlice);
+		ImGui::SameLine();
+		ImGui::TextDisabled("(debug: cross-section, red=label 0 green=label 1)");
+		if (showPotentialSlice) {
+			static const char* axisItems[] = { "X", "Y", "Z" };
+			ImGui::Combo("Slice Axis", &sliceAxis, axisItems, 3);
+			ImGui::SliderInt("Slice Index", &sliceIndex, 0, (int)GridRes - 1);
+			ImGui::SliderFloat("Potential Color Scale", &potentialColorScale, 0.05f, 5.0f);
+		}
+
 		if (dataValid) {
 			if (pickedTetValid) ImGui::Text("Picked tet (right-click): %u", pickedTetIndex);
 			else ImGui::TextDisabled("Picked tet (right-click): none (or last click missed)");
@@ -1208,9 +1249,22 @@ protected:
 						hasI[c] ? "" : "*", phiI[c],
 						hasJ[c] ? "" : "*", phiJ[c],
 						phiI[c] - phiJ[c]);
-					ImGui::Text("      CurVol=%.4f%s",
+					ImGui::Text("      CurVol=%.4f%s%s",
 						pickedCornerCurrentVolume[c],
-						pickedCornerIsConnecting[c] ? "  CONNECTING (floor pinned)" : "");
+						(pickedCornerIsConnecting[c] & 1u) ? "  CONNECTING (floor pinned)" : "",
+						(pickedCornerIsConnecting[c] & 2u) ? "  LOCAL-MAX(footdist)" : "");
+					if (pickedCornerFootDist[c] >= 0.0f) {
+						uint node = pickedTetNodes[c];
+						uint seed = pickedCornerFootSeed[c];
+						if (seed == SENTINEL_LABEL)
+							ImGui::Text("      NodeFootDist(raw)=%.6f  seed=SENTINEL (no boundary found!)", pickedCornerFootDist[c]);
+						else if (seed == node)
+							ImGui::Text("      NodeFootDist(raw)=%.6f  seed=SELF (node %u) -- BUG", pickedCornerFootDist[c], seed);
+						else
+							ImGui::Text("      NodeFootDist(raw)=%.6f  seed=node %u", pickedCornerFootDist[c], seed);
+					} else {
+						ImGui::TextDisabled("      NodeFootDist(raw)=N/A (B-node)");
+					}
 				}
 				ImGui::TextDisabled("(* = label not a candidate here, falls back to 0)");
 
@@ -1222,13 +1276,26 @@ protected:
 					report += line;
 					for (uint c = 0; c < 4; c++) {
 						uint node = pickedTetNodes[c];
+						char footDistStr[64];
+						if (pickedCornerFootDist[c] >= 0.0f) {
+							uint seed = pickedCornerFootSeed[c];
+							if (seed == SENTINEL_LABEL)
+								sprintf_s(footDistStr, sizeof(footDistStr), "%.6f (seed=SENTINEL)", pickedCornerFootDist[c]);
+							else if (seed == node)
+								sprintf_s(footDistStr, sizeof(footDistStr), "%.6f (seed=SELF -- BUG)", pickedCornerFootDist[c]);
+							else
+								sprintf_s(footDistStr, sizeof(footDistStr), "%.6f (seed=node %u)", pickedCornerFootDist[c], seed);
+						} else {
+							sprintf_s(footDistStr, sizeof(footDistStr), "N/A (B-node)");
+						}
 						sprintf_s(line, sizeof(line), "%s (node %u, %s): phi_i=%s%.6f  phi_j=%s%.6f  g=%.6f\r\n"
-							"    CurVol=%.6f  IsConnecting=%u\r\n",
+							"    CurVol=%.6f  IsConnecting=%u  NodeFootDist(raw)=%s\r\n",
 							cornerNames[c], node, (node < ACount) ? "A" : "B",
 							hasI[c] ? "" : "*", phiI[c],
 							hasJ[c] ? "" : "*", phiJ[c],
 							phiI[c] - phiJ[c],
-							pickedCornerCurrentVolume[c], pickedCornerIsConnecting[c]);
+							pickedCornerCurrentVolume[c], pickedCornerIsConnecting[c],
+							footDistStr);
 						report += line;
 					}
 					ImGui::SetClipboardText(report.c_str());
@@ -1481,6 +1548,37 @@ public:
 				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(wireframePso.GetAddressOf()));
 		}
 
+		{
+			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/footSliceVS.cso");
+			com_ptr<ID3DBlob> ps = Egg::Shader::LoadCso("Shaders/footSlicePS.cso");
+			footSliceRootSig = Egg::Shader::LoadRootSignature(device.Get(), vs.Get());
+
+			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = footSliceRootSig.Get();
+			psoDesc.VS = { vs->GetBufferPointer(), vs->GetBufferSize() };
+			psoDesc.PS = { ps->GetBufferPointer(), ps->GetBufferSize() };
+			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+			psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+			psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+			// Real plane geometry (ray-plane intersection in the PS, written
+			// to SV_Depth), same LESS/write convention as surfacePso -- it
+			// should hide behind closer real geometry and be hidden by it.
+			psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+			psoDesc.DepthStencilState.DepthEnable = TRUE;
+			psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+			psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+			psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+			D3D12_INPUT_LAYOUT_DESC emptyLayout = { nullptr, 0 };
+			psoDesc.InputLayout = emptyLayout;
+			psoDesc.NumRenderTargets = 1;
+			psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.SampleMask = UINT_MAX;
+			psoDesc.SampleDesc.Count = 1;
+			DX_API("create foot-dist slice PSO")
+				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(footSlicePso.GetAddressOf()));
+		}
+
 		DX_API("create upload command allocator.")
 			device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
 				IID_PPV_ARGS(uploadAllocator.ReleaseAndGetAddressOf()));
@@ -1598,6 +1696,22 @@ public:
 			commandList->SetPipelineState(nodePointPso.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 			commandList->DrawInstanced(4, NodeCount, 0, 0);
+		}
+
+		if (dataValid && showPotentialSlice) {
+			commandList->SetGraphicsRootSignature(footSliceRootSig.Get());
+			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
+			int clampedSliceIndex = sliceIndex < 0 ? 0 : (sliceIndex > (int)GridRes - 1 ? (int)GridRes - 1 : sliceIndex);
+			struct { uint32_t axis; float coord; float colorScale; float pad; } sliceConsts = {
+				(uint32_t)sliceAxis, (float)clampedSliceIndex * CellSize, potentialColorScale, 0.0f
+			};
+			commandList->SetGraphicsRoot32BitConstants(1, 4, &sliceConsts, 0);
+			commandList->SetGraphicsRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootUnorderedAccessView(3, nodePotentialBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
+			commandList->SetPipelineState(footSlicePso.Get());
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			commandList->DrawInstanced(3, 1, 0, 0);
 		}
 
 		if (pickedTetValid) {

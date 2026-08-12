@@ -28,7 +28,7 @@ void jfaFinalizeCS(uint3 tid : SV_DispatchThreadID)
     float dist = 0.0;
     if (seed != SENTINEL_LABEL) {
         bool isB; uint3 sIjk; DecodeNodeIndex(seed, isB, sIjk);
-        dist = length(APos((int3)tid) - APos((int3)sIjk));
+        dist = length(APos((int3)tid) - APos((int3)sIjk)) + 0.5;
     }
     NodeFootDist[idx] = dist;
 }

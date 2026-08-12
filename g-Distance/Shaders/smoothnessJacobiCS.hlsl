@@ -482,7 +482,10 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     // that only activates when this node's own reconstructed volume dips
     // below VolumeFloor (default 1 unit, DistanceCb.hlsli) -- if it's
     // already at or above the floor, there is NO penalty at all.
-    if (ownSlot >= 0 && node < ACount && NodeIsConnecting[node] != 0) {
+    // NodeIsConnecting is a 2-bit flag field now (see computeConnectingNodesCS.hlsl)
+    // -- bit 0 (value 1) is this "connecting" flag; bit 1 is an unrelated
+    // local-max-of-NodeFootDist flag not consulted by the solve, so mask it.
+    if (ownSlot >= 0 && node < ACount && (NodeIsConnecting[node] > 0)) {
         float violation = VolumeFloor - myCurrentVolume;
         if (violation > 0.0 && myKSum != 0.0) {
             grad[ownSlot] += -2.0 * VolumeWeight * violation * myKSum;
