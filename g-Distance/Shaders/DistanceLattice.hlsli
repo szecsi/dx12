@@ -83,10 +83,9 @@ static const int3 SameLatticeOffsets[26] = {
 // q=(i+j,i+k,j+k) for A-node (i,j,k) and q=(i+j+1,i+k+1,j+k+1) for B-node
 // (i,j,k); node type is recoverable as the parity of q.x+q.y+q.z (even=A,
 // odd=B). No buffer stores tet connectivity anywhere in this pipeline --
-// every consumer (smoothnessJacobiCS.hlsl, extractSurfaceCS.hlsl,
-// assignInterfacePairsCS.hlsl) computes a tet's corners, a node's incident
-// tets, and a tet's cross-cube neighbors on the fly, purely from a tet or
-// node index plus the small constant tables below. Tables derived and
+// every consumer (smoothnessJacobiCS.hlsl, extractSurfaceCS.hlsl) computes
+// a tet's corners, a node's incident tets, and an edge's tet-fan on the fly,
+// purely from a tet or node index plus the small constant tables below. Tables derived and
 // cross-verified earlier this session (see the approved plan,
 // soft-stargazing-biscuit.md) -- NOT the same as the initially proposed
 // edgeMap, which had a bug caught during derivation.
@@ -113,23 +112,6 @@ static const int3 CubeVertexOffsets[6][2] = {
 static const int3 RingBetween[6] = {
     int3(1, 0, 0), int3(1, 1, 0), int3(0, 1, 0), int3(0, 1, 1), int3(0, 0, 1), int3(1, 0, 1)
 };
-
-// Cross-cube ("cap") neighbors: tet slot i's D0-cap face crosses to the
-// neighbor cube at D0CapOffset[i] (always -1 along one axis), landing on
-// slot D0CapTargetSlot[i] there; its D1-cap face crosses to D1CapOffset[i]
-// (always +1), landing on D1CapTargetSlot[i]. The two target-slot tables
-// are exact inverse permutations of each other -- the consistency check
-// that caught the original edgeMap's bug (crossing to the neighbor and
-// back must return you to where you started).
-static const int3 D0CapOffset[6] = {
-    int3(0, -1, 0), int3(0, 0, -1), int3(0, 0, -1), int3(-1, 0, 0), int3(-1, 0, 0), int3(0, -1, 0)
-};
-static const uint D0CapTargetSlot[6] = { 2, 5, 4, 1, 0, 3 };
-
-static const int3 D1CapOffset[6] = {
-    int3(1, 0, 0), int3(1, 0, 0), int3(0, 1, 0), int3(0, 1, 0), int3(0, 0, 1), int3(0, 0, 1)
-};
-static const uint D1CapTargetSlot[6] = { 4, 3, 0, 5, 2, 1 };
 
 // Cube-origin bounding box for q-space dispatch: every candidate cube
 // origin in this box gets a permanent 6-tet slot (tetBase=6*linearIndex)
@@ -233,26 +215,18 @@ void GetTetCornerQs(uint tetIndex, out int3 q0, out int3 q1, out int3 q2, out in
     q3 = C + CubeVertexOffsets[slot][1];
 }
 
-// Convenience wrapper for callers that only need corner IDENTITY (not
-// position), e.g. assignInterfacePairsCS.hlsl's label vote.
-uint4 GetTetCornerRefs(uint tetIndex)
-{
-    int3 q0, q1, q2, q3;
-    GetTetCornerQs(tetIndex, q0, q1, q2, q3);
-    return uint4(ResolveCorner(q0), ResolveCorner(q1), ResolveCorner(q2), ResolveCorner(q3));
-}
-
-// Packed candidate-label accessor: nodeCandidateLabelBuffer stores ONE uint
-// per node (not per slot) -- MAX_CANDIDATES(6) 5-bit fields packed into the
-// low 30 bits, see DistanceConfig.hlsli's SENTINEL_CANDIDATE comment. Safe
-// as a plain (non-atomic) bitfield because every node's candidate slots are
-// written exactly once, by exactly one thread, in buildCandidatesCS.hlsl --
-// no cross-thread read-modify-write ever touches this buffer afterward
-// (only NodePotential/NodePotentialScratch, which stay one float per slot,
-// change during the solve).
+// Packed candidate-label accessor: nodeCandidateLabelBuffer stores TWO
+// uints per node -- MAX_CANDIDATES(8) 8-bit fields, 4 packed per word (word
+// = slot/4, shift = (slot%4)*8), see DistanceConfig.hlsli's
+// SENTINEL_CANDIDATE comment. Safe as a plain (non-atomic) bitfield because
+// every node's candidate slots are written exactly once, by exactly one
+// thread, in buildCandidatesCS.hlsl -- no cross-thread read-modify-write
+// ever touches this buffer afterward (only NodePotential/
+// NodePotentialScratch, which stay one float per slot, change during the
+// solve).
 uint GetCandidateLabelAt(RWStructuredBuffer<uint> buf, uint node, uint slot)
 {
-    return (buf[node] >> (slot * 5u)) & 0x1Fu;
+    return (buf[node * 2u + slot / 4u] >> ((slot % 4u) * 8u)) & 0xFFu;
 }
 
 // Candidate-label potential lookup for a tet corner, real or virtual.
@@ -265,7 +239,7 @@ uint GetCandidateLabelAt(RWStructuredBuffer<uint> buf, uint node, uint slot)
 // back the same way each caller already does for "label not present here".
 float GetCornerPotential(uint cornerRef, uint label, RWStructuredBuffer<uint> candLabel, RWStructuredBuffer<float> candPot, float missingFallback)
 {
-    if (cornerRef == SENTINEL_LABEL) return (label == 0u) ? 1.0 : missingFallback;
+    if (cornerRef == SENTINEL_LABEL) return (label == 0u) ? 0.0 : missingFallback;
     for (uint s = 0; s < MAX_CANDIDATES; s++) {
         if (GetCandidateLabelAt(candLabel, cornerRef, s) == label) return candPot[cornerRef * MAX_CANDIDATES + s];
     }
@@ -295,15 +269,23 @@ void GetCornerTopLabel(uint cornerRef, RWStructuredBuffer<uint> candLabel, RWStr
 // position (via RingBetween's slot pairing). No data read/validity check
 // beyond the bounds test: every in-box cube's tets are always meaningful
 // now (see the header comment above), so there's nothing else to check.
+// Q-space coordinate of a global node index -- the forward bccToRhombo
+// transform (A: q=(i+j,i+k,j+k), B: q=(i+j+1,i+k+1,j+k+1)), shared by
+// GatherIncidentTets and GatherEdgeTets/edge-centric neighbor lookup below.
+int3 NodeQ(uint node)
+{
+    bool isB; uint3 idx;
+    DecodeNodeIndex(node, isB, idx);
+    return isB
+        ? int3((int)idx.x + (int)idx.y + 1, (int)idx.x + (int)idx.z + 1, (int)idx.y + (int)idx.z + 1)
+        : int3((int)idx.x + (int)idx.y, (int)idx.x + (int)idx.z, (int)idx.y + (int)idx.z);
+}
+
 uint GatherIncidentTets(uint node, out uint tets[MAX_INCIDENT_TETS])
 {
     for (uint z = 0; z < MAX_INCIDENT_TETS; z++) tets[z] = SENTINEL_LABEL;
 
-    bool isB; uint3 idx;
-    DecodeNodeIndex(node, isB, idx);
-    int3 q = isB
-        ? int3((int)idx.x + (int)idx.y + 1, (int)idx.x + (int)idx.z + 1, (int)idx.y + (int)idx.z + 1)
-        : int3((int)idx.x + (int)idx.y, (int)idx.x + (int)idx.z, (int)idx.y + (int)idx.z);
+    int3 q = NodeQ(node);
 
     uint count = 0;
     {
@@ -331,21 +313,196 @@ uint GatherIncidentTets(uint node, out uint tets[MAX_INCIDENT_TETS])
     return count;
 }
 
-// Cross-cube ("cap") neighbor tets of a tet, computed directly -- no
-// TetFaceNeighbors buffer. SENTINEL_LABEL means the neighbor cube's origin
-// falls outside the (deliberately oversized) dispatch box entirely -- the
-// only remaining "doesn't exist" case, confined to the very edge of the
-// box, never affecting a tet anywhere near real data.
-uint2 GetCrossNeighbors(uint tetIndex)
-{
-    uint cubeLin = tetIndex / 6u;
-    uint slot = tetIndex % 6u;
-    int3 C = CubeOriginFromLinear(cubeLin);
+// Spatial (GridRes-agnostic) cap tables for a tet slot's two OUT-OF-CUBE
+// face-adjacent partners -- D0-cap and D1-cap cross into a NEIGHBORING
+// cube's tet; fanNext/fanPrev ((slot+1)%6 / (slot+5)%6) stay within the SAME
+// cube, no table needed. Cube-ORIGIN offsets + a target slot, not flat
+// tet-index offsets -- unlike the flat PartnerOffset table this project
+// briefly used (removed once GridRes became a runtime GUI value: flat
+// tet-index strides depend on CubeBoundDim, these spatial offsets don't).
+// Re-derived from GetTetCornerQs' own per-slot corner assignment, verified
+// via a standalone reciprocity check (D0-cap[s] and D1-cap[D0CapTargetSlot[s]]
+// are exact negations of each other).
+static const int3 D0CapOffset[6] = { { 0, -1, 0 }, { 0, 0, -1 }, { 0, 0, -1 }, { -1, 0, 0 }, { -1, 0, 0 }, { 0, -1, 0 } };
+static const uint D0CapTargetSlot[6] = { 2, 5, 4, 1, 0, 3 };
+static const int3 D1CapOffset[6] = { { 1, 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0, 0, 1 } };
+static const uint D1CapTargetSlot[6] = { 4, 3, 0, 5, 2, 1 };
 
-    uint lin0, lin1;
-    uint cross0 = CubeLinearIndex(C + D0CapOffset[slot], lin0) ? (lin0 * 6 + D0CapTargetSlot[slot]) : SENTINEL_LABEL;
-    uint cross1 = CubeLinearIndex(C + D1CapOffset[slot], lin1) ? (lin1 * 6 + D1CapTargetSlot[slot]) : SENTINEL_LABEL;
-    return uint2(cross0, cross1);
+// The 4 face-adjacent partners of tet `tetX`: relation 0=fanNext,
+// 1=fanPrev (same cube), 2=D0cap, 3=D1cap (neighboring cube, via the tables
+// above). Returns false if the partner cube falls outside the current
+// grid's bounding box (edge of the domain), same convention CubeLinearIndex
+// itself uses.
+bool GetFaceAdjacentPartner(uint tetX, uint relation, out uint P)
+{
+    P = 0u;
+    uint cubeLin = tetX / 6u, slot = tetX % 6u;
+    if (relation == 0u) { P = cubeLin * 6u + (slot + 1u) % 6u; return true; }
+    if (relation == 1u) { P = cubeLin * 6u + (slot + 5u) % 6u; return true; }
+    int3 C = CubeOriginFromLinear(cubeLin);
+    uint lin;
+    if (relation == 2u) {
+        if (!CubeLinearIndex(C + D0CapOffset[slot], lin)) return false;
+        P = lin * 6u + D0CapTargetSlot[slot];
+        return true;
+    }
+    if (!CubeLinearIndex(C + D1CapOffset[slot], lin)) return false;
+    P = lin * 6u + D1CapTargetSlot[slot];
+    return true;
+}
+
+// 2-ring incident-tet gather: this node's own incident tets (ring 1, via
+// GatherIncidentTets above) plus every tet FACE-ADJACENT to a ring-1 tet
+// (ring 2, via GetFaceAdjacentPartner's 4 relations per tet), each tet
+// listed at most once overall. Note ring 2 is NOT "every tet incident to a
+// ring-1 corner node" (that would pull in a much wider, node-incidence-based
+// set) -- only tets sharing an actual face (3 corners) with a ring-1 tet
+// qualify. 3 of a ring-1 tet's 4 face-adjacent partners share the face that
+// includes `node` itself, so they're already in ring 1; only the partner
+// across the ONE face opposite `node`'s own corner is genuinely new -- so
+// ring 2 contributes at most 1 new tet per ring-1 tet in practice (<=~24),
+// which is what the 48 cap (MAX_INCIDENT_TETS2, DistanceConfig.hlsli) is
+// sized around.
+uint GatherIncidentTets2(uint node, out uint tets[MAX_INCIDENT_TETS2])
+{
+    for (uint z = 0; z < MAX_INCIDENT_TETS2; z++) tets[z] = SENTINEL_LABEL;
+    uint count = 0;
+
+    uint ring1[MAX_INCIDENT_TETS];
+    uint ring1Count = GatherIncidentTets(node, ring1);
+    for (uint r1 = 0; r1 < ring1Count && count < MAX_INCIDENT_TETS2; r1++) tets[count++] = ring1[r1];
+
+    for (uint t = 0; t < ring1Count; t++) {
+        for (uint rel = 0; rel < 4; rel++) {
+            uint P;
+            if (!GetFaceAdjacentPartner(ring1[t], rel, P)) continue;
+            bool found = false;
+            for (uint e = 0; e < count; e++) if (tets[e] == P) { found = true; break; }
+            if (!found && count < MAX_INCIDENT_TETS2) tets[count++] = P;
+        }
+    }
+
+    return count;
+}
+
+// Edge-centric connectivity: the 14 actual geometric neighbors of any node
+// (opposite-sublattice near + same-sublattice far), and -- for a given such
+// edge -- the tets that actually contain it. Replaces the old per-cube
+// TetInterfacePair vote entirely: an "active pair" is now just (this node's
+// own winning label, a neighbor's own winning label), read directly, with
+// nothing to disagree about. See the design discussion for the derivation.
+//
+// Offsets derived directly in q-space from the bccToRhombo transform
+// (translation-invariant, so the SAME 14 offsets apply whether the center
+// node is A or B):
+//   8 opposite-sublattice ("near") neighbors: the 6 signed axis unit
+//     vectors, plus +-(1,1,1) (exactly the D0<->D1 relationship already
+//     used elsewhere in this file) -- always 6 tets per edge.
+//   6 same-sublattice ("far") neighbors: +-(1,1,0)-type vectors (sum of two
+//     axis vectors) -- always 4 tets per edge.
+static const int3 NodeNeighborOffsets[14] = {
+    int3(1, 0, 0), int3(-1, 0, 0), int3(0, 1, 0), int3(0, -1, 0), int3(0, 0, 1), int3(0, 0, -1),
+    int3(1, 1, 1), int3(-1, -1, -1),
+    int3(1, 1, 0), int3(-1, -1, 0), int3(1, 0, 1), int3(-1, 0, -1), int3(0, 1, 1), int3(0, -1, -1)
+};
+
+// The 8 corner roles of one cube, in the same order GetTetCornerQs/
+// RingBetween use: D0, D1, ring[0..5]. Duplicated here (rather than built
+// from D0/D1/RingBetween at HLSL scope) only because HLSL static-const
+// array initializers can't reference another array's elements; kept
+// byte-for-byte identical to RingBetween's own values.
+static const int3 CornerOffsets8[8] = {
+    int3(0, 0, 0), int3(1, 1, 1),
+    int3(1, 0, 0), int3(1, 1, 0), int3(0, 1, 0), int3(0, 1, 1), int3(0, 0, 1), int3(1, 0, 1)
+};
+
+// Which of the 8 corner roles a LOCAL (cube-relative) offset is -- always
+// exactly one of the 8 for any offset actually produced by GatherEdgeTets
+// below (guaranteed by construction: see its own comment).
+int CornerRoleIndex(int3 localOffset)
+{
+    for (int r = 0; r < 8; r++) if (all(CornerOffsets8[r] == localOffset)) return r;
+    return -1; // unreachable for a valid edge offset
+}
+
+// Given two corner roles (0=D0, 1=D1, 2..7=ring[0..5]) that are edge-
+// adjacent within one cube (guaranteed for the role pairs GatherEdgeTets
+// ever passes in), returns which tet slot(s) of that cube share that edge:
+// D0-D1 (the main diagonal) is shared by all 6; a D0/D1-to-ring edge (a
+// cube edge or its "long" counterpart) by 2; a ring-to-ring edge (the
+// hexagonal path around the diagonal) by exactly 1 -- all read directly off
+// GetTetCornerQs' own per-slot corner assignment (q2=ring[slot-1],
+// q3=ring[slot]), not a new independently-derived rule.
+uint EdgeRoleSlots(int roleA, int roleB, out uint slots[6])
+{
+    if ((roleA == 0 && roleB == 1) || (roleA == 1 && roleB == 0)) {
+        for (uint s = 0; s < 6; s++) slots[s] = s;
+        return 6;
+    }
+    if (roleA == 0 || roleA == 1 || roleB == 0 || roleB == 1) {
+        int ringIdx = (roleA == 0 || roleA == 1) ? (roleB - 2) : (roleA - 2);
+        slots[0] = (uint)ringIdx;
+        slots[1] = (uint)((ringIdx + 1) % 6);
+        return 2;
+    }
+    int ra = roleA - 2, rb = roleB - 2;
+    slots[0] = (uint)((rb == (ra + 1) % 6) ? rb : ra);
+    return 1;
+}
+
+// Gathers the (up to 6) global tet indices sharing the edge (Q, Q+D), for D
+// one of the 14 NodeNeighborOffsets above. General algorithm, not 14
+// hardcoded special cases: for each axis, D_axis==0 means the candidate
+// cube origin could be Q_axis-1 OR Q_axis (2 choices, doubling the running
+// candidate set); D_axis==+-1 forces exactly one choice. So a diagonal
+// offset (0 free axes) yields 1 candidate cube (6 slots -- the whole cube's
+// fan); an axis offset (2 free axes) yields 4 candidate cubes (6 tets
+// total: 2 contribute a D-ring edge each, 2 contribute a ring-ring edge
+// each); a far offset (1 free axis) yields 2 candidate cubes (4 tets total,
+// both D-ring edges). Every candidate's two corner roles are guaranteed to
+// land in {0,1}^3 (i.e. always one of the 8 known corner roles) by
+// construction of how the candidates are generated -- see the design
+// discussion for why a "bad" (non-edge, e.g. face-diagonal) role pair can
+// never arise for these specific 14 offsets.
+uint GatherEdgeTets(int3 Q, int3 D, out uint tets[6])
+{
+    int3 cand[4] = { Q, Q, Q, Q };
+    uint nCand = 1;
+
+    if (D.x == 0) {
+        for (uint c = 0; c < nCand; c++) cand[nCand + c] = cand[c];
+        for (uint c = 0; c < nCand; c++) cand[c].x -= 1;
+        nCand *= 2;
+    } else if (D.x == -1) {
+        for (uint c = 0; c < nCand; c++) cand[c].x -= 1;
+    }
+    if (D.y == 0) {
+        for (uint c = 0; c < nCand; c++) cand[nCand + c] = cand[c];
+        for (uint c = 0; c < nCand; c++) cand[c].y -= 1;
+        nCand *= 2;
+    } else if (D.y == -1) {
+        for (uint c = 0; c < nCand; c++) cand[c].y -= 1;
+    }
+    if (D.z == 0) {
+        for (uint c = 0; c < nCand; c++) cand[nCand + c] = cand[c];
+        for (uint c = 0; c < nCand; c++) cand[c].z -= 1;
+        nCand *= 2;
+    } else if (D.z == -1) {
+        for (uint c = 0; c < nCand; c++) cand[c].z -= 1;
+    }
+
+    uint count = 0;
+    for (uint ci = 0; ci < nCand; ci++) {
+        int3 C = cand[ci];
+        int roleA = CornerRoleIndex(Q - C);
+        int roleB = CornerRoleIndex((Q + D) - C);
+        uint slots[6];
+        uint nSlots = EdgeRoleSlots(roleA, roleB, slots);
+        uint cubeLin;
+        if (!CubeLinearIndex(C, cubeLin)) continue; // candidate cube outside the (deliberately oversized) dispatch box
+        for (uint si = 0; si < nSlots; si++) tets[count++] = cubeLin * 6 + slots[si];
+    }
+    return count;
 }
 
 // Standard affine/barycentric shape-function gradients for a tetrahedron:

@@ -29,6 +29,10 @@
 //                      of Line's at most 2, stress-testing the connecting-
 //                      node topology test and volume floor against a
 //                      genuinely higher-connectivity thin feature.
+//   8 Box2x2x2:        the single A-cube [c,c+1]^3 (all 8 corners), label 1
+//                      -- the smallest genuinely-3D solid feature, exercises
+//                      every B-node/tet fully interior to one filled A-cube
+//                      without any of Line/Slab's 1D/2D degeneracy.
 #define RasterSig "RootFlags(0)," \
     "CBV(b1)," \
     "UAV(u0)," \
@@ -66,6 +70,8 @@ void rasterLabelCS(uint3 tid : SV_DispatchThreadID)
             hit = (d.x == d.y && d.y == d.z && abs(d.x) <= PatternHalfLen);
         } else if (ShapeKind == 6) {
             hit = (d.z == 0 && abs(d.x) <= PatternHalfLen && abs(d.y) <= PatternHalfLen);
+        } else if (ShapeKind == 8) {
+            hit = (d.x == 0 || d.x == 1) && (d.y == 0 || d.y == 1) && (d.z == 0 || d.z == 1);
         }
         if (hit) label = 1;
     }

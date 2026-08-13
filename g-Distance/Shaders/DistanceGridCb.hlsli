@@ -21,7 +21,7 @@ using namespace Egg::Math;
 // compile-time GRID_RES; now the grid resolution is a GUI slider (applied on
 // Reinitialize), so every value derived from it must be read from this
 // cbuffer instead. DistanceLattice.hlsli's functions (AIdx/BIdx/ResolveCorner
-// /QWorldPos/GetTetCornerQs/GatherIncidentTets/GetCrossNeighbors/etc.) are
+// /QWorldPos/GetTetCornerQs/GatherIncidentTets/GatherEdgeTets/etc.) are
 // otherwise UNCHANGED -- they already just reference GridRes/BDim/ACount/
 // CubeBoundDim/etc. by name; only the declaration of those names moved here.
 //

@@ -3,14 +3,25 @@
 #include "DistanceSurface.hlsli"
 
 // Render-only postprocess, run once after the solve settles (not part of the
-// optimization, not run per Jacobi sweep): since v1 only ever tracks 2
-// competing labels per tet (TetInterfacePair), the in-tet interface is a
-// single plane -- marching tetrahedra on the scalar field g = phi_i - phi_j
-// (affine over the tet) -- so a tet's surface fragment is at most one
-// triangle (1-3 vertex split) or one quad, i.e. 2 triangles (2-2 split).
-// Always writes exactly 6 vertices per tet (2 triangles) into a fixed-size
-// buffer; unused triangles are collapsed to a single degenerate point (zero
-// area, never rasterizes) -- same "always-fixed-stride, degenerate-collapse
+// optimization, not run per Jacobi sweep): a tet's active label pair
+// (li,lj) is picked INDEPENDENTLY per tet now (no TetInterfacePair/
+// assignInterfacePairsCS.hlsl at all -- removed along with the smoothness
+// solve's cube-level vote, see the edge-centric design discussion) --
+// frequency-count this tet's own 4 corners' CURRENT winning labels
+// (GetCornerTopLabel), top-2 by frequency, tie-broken by ascending label.
+// Purely a function of this one tet's own 4 corners, no cross-tet
+// dependency, so it can never disagree with a neighboring tet's own pick
+// the way the old cube-vote could -- accepted as an approximation for
+// genuine 3+-label tets (there's no single pair that renders a triple
+// junction "correctly" anyway; see the design discussion).
+//
+// Once (li,lj) is picked, the in-tet interface is a single plane --
+// marching tetrahedra on the scalar field g = phi_i - phi_j (affine over
+// the tet) -- so a tet's surface fragment is at most one triangle (1-3
+// vertex split) or one quad, i.e. 2 triangles (2-2 split). Always writes
+// exactly 6 vertices per tet (2 triangles) into a fixed-size buffer;
+// unused triangles are collapsed to a single degenerate point (zero area,
+// never rasterizes) -- same "always-fixed-stride, degenerate-collapse
 // inactive slots" pattern used throughout this codebase (e.g.
 // particlePointVS.hlsl's SENTINEL_LABEL handling).
 //
@@ -25,12 +36,11 @@
 // WINDOWED: dispatched over WindowTetCount (a small, GridRes-independent
 // render window, see DistanceGridCb.hlsli), not the whole domain -- the
 // grid can be huge (up to GridRes=256), but SurfaceVertices only needs to
-// hold what's actually rendered. TetInterfacePair, however, is solved over
-// the WHOLE domain (smoothnessJacobiCS.hlsl needs it everywhere real nodes
-// exist, not just the window), so every thread here works in two index
+// hold what's actually rendered. Every thread here works in two index
 // spaces: LOCAL (0..WindowTetCount, where it writes in SurfaceVertices) and
-// GLOBAL (the real domain-wide tetIndex, where it reads TetInterfacePair
-// and computes corners/positions via the unchanged GetTetCornerQs).
+// GLOBAL (the real domain-wide tetIndex, where it reads NodeCandidateLabel/
+// NodePotential and computes corners/positions via the unchanged
+// GetTetCornerQs).
 //
 // A q-space axis-aligned box is NOT a compact region in real space -- the
 // bccToRhombo change of basis is a SHEAR, so an axis-aligned q-box's real-
@@ -45,13 +55,11 @@
     "UAV(u0)," \
     "UAV(u1)," \
     "UAV(u2)," \
-    "UAV(u3)," \
     "CBV(b0)"
 
-RWStructuredBuffer<uint2>  TetInterfacePair : register(u0);
-RWStructuredBuffer<uint>   NodeCandidateLabel : register(u1);
-RWStructuredBuffer<float>  NodePotential : register(u2);
-RWStructuredBuffer<SurfaceVertex> SurfaceVertices : register(u3);
+RWStructuredBuffer<uint>   NodeCandidateLabel : register(u0);
+RWStructuredBuffer<float>  NodePotential : register(u1);
+RWStructuredBuffer<SurfaceVertex> SurfaceVertices : register(u2);
 
 // A missing candidate means "this label is not locally viable here" -- e.g.
 // a corner deep in one label's territory that never picked up the other
@@ -132,13 +140,44 @@ void extractSurfaceCS(uint3 tid : SV_DispatchThreadID)
         if (!IsWithinRealWindow(cubeOriginCheck)) { WriteDegenerate(base); return; }
     }
 
-    uint2 pair = TetInterfacePair[globalT];
-    if (pair.x == pair.y) { WriteDegenerate(base); return; }
-    uint li = pair.x, lj = pair.y;
-
     int3 q0, q1, q2, q3; GetTetCornerQs(globalT, q0, q1, q2, q3);
     int3 qArr[4] = { q0, q1, q2, q3 };
     uint verts[4] = { ResolveCorner(q0), ResolveCorner(q1), ResolveCorner(q2), ResolveCorner(q3) };
+
+    // Independent per-tet dominant pair: this tet's own 4 corners' current
+    // winning labels, frequency-counted, top-2 by frequency (ties broken by
+    // ascending label) -- same rule assignInterfacePairsCS.hlsl used to
+    // apply per-cube, now purely local to this one tet.
+    uint li, lj;
+    {
+        uint cornerLabels[4];
+        for (uint cc = 0; cc < 4; cc++) {
+            float unusedPot;
+            GetCornerTopLabel(verts[cc], NodeCandidateLabel, NodePotential, cornerLabels[cc], unusedPot);
+        }
+        uint uniqueLabels[4] = { SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE, SENTINEL_CANDIDATE };
+        int freq[4] = { 0, 0, 0, 0 };
+        uint nUnique = 0;
+        for (uint cc2 = 0; cc2 < 4; cc2++) {
+            uint l = cornerLabels[cc2];
+            bool found = false;
+            for (uint u = 0; u < nUnique; u++) if (uniqueLabels[u] == l) { freq[u]++; found = true; break; }
+            if (!found) { uniqueLabels[nUnique] = l; freq[nUnique] = 1; nUnique++; }
+        }
+        for (uint p = 0; p < 4; p++) {
+            for (uint s = 0; s < 3; s++) {
+                bool doSwap = (freq[s] < freq[s + 1]) || (freq[s] == freq[s + 1] && uniqueLabels[s] > uniqueLabels[s + 1]);
+                if (doSwap) {
+                    int tf = freq[s]; freq[s] = freq[s + 1]; freq[s + 1] = tf;
+                    uint tl = uniqueLabels[s]; uniqueLabels[s] = uniqueLabels[s + 1]; uniqueLabels[s + 1] = tl;
+                }
+            }
+        }
+        li = uniqueLabels[0];
+        lj = (freq[1] > 0) ? uniqueLabels[1] : li;
+        if (lj < li) { uint tmp = li; li = lj; lj = tmp; }
+    }
+    if (li == lj) { WriteDegenerate(base); return; }
 
     float3 P[4];
     float g[4];

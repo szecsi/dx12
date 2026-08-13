@@ -1,4 +1,5 @@
 Buffer: rasterLabelBuffer
+Role: input
 Type: uint
 Element count: ACount = 8,000
 Type × count: uint × 8,000
@@ -7,6 +8,7 @@ Read by: buildCandidatesCS, computeConnectingNodesCS
 Description: Ground-truth input label per A-node (rasterized from the test shape).
 ────────────────────────────────────────
 Buffer: tetsBuffer
+Role: indexing!!!
 Type: uint4
 Element count: TetCount = 77,976
 Type × count: uint4 × 77,976
@@ -15,6 +17,7 @@ Read by: buildIncidentCS, buildTetFaceNeighborsCS, assignInterfacePairsCS, smoot
 Description: Static disphenoid connectivity: (A0, A1, B0, B1) global node indices per tet.
 ────────────────────────────────────────
 Buffer: nodeIncidentCountBuffer
+Role: indexing!!!
 Type: uint
 Element count: NodeCount = 14,859
 Type × count: uint × 14,859
@@ -23,6 +26,7 @@ Read by: buildTetFaceNeighborsCS, smoothnessJacobiCS
 Description: Per-node count of tets touching it (reverse-adjacency degree).
 ────────────────────────────────────────
 Buffer: nodeIncidentTetsBuffer
+Role: indexing!!!
 Type: uint
 Element count: NodeCount * MaxIncidentTets = 14,859 × 32 = 475,488
 Type × count: uint × 475,488
@@ -31,6 +35,7 @@ Read by: buildTetFaceNeighborsCS, smoothnessJacobiCS
 Description: Fixed-capacity per-node list of incident tet indices.
 ────────────────────────────────────────
 Buffer: tetFaceNeighborsBuffer
+Role: indexing!!!
 Type: uint2
 Element count: TetCount = 77,976
 Type × count: uint2 × 77,976
@@ -39,6 +44,7 @@ Read by: smoothnessJacobiCS
 Description: Cross-orientation neighbor tet indices per tet (SENTINEL_LABEL = none).
 ────────────────────────────────────────
 Buffer: nodeIsConnectingBuffer
+Role: preproc
 Type: uint (0/1)
 Element count: ACount = 8,000
 Type × count: uint × 8,000
@@ -48,32 +54,82 @@ Description: Flags an A-node as the sole local neighborhood (topology pin for th
 floor).
 ────────────────────────────────────────
 Buffer: nodeCandidateLabelBuffer
+Role: preproc
 Type: uint
 Element count: NodeCount * 8 = 118,872
+Type × count: uint × 118,872
+Written by: buildCandidatesCS
+Read by: assignInterfacePairsCS, smoothnessJacobiCS, extractSurfaceCS, nodePointVS
 Description: Up to 8 candidate label IDs per node (SENTINEL_LABEL = unused slot).
 ────────────────────────────────────────
 Buffer: nodePotentialBuffer
+Role: iterated
 Type: float
 Element count: NodeCount * 8 = 118,872
+Type × count: float × 118,872
+Written by: buildCandidatesCS (initial seed), commitPotentialCS (copy-back from scratch)
+Read by: assignInterfacePairsCS, smoothnessJacobiCS, extractSurfaceCS, nodePointVS
 Description: Current raw potential per (node, candidate-slot) — Jacobi read buffer.
 ────────────────────────────────────────
 Buffer: nodePotentialScratchBuffer
+Role: inter-iteration
 Type: float
 Element count: NodeCount * 8 = 118,872
+Type × count: float × 118,872
+Written by: smoothnessJacobiCS
+Read by: commitPotentialCS
 Description: Jacobi write buffer, committed back into nodePotentialBuffer each sweep.
 ────────────────────────────────────────
 Buffer: tetInterfacePairBuffer
+Role: inter-iteration
 Type: uint2
 Element count: TetCount = 77,976
+Type × count: uint2 × 77,976
+Written by: assignInterfacePairsCS
+Read by: smoothnessJacobiCS, extractSurfaceCS
 Description: Current active (labelI, labelJ) per tet, re-derived each outer round by assignInterfacePairsCS.
-────────────────────────────────────────
-Buffer: nodeCurrentVolumeBuffer
-Type: float
-Element count: NodeCount = 14,859
-Description: Each node's reconstructed volume under its current winning label, written every Jacobi sweep (feeds the
-volume-floor term).
-────────────────────────────────────────
-Buffer: surfaceVertexBuffer
-Type: SurfaceVertex (32 bytes: pos+normal+labelI+labelJ)
-Element count: TetCount * 6 = 467,856
-Description: Extracted render-only surface triangles (up to 2 triangles/6 verts per tet crossing).
+
+32k gsm, 32 bytes coalesced reads needed
+per node: 8 bytes candidate lists, 8*4=32 bytes potentials?
+int4 candi + pot? 16 bits per candi, 7 bits label, 9 bits poti
+~40 bytes per node input, 8 bytes for li, lj, 32 bytes for gradiens
+max. 256 nodes
+3x3 + 2x2 = 13 per layer
+process 4x4x4 + 4x4x4 = 128 nodes  -> compute 2x2x2x2 = 16 targets
+
+16 targets
+27 candidates examined per target (1+6+8+12)
+4 targets per warp, sequentially, in turns -> 4 warps per group -> 128 threads per group
+
+pick li, lj from leader (must jigger grid in iterations to rotate leaders)
+mine li, lj potentials
+
+compute grad li, grad lj for wedges
+wegdes: 4x4x4x2x6 = 768, because 6 for every node along rhomb diagonal
+768*2*3*4 = 18k
+
+// smoothness
+1 wave per target
+there are 6*4=24 faces, 24 inner + 24 outer = 48 wedges
+6 faces * 4 wedge-pairs + 12 edges = 36 inner wedge-pairs
+24 inner-outer wedge pair
+36 inner + 24 inner-outer wedge pairs = 60 wedge pairs
+2 fullish waves computing differences
+wave parallel reduction to a single addition
+
+3*3*3 nodes * 3 faces * 4 wedges + 3*3 missing cube faces * 3 axes * 4 in pyramid = 324 + 108 = 432 wedges
+indexing by face
+(x|y|z) x [0..2,0..2,0..3] x [0..1,0..1]
+3*3*3*4*2*2 = 432
+
+
+// volume
+24 inner wedges
+wave parallel reduction to a single addition
+
+// regularization
+
+// margin
+
+write result
+

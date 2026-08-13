@@ -74,9 +74,13 @@
   <ItemGroup>
     <FxCompile Include="Shaders\rasterLabelCS.hlsl" />
     <FxCompile Include="Shaders\computeConnectingNodesCS.hlsl" />
+    <FxCompile Include="Shaders\jfaInitCS.hlsl" />
+    <FxCompile Include="Shaders\jfaStepCS.hlsl" />
+    <FxCompile Include="Shaders\jfaFinalizeCS.hlsl" />
     <FxCompile Include="Shaders\buildCandidatesCS.hlsl" />
-    <FxCompile Include="Shaders\assignInterfacePairsCS.hlsl" />
+    <FxCompile Include="Shaders\snapshotWinnerCS.hlsl" />
     <FxCompile Include="Shaders\smoothnessJacobiCS.hlsl" />
+    <FxCompile Include="Shaders\smoothnessJacobiBlockCS.hlsl" />
     <FxCompile Include="Shaders\commitPotentialCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl" />
     <FxCompile Include="Shaders\raymarchVS.hlsl">
@@ -101,6 +105,12 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
     <FxCompile Include="Shaders\wireframePS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\footSliceVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\footSlicePS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
     </FxCompile>
   </ItemGroup>
