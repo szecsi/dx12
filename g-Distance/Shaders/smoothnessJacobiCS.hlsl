@@ -566,8 +566,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             // Hard step clamp -- plain per-unknown-diagonal Jacobi on this
             // coupled system (each unknown's diagonal ignores that the other
             // unknowns feeding the same residual are moving simultaneously
-            // this same sweep) overshoots and diverges without one. Same
-            // role/necessity as g-Aequor's MaxStep.
+            // this same sweep) overshoots and diverges without one.
             float step = -grad[s] / (diag[s] + JacobiDiagEpsilon);
             step = clamp(step, -MaxPotentialStep, MaxPotentialStep);
             newPhi = phi + step;

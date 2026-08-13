@@ -178,6 +178,7 @@ protected:
 	Egg::Compute::ComputeShader smoothnessJacobiCS;
 	Egg::Compute::ComputeShader smoothnessJacobiBlockCS; // Term-1-only tile/groupshared reimplementation, see smoothnessJacobiBlockCS.hlsl
 	Egg::Compute::ComputeShader commitPotentialCS;
+	Egg::Compute::ComputeShader commitPotentialBlockCS; // scratch->main commit for the block-smoothing path ONLY, see commitPotentialBlockCS.hlsl
 	Egg::Compute::ComputeShader extractSurfaceCS;
 
 	com_ptr<ID3D12RootSignature> raymarchRootSig;
@@ -422,7 +423,16 @@ protected:
 	// changed -- a same-GridRes Reinit (e.g. just switching test shape)
 	// leaves the camera alone.
 	void EnsureGridBuffersSized() {
+		// Forced even: smoothnessJacobiBlockCS.hlsl's tile dispatch
+		// (BlockSmoothingTilesPerAxis, computed below) leaves exactly the
+		// outermost 1-node layer untouched at the LOW end of every axis
+		// (index 0) and, only when GridRes is even, exactly the outermost
+		// 1-node layer at the HIGH end too (index GridRes-1) -- an odd
+		// GridRes leaves 2 untouched layers at the high end instead of 1,
+		// asymmetric with the low end. Rounding down to even keeps every
+		// domain edge identical.
 		int newGridRes = gridResSetting < 4 ? 4 : (gridResSetting > 256 ? 256 : gridResSetting);
+		newGridRes &= ~1;
 		int newWindowCubeDim = windowCubeDimSetting < 8 ? 8 : (windowCubeDimSetting > 128 ? 128 : windowCubeDimSetting);
 
 		bool gridChanged = (lastAppliedGridRes != newGridRes);
@@ -494,7 +504,15 @@ protected:
 		ExtractSurfaceGroups = (WindowTetCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
 		SmoothnessGroups = (NodeCount + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
 		CommitGroups = (NodeCount * MAX_CANDIDATES + THREAD_GROUP_SIZE - 1) / THREAD_GROUP_SIZE;
-		BlockSmoothingTilesPerAxis = (GridRes + 1u) / 2u;
+		// Tiles are positioned so no target and no halo read ever touches
+		// the outer 1-node grid boundary (smoothnessJacobiBlockCS.hlsl does
+		// no bounds-checking at all, unlike the ResolveCorner/virtual-corner
+		// convention every other lattice shader uses) -- targets cover only
+		// A-index (and, via the same integer coords, B-index) [1, GridRes-2]
+		// per axis; halo reads then stay within [0, GridRes-1], always
+		// in-bounds. GridRes is clamped >=4 (see above), so GridRes-2>=2,
+		// no unsigned underflow here.
+		BlockSmoothingTilesPerAxis = (GridRes - 2u) / 2u;
 
 		if (gridChanged) {
 			rasterLabelBuffer          = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"rasterLabelBuffer");
@@ -655,6 +673,28 @@ protected:
 				// here; NodeCurrentVolume/NodeIsConnecting are left
 				// untouched by this path (Term 4's volume readback will show
 				// stale/zero values while this is enabled).
+				// Seed scratch from potential before every block sweep:
+				// smoothnessJacobiBlockCS.hlsl only ever writes its 16
+				// per-tile touched targets into scratch (by design -- see
+				// commitPotentialBlockCS.hlsl), but that shader can also
+				// bail a whole tile with nothing written at all (e.g. its
+				// rotating authority node lacking 2 real candidates this
+				// sweep). commitPotentialBlockCS unconditionally re-commits
+				// all 16 targets regardless, so without this, any untouched
+				// target's scratch entry -- whatever was last written there,
+				// possibly by an entirely different prior solve/path -- gets
+				// copied back over a perfectly good current potential.
+				// Reuses commitPotentialCS's shader body (NodePotential[idx]
+				// = NodePotentialScratch[idx]) with the two buffers bound
+				// swapped, so it runs as the reverse copy with no new PSO.
+				cmd->SetComputeRootSignature(commitPotentialCS.rootSig.Get());
+				cmd->SetPipelineState(commitPotentialCS.pso.Get());
+				cmd->SetComputeRootUnorderedAccessView(0, nodePotentialBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(1, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+				cmd->Dispatch(CommitGroups, 1, 1);
+				cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()));
+
 				uint32_t rotationOffset = (uint32_t)(blockSmoothingSweepCounter % 8);
 				blockSmoothingSweepCounter++;
 				cmd->SetComputeRootSignature(smoothnessJacobiBlockCS.rootSig.Get());
@@ -688,12 +728,25 @@ protected:
 				}
 			}
 
-			cmd->SetComputeRootSignature(commitPotentialCS.rootSig.Get());
-			cmd->SetPipelineState(commitPotentialCS.pso.Get());
-			cmd->SetComputeRootUnorderedAccessView(0, nodePotentialScratchBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
-			cmd->Dispatch(CommitGroups, 1, 1);
+			if (useBlockSmoothing) {
+				// Only the 16 per-tile targets got written into scratch this
+				// sweep (see smoothnessJacobiBlockCS.hlsl) -- commit exactly
+				// that same set, not the full NodeCount range, or every
+				// untouched node gets overwritten with stale scratch.
+				cmd->SetComputeRootSignature(commitPotentialBlockCS.rootSig.Get());
+				cmd->SetPipelineState(commitPotentialBlockCS.pso.Get());
+				cmd->SetComputeRootUnorderedAccessView(0, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
+			} else {
+				cmd->SetComputeRootSignature(commitPotentialCS.rootSig.Get());
+				cmd->SetPipelineState(commitPotentialCS.pso.Get());
+				cmd->SetComputeRootUnorderedAccessView(0, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+				cmd->Dispatch(CommitGroups, 1, 1);
+			}
 			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()));
 		}
 	}
@@ -1185,6 +1238,8 @@ protected:
 		};
 		ImGui::Combo("Test Shape", &testShapeKind, testShapeItems, IM_ARRAYSIZE(testShapeItems));
 		ImGui::SliderInt("Grid Resolution", &gridResSetting, 4, 256, "%d", ImGuiSliderFlags_Logarithmic);
+		ImGui::SameLine();
+		ImGui::TextDisabled("(applied: %d -- rounded down to even for block-smoothing edge symmetry)", gridResSetting & ~1);
 		ImGui::SliderInt("Render Window Size", &windowCubeDimSetting, 8, 48);
 		ImGui::TextDisabled("(real grid units, GridRes-independent -- only this much of the domain, centered, is ever extracted/rendered)");
 		{
@@ -1450,6 +1505,7 @@ public:
 		smoothnessJacobiCS.createResources(device, "Shaders/smoothnessJacobiCS.cso");
 		smoothnessJacobiBlockCS.createResources(device, "Shaders/smoothnessJacobiBlockCS.cso");
 		commitPotentialCS.createResources(device, "Shaders/commitPotentialCS.cso");
+		commitPotentialBlockCS.createResources(device, "Shaders/commitPotentialBlockCS.cso");
 		extractSurfaceCS.createResources(device, "Shaders/extractSurfaceCS.cso");
 
 		{

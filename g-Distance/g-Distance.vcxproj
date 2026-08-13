@@ -82,6 +82,7 @@
     <FxCompile Include="Shaders\smoothnessJacobiCS.hlsl" />
     <FxCompile Include="Shaders\smoothnessJacobiBlockCS.hlsl" />
     <FxCompile Include="Shaders\commitPotentialCS.hlsl" />
+    <FxCompile Include="Shaders\commitPotentialBlockCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl" />
     <FxCompile Include="Shaders\raymarchVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>

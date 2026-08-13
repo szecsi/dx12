@@ -55,6 +55,9 @@
     <FxCompile Include="Shaders\commitPotentialCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\commitPotentialBlockCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
