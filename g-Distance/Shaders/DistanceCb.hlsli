@@ -73,7 +73,14 @@ DistanceCb
     // consistency term a future JFA-footvector-length potential init will
     // need to not just decay back toward Term 3's sum-to-0 pull.
     float DistanceWeight;  // term 5 weight -- 0 disables the term entirely
-    float _pad3a;
+    // Term 1 fast path, GUI checkbox (>0.5 = on): replaces tet-walking
+    // (both UseEdgeWalkTraversal modes) with the closed-form 27-tap fixed
+    // lattice kernel derived and numerically verified against the tet-walk
+    // result (see smoothnessJacobiCS.hlsl's FixedKernelSmoothness) -- exact,
+    // not an approximation, for any MissingFallback/candidate-tracking
+    // pattern, since it's a direct algebraic reduction of the same sum over
+    // face-adjacent tet pairs. Was _pad3a.
+    float UseFixedKernelSmoothing;
     float _pad3b;
     float _pad3c;
 }

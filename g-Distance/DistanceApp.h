@@ -221,6 +221,7 @@ protected:
 	float volumeWeight = 5000.0f; // energy term 4 weight, see DistanceCb.hlsli -- needs to be this large (not ~1 like the other weights) to actually outweigh smoothness's gradient at a topologically point-like feature; see "Volume Weight" slider comment
 	float volumeFloor = 1.0f; // the floor itself for connecting nodes, see DistanceCb.hlsli
 	bool useEdgeWalkTraversal = false; // Term 1 pair-listing method: edge-walking vs. node-adjacent-tets, see smoothnessJacobiCS.hlsl
+	bool useFixedKernelSmoothing = false; // Term 1 fast path: closed-form 27-tap lattice kernel instead of tet-walking, see smoothnessJacobiCS.hlsl's FixedKernelSmoothness (exact, not an approximation)
 	bool useBlockSmoothing = false; // experimental: replace smoothnessJacobiCS entirely with the tile/groupshared Term-1-only smoothnessJacobiBlockCS.hlsl for the Jacobi sweep loop (Terms 2-5 are NOT applied while this is on)
 	int blockSmoothingSweepCounter = 0; // advances every block-smoothing sweep; RotationOffset = counter % 8 (see smoothnessJacobiBlockCS.hlsl Stage 1)
 	float missingFallback = -0.75f; // TetFieldGrad's GetCornerPotential missing-candidate fallback, see DistanceCb.hlsli
@@ -354,7 +355,7 @@ protected:
 		distanceCb.data.MissingFallback = missingFallback;
 		distanceCb.data.UseEdgeWalkTraversal = useEdgeWalkTraversal ? 1u : 0u;
 		distanceCb.data.DistanceWeight = distanceWeight;
-		distanceCb.data._pad3a = 0.0f;
+		distanceCb.data.UseFixedKernelSmoothing = useFixedKernelSmoothing ? 1.0f : 0.0f;
 		distanceCb.data._pad3b = 0.0f;
 		distanceCb.data._pad3c = 0.0f;
 		distanceCb.Upload();
@@ -1335,6 +1336,9 @@ protected:
 			ImGui::Checkbox("Term 1: Edge-Walk Traversal", &useEdgeWalkTraversal);
 			ImGui::SameLine();
 			ImGui::TextDisabled("(off = node-adjacent-tets, see smoothnessJacobiCS.hlsl; ignored by Block Smoothing)");
+			ImGui::Checkbox("Term 1: Use Fixed Kernel", &useFixedKernelSmoothing);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(closed-form 27-tap lattice stencil instead of tet-walking -- exact, not an approximation; overrides Edge-Walk Traversal, ignored by Block Smoothing)");
 			ImGui::SliderFloat("Smoothness Weight", &smoothnessWeight, 0.0f, 10.0f);
 			ImGui::SliderFloat("Margin Weight", &marginWeight, 0.0f, 10.0f);
 			ImGui::SliderFloat("Margin Target", &marginTarget, 0.0f, 2.0f);
