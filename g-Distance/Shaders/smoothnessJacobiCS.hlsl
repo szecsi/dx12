@@ -124,6 +124,71 @@ float3 TetFieldGrad(uint refs[4], float3 w[4], uint label)
     return g;
 }
 
+// Closed-form Term-1 fast path: the entire tet-walk-and-accumulate result
+// (AccumulateEdgePair summed over every face-adjacent pair in a node's
+// 2-ring, GatherIncidentTets2) reduces algebraically to a FIXED 27-tap
+// lattice stencil applied to g(n) = GetCornerPotential(n,li) -
+// GetCornerPotential(n,lj), because every corner's shape-gradient weight
+// contribution only ever enters that sum linearly and the resulting
+// (relative-offset -> weight) map is translation-invariant across the whole
+// BCC lattice (derived + numerically verified against a from-scratch tet
+// enumeration: self=192, 8 opposite-sublattice cell-neighbors=-48, 6
+// same-sublattice face neighbors=+16, 12 same-sublattice edge-diagonal
+// neighbors=+8 -- weights sum to exactly 0, self coefficient exactly equals
+// the (also-invariant) diag contribution of 192, both confirmed identical
+// for A- and B-type centers and at arbitrary lattice offsets, no boundary/
+// interior difference since GetCornerPotential's own virtual-corner
+// convention is exactly what g(n) already delegates to for an out-of-grid
+// tap). This is an EXACT reformulation, not an approximation -- it replaces
+// the existing node-adjacent-tets tet-walk below (left in place, still
+// selected when this is off).
+static const int3 FixedKernelFaceOffsets[6] = {
+    int3(1, 0, 0), int3(-1, 0, 0), int3(0, 1, 0), int3(0, -1, 0), int3(0, 0, 1), int3(0, 0, -1)
+};
+static const int3 FixedKernelEdgeOffsets[12] = {
+    int3(1, 1, 0), int3(1, -1, 0), int3(-1, 1, 0), int3(-1, -1, 0),
+    int3(1, 0, 1), int3(1, 0, -1), int3(-1, 0, 1), int3(-1, 0, -1),
+    int3(0, 1, 1), int3(0, 1, -1), int3(0, -1, 1), int3(0, -1, -1)
+};
+
+// g(n) for one fixed-kernel tap, given the tap's own sublattice grid index
+// (out of [0,GridRes) or [0,BDim) resolves to the same virtual-corner
+// convention GetCornerPotential already uses for SENTINEL_LABEL).
+float FixedKernelTapG(int3 idx, bool isB, uint li, uint lj)
+{
+    uint nodeRef = SENTINEL_LABEL;
+    if (isB) {
+        if (all(idx >= 0) && all(idx < (int3)BDim)) nodeRef = BIdx((uint)idx.x, (uint)idx.y, (uint)idx.z);
+    } else {
+        if (all(idx >= 0) && all(idx < (int3)GridRes)) nodeRef = AIdx((uint)idx.x, (uint)idx.y, (uint)idx.z);
+    }
+    return GetCornerPotential(nodeRef, li, NodeCandidateLabel, NodePotential, MissingFallback)
+         - GetCornerPotential(nodeRef, lj, NodeCandidateLabel, NodePotential, MissingFallback);
+}
+
+// Full 27-tap accumulation for one (li,lj) pair at one node -- already
+// includes the AccumulateEdgePair's own "2.0" factor (matches its
+// `w = pairWeight * 2.0 * SmoothnessWeight` with pairWeight folded to 1 over
+// the full pair set), so the caller only multiplies by SmoothnessWeight.
+float FixedKernelSmoothness(int3 idx, bool isB, uint li, uint lj)
+{
+    float acc = 192.0 * FixedKernelTapG(idx, isB, li, lj);
+    for (uint f = 0; f < 6; f++) acc += 16.0 * FixedKernelTapG(idx + FixedKernelFaceOffsets[f], isB, li, lj);
+    for (uint e = 0; e < 12; e++) acc += 8.0 * FixedKernelTapG(idx + FixedKernelEdgeOffsets[e], isB, li, lj);
+    if (!isB) {
+        for (int dz = -1; dz <= 0; dz++)
+            for (int dy = -1; dy <= 0; dy++)
+                for (int dx = -1; dx <= 0; dx++)
+                    acc += -48.0 * FixedKernelTapG(idx + int3(dx, dy, dz), true, li, lj);
+    } else {
+        for (int dz = 0; dz <= 1; dz++)
+            for (int dy = 0; dy <= 1; dy++)
+                for (int dx = 0; dx <= 1; dx++)
+                    acc += -48.0 * FixedKernelTapG(idx + int3(dx, dy, dz), false, li, lj);
+    }
+    return acc;
+}
+
 // GetFaceAdjacentPartner (+ its D0Cap/D1Cap tables) moved to
 // DistanceLattice.hlsli -- pure tet-index topology math, no
 // NodeCandidateLabel/NodePotential access, so it belongs alongside
@@ -239,32 +304,45 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             
     if(myValidCount == 0) return;
 
-    // Term 1, brute force traversal: walk its own
+    // Term 1: either the closed-form fixed-kernel fast path (see
+    // FixedKernelSmoothness above -- exact, no tet geometry at all) or the
+    // original brute-force tet-walk traversal, GUI-selected
+    // (UseFixedKernelSmoothing). The tet-walk branch: walk this node's own
     // 2-ring incident tets (GatherIncidentTets2 -- this node's own ~24
     // incident tets PLUS every tet incident to any of THEIR other corner
     // nodes, <=48 total, each listed once) and check EVERY PAIR of them for
     // the SAME 3-vertex coincidence the edge-walking traversal uses
     // (sharedCount==3)
     if (myValidCount > 1) {
-        uint incidentTets[MAX_INCIDENT_TETS2];
-        uint incCount = GatherIncidentTets2(node, incidentTets);
+        if (UseFixedKernelSmoothing > 0.5) {
+            bool myIsB; uint3 myIdxU; DecodeNodeIndex(node, myIsB, myIdxU);
+            float g = FixedKernelSmoothness((int3)myIdxU, myIsB, myLabel, myOtherLabel);
+            int si = FindSlot(node, myLabel);
+            int sj = FindSlot(node, myOtherLabel);
+            float w = SmoothnessWeight;
+            if (si >= 0) { grad[si] += w * g; diag[si] += w * 192.0; }
+            if (sj >= 0) { grad[sj] += -w * g; diag[sj] += w * 192.0; }
+        } else {
+            uint incidentTets[MAX_INCIDENT_TETS2];
+            uint incCount = GatherIncidentTets2(node, incidentTets);
 
-        uint incRefs[MAX_INCIDENT_TETS2][4];
-        for (uint e = 0; e < incCount; e++) {
-            int3 tq0, tq1, tq2, tq3; GetTetCornerQs(incidentTets[e], tq0, tq1, tq2, tq3);
-            incRefs[e][0] = ResolveCorner(tq0); incRefs[e][1] = ResolveCorner(tq1);
-            incRefs[e][2] = ResolveCorner(tq2); incRefs[e][3] = ResolveCorner(tq3);
-        }
+            uint incRefs[MAX_INCIDENT_TETS2][4];
+            for (uint e = 0; e < incCount; e++) {
+                int3 tq0, tq1, tq2, tq3; GetTetCornerQs(incidentTets[e], tq0, tq1, tq2, tq3);
+                incRefs[e][0] = ResolveCorner(tq0); incRefs[e][1] = ResolveCorner(tq1);
+                incRefs[e][2] = ResolveCorner(tq2); incRefs[e][3] = ResolveCorner(tq3);
+            }
 
-        for (uint a = 0; a < incCount; a++) {
-            for (uint b = a + 1; b < incCount; b++) {
-                uint sharedCount = 0;
-                for (uint ca = 0; ca < 4; ca++)
-                    for (uint cb = 0; cb < 4; cb++)
-                        if (incRefs[a][ca] == incRefs[b][cb]) sharedCount++;
-                if (sharedCount != 3) continue; // not a true face-adjacent pair
+            for (uint a = 0; a < incCount; a++) {
+                for (uint b = a + 1; b < incCount; b++) {
+                    uint sharedCount = 0;
+                    for (uint ca = 0; ca < 4; ca++)
+                        for (uint cb = 0; cb < 4; cb++)
+                            if (incRefs[a][ca] == incRefs[b][cb]) sharedCount++;
+                    if (sharedCount != 3) continue; // not a true face-adjacent pair
 
-                AccumulateEdgePair(node, incidentTets[a], incidentTets[b], myLabel, myOtherLabel, 1.0, grad, diag);
+                    AccumulateEdgePair(node, incidentTets[a], incidentTets[b], myLabel, myOtherLabel, 1.0, grad, diag);
+                }
             }
         }
     }
