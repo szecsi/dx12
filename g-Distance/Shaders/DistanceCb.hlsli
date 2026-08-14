@@ -81,7 +81,16 @@ DistanceCb
     // pattern, since it's a direct algebraic reduction of the same sum over
     // face-adjacent tet pairs. Was _pad3a.
     float UseFixedKernelSmoothing;
-    float _pad3b;
+    // Term 6 weight (smoothnessJacobiCS.hlsl): draws a DIVERGENT A-node's
+    // (NodeIsConnecting bit2, computeConnectingNodesCS.hlsl) own/input-label
+    // potential (slot 0) back toward its NodeFootDist -- a stabilizer for
+    // exactly the nodes whose footvector conflicts with a same-label
+    // neighbor's (a saddle/pinch region), where the solve is most likely to
+    // distort phi0 away from its sensible JFA-distance value. Ramped like
+    // Term 5: negligible pull for |phi0-NodeFootDist|<1, rising sharply as
+    // that gap approaches/exceeds 1 unit. 0 disables the term entirely. Was
+    // _pad3b.
+    float DivergencePullWeight;
     float _pad3c;
 }
 #ifndef __HLSL_VERSION

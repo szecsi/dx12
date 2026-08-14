@@ -12,6 +12,7 @@
     "RootConstants(num32BitConstants=4, b1)," \
     "UAV(u0)," \
     "UAV(u1)," \
+    "UAV(u2)," \
     "CBV(b2)"
 
 struct VsOut {

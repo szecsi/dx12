@@ -141,7 +141,7 @@ protected:
 	// node index via DistanceLattice.hlsli's GetTetCornerQs/ResolveCorner/
 	// GatherIncidentTets/GetCrossNeighbors.
 	com_ptr<ID3D12Resource> rasterLabelBuffer;          // ACount uint: ground-truth A-node label
-	com_ptr<ID3D12Resource> nodeIsConnectingBuffer;     // ACount uint, 2-bit flags: bit0=sole local connector of its same-label neighborhood, bit1=local max of same-label NodeFootDist (ties count), see computeConnectingNodesCS.hlsl
+	com_ptr<ID3D12Resource> nodeIsConnectingBuffer;     // ACount uint, 3-bit flags: bit0=sole local connector of its same-label neighborhood, bit1=local max of same-label NodeFootDist (ties count), bit2=divergent (a same-label neighbor's footvector disagrees, see computeConnectingNodesCS.hlsl)
 	// JFA (Jump Flooding) feature transform over the A-sublattice -- ping-pong
 	// seed-node-index buffers (jfaInitCS/jfaStepCS.hlsl) finalized into a
 	// per-A-node distance ("footvector length" to the nearest differently-
@@ -152,6 +152,7 @@ protected:
 	com_ptr<ID3D12Resource> jfaSeedBufferB;             // ACount uint
 	bool jfaFinalIsBufferA = false;                     // which of jfaSeedBufferA/B held the last Reinit's converged seeds -- set by RunTopologyBuild, read by ReadBackPickedTetDiagnostics for debug purposes
 	com_ptr<ID3D12Resource> nodeFootDistBuffer;         // ACount float
+	com_ptr<ID3D12Resource> nodeFootVectorBuffer;       // ACount float3, jfaFinalizeCS.hlsl -- direction (this node - nearest differently-labeled node), for computeConnectingNodesCS.hlsl's divergent-node test
 
 	// -- per-node candidate/potential state, (re)seeded at init, evolved by the outer loop --
 	com_ptr<ID3D12Resource> nodeCandidateLabelBuffer;   // NodeCount*2 uint, MAX_CANDIDATES(8) 8-bit labels packed per node (SENTINEL_CANDIDATE = unused slot)
@@ -210,14 +211,15 @@ protected:
 	int jacobiSweepsPerRound = 4; // inner linear-solve depth per outer round
 
 	float smoothnessWeight = 1.0f;
-	float marginWeight = 1.0f;
+	float marginWeight = 10.0f;
 	float marginTarget = 0.5f;
-	float regularizerWeight = 0.02f;
+	float regularizerWeight = 10.0f;
 	float jacobiDiagEpsilon = 0.05f;
 	float seedJitter = 0.05f;
 	float ownLabelSeed = 1.0f;
 	bool neutralBSeed = true; // B-nodes seed with pure jitter instead of a majority-vote confidence boost, see buildCandidatesCS.hlsl
 	bool edgeConnectivityOnly = true; // 18-connectivity (vs 26-connectivity) for computeConnectingNodesCS.hlsl's local flood-fill
+	float divergenceThreshold = 0.0f; // dot(myFootVector,neighborFootVector) below this flags a node DIVERGENT, see computeConnectingNodesCS.hlsl
 	float maxPotentialStep = 0.002f; // hard per-sweep step clamp, see DistanceCb.hlsli -- user-confirmed stable value; 0.1 was not, likely because the all-edges connectivity change couples each unknown to more neighbors than the original fan-only gather did
 	float volumeWeight = 5000.0f; // energy term 4 weight, see DistanceCb.hlsli -- needs to be this large (not ~1 like the other weights) to actually outweigh smoothness's gradient at a topologically point-like feature; see "Volume Weight" slider comment
 	float volumeFloor = 1.0f; // the floor itself for connecting nodes, see DistanceCb.hlsli
@@ -225,8 +227,9 @@ protected:
 	bool useFixedKernelSmoothing = false; // Term 1 fast path: closed-form 27-tap lattice kernel instead of tet-walking, see smoothnessJacobiCS.hlsl's FixedKernelSmoothness (exact, not an approximation)
 	bool useBlockSmoothing = false; // experimental: replace smoothnessJacobiCS entirely with the tile/groupshared Term-1-only smoothnessJacobiBlockCS.hlsl for the Jacobi sweep loop (Terms 2-5 are NOT applied while this is on)
 	int blockSmoothingSweepCounter = 0; // advances every block-smoothing sweep; RotationOffset = counter % 8 (see smoothnessJacobiBlockCS.hlsl Stage 1)
-	float missingFallback = -0.75f; // TetFieldGrad's GetCornerPotential missing-candidate fallback, see DistanceCb.hlsli
+	float missingFallback = -3.0f; // TetFieldGrad's GetCornerPotential missing-candidate fallback, see DistanceCb.hlsli
 	float distanceWeight = 0.0f; // term 5 (distance/Eikonal shaping) weight, see DistanceCb.hlsli -- default 0, off until tuned
+	float divergencePullWeight = 0.0f; // term 6 weight: pulls a DIVERGENT A-node's own potential back toward NodeFootDist, see DistanceCb.hlsli -- default 0, off until tuned
 	float pointRadiusPx = 3.0f;
 	float potentialSizeScale = 1.0f; // winning-potential reference value that maps to full-size sprites, see nodePointVS.hlsl
 	float nodeFadeExponent = 1.0f;      // exponential depth-fade rate for distant nodes, see nodePointVS.hlsl
@@ -260,7 +263,8 @@ protected:
 	bool showPotentialSlice = false;
 	int sliceAxis = 2;             // 0=X, 1=Y, 2=Z
 	int sliceIndex = 10;           // grid index along sliceAxis, clamped to [0,GridRes-1] at draw time
-	float potentialColorScale = 1.0f; // potential value mapped to full channel brightness
+	float potentialColorScale = 1.0f; // potential/footdist value mapped to full channel brightness
+	int sliceDisplayMode = 0;      // 0 = potentials (label0/label1 heatmap), 1 = NodeFootDist (grayscale), see footSlicePS.hlsl
 
 	// Test shape: same torus/ellipsoid scene as g-BCC/g-Aequor, centered in
 	// the middle of the (positive-only) BCC lattice index space rather than
@@ -357,7 +361,7 @@ protected:
 		distanceCb.data.UseEdgeWalkTraversal = useEdgeWalkTraversal ? 1u : 0u;
 		distanceCb.data.DistanceWeight = distanceWeight;
 		distanceCb.data.UseFixedKernelSmoothing = useFixedKernelSmoothing ? 1.0f : 0.0f;
-		distanceCb.data._pad3b = 0.0f;
+		distanceCb.data.DivergencePullWeight = divergencePullWeight;
 		distanceCb.data._pad3c = 0.0f;
 		distanceCb.Upload();
 	}
@@ -520,6 +524,7 @@ protected:
 			jfaSeedBufferA             = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"jfaSeedBufferA");
 			jfaSeedBufferB             = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(UINT), L"jfaSeedBufferB");
 			nodeFootDistBuffer         = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(float), L"nodeFootDistBuffer");
+			nodeFootVectorBuffer       = CreateRawUavBuffer(device.Get(), (UINT64)ACount * sizeof(float) * 3, L"nodeFootVectorBuffer");
 			nodeCandidateLabelBuffer   = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * 2 * sizeof(UINT), L"nodeCandidateLabelBuffer");
 			nodePotentialBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialBuffer");
 			nodePotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialScratchBuffer");
@@ -589,7 +594,8 @@ protected:
 			cmd->SetComputeRoot32BitConstant(0, step, 0);
 			cmd->SetComputeRootUnorderedAccessView(1, src->GetGPUVirtualAddress());
 			cmd->SetComputeRootUnorderedAccessView(2, dst->GetGPUVirtualAddress());
-			cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(3, rasterLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
 			cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
 			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(dst.Get()));
 			jfaCurrentIsA = !jfaCurrentIsA;
@@ -602,18 +608,27 @@ protected:
 			cmd->SetPipelineState(jfaFinalizeCS.pso.Get());
 			cmd->SetComputeRootUnorderedAccessView(0, finalSeed->GetGPUVirtualAddress());
 			cmd->SetComputeRootUnorderedAccessView(1, nodeFootDistBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodeFootVectorBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
 			cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
-			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeFootDistBuffer.Get()));
+			{
+				D3D12_RESOURCE_BARRIER b[] = {
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeFootDistBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeFootVectorBuffer.Get()),
+				};
+				cmd->ResourceBarrier(_countof(b), b);
+			}
 		}
 
 		cmd->SetComputeRootSignature(computeConnectingNodesCS.rootSig.Get());
 		cmd->SetPipelineState(computeConnectingNodesCS.pso.Get());
 		cmd->SetComputeRoot32BitConstant(0, edgeConnectivityOnly ? 1u : 0u, 0);
+		cmd->SetComputeRoot32BitConstants(0, 1, &divergenceThreshold, 1);
 		cmd->SetComputeRootUnorderedAccessView(1, rasterLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(2, nodeIsConnectingBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(3, nodeFootDistBuffer->GetGPUVirtualAddress());
-		cmd->SetComputeRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(4, nodeFootVectorBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
 		cmd->Dispatch(BuildCandidatesAGroups, 1, 1); // ACount-based, same as buildCandidatesCS's A dispatch
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeIsConnectingBuffer.Get()));
 
@@ -717,7 +732,8 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(4, nodeCurrentVolumeBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(5, nodeIsConnectingBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(6, nodeFrozenWinnerBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootConstantBufferView(7, distanceGridCb.GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(7, nodeFootDistBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootConstantBufferView(8, distanceGridCb.GetGPUVirtualAddress());
 				cmd->Dispatch(SmoothnessGroups, 1, 1);
 				{
 					D3D12_RESOURCE_BARRIER b[] = {
@@ -1274,6 +1290,8 @@ protected:
 		ImGui::TextDisabled("(off = old majority-vote B seed)");
 		ImGui::Checkbox("Edge Connectivity Only", &edgeConnectivityOnly);
 		ImGui::TextDisabled("(18- vs 26-connectivity for pinning connecting nodes)");
+		ImGui::SliderFloat("Divergence Threshold", &divergenceThreshold, -1.0f, 1.0f);
+		ImGui::TextDisabled("(dot(footvector,neighbor footvector) below this flags DIVERGENT)");
 		ImGui::TextDisabled("(all of the above applied on Reinitialize)");
 
 		if (dataValid) {
@@ -1301,6 +1319,8 @@ protected:
 			static const char* axisItems[] = { "X", "Y", "Z" };
 			ImGui::Combo("Slice Axis", &sliceAxis, axisItems, 3);
 			ImGui::SliderInt("Slice Index", &sliceIndex, 0, (int)GridRes - 1);
+			static const char* sliceDisplayItems[] = { "Potentials", "FootDist" };
+			ImGui::Combo("Slice Display", &sliceDisplayMode, sliceDisplayItems, 2);
 			ImGui::SliderFloat("Potential Color Scale", &potentialColorScale, 0.05f, 5.0f);
 		}
 
@@ -1330,10 +1350,11 @@ protected:
 						hasI[c] ? "" : "*", phiI[c],
 						hasJ[c] ? "" : "*", phiJ[c],
 						phiI[c] - phiJ[c]);
-					ImGui::Text("      CurVol=%.4f%s%s",
+					ImGui::Text("      CurVol=%.4f%s%s%s",
 						pickedCornerCurrentVolume[c],
 						(pickedCornerIsConnecting[c] & 1u) ? "  CONNECTING (floor pinned)" : "",
-						(pickedCornerIsConnecting[c] & 2u) ? "  LOCAL-MAX(footdist)" : "");
+						(pickedCornerIsConnecting[c] & 2u) ? "  LOCAL-MAX(footdist)" : "",
+						(pickedCornerIsConnecting[c] & 4u) ? "  DIVERGENT(footvector)" : "");
 					if (pickedCornerFootDist[c] >= 0.0f) {
 						uint node = pickedTetNodes[c];
 						uint seed = pickedCornerFootSeed[c];
@@ -1395,9 +1416,9 @@ protected:
 			ImGui::SameLine();
 			ImGui::TextDisabled("(closed-form 27-tap lattice stencil instead of tet-walking -- exact, not an approximation; overrides Edge-Walk Traversal, ignored by Block Smoothing)");
 			ImGui::SliderFloat("Smoothness Weight", &smoothnessWeight, 0.0f, 10.0f);
-			ImGui::SliderFloat("Margin Weight", &marginWeight, 0.0f, 10.0f);
+			ImGui::SliderFloat("Margin Weight", &marginWeight, 0.0f, 20.0f);
 			ImGui::SliderFloat("Margin Target", &marginTarget, 0.0f, 2.0f);
-			ImGui::SliderFloat("Regularizer Weight", &regularizerWeight, 0.0f, 1.0f);
+			ImGui::SliderFloat("Regularizer Weight", &regularizerWeight, 0.0f, 20.0f);
 			ImGui::SliderFloat("Jacobi Diag Epsilon", &jacobiDiagEpsilon, 0.001f, 1.0f);
 			ImGui::SliderFloat("Max Potential Step", &maxPotentialStep, 0.0001f, 0.1f, "%.4f");
 			// Range is huge (not 0..5 like the other weights) because Term 4's
@@ -1416,12 +1437,15 @@ protected:
 			// connecting node's own volume is at or above Volume Floor.
 			ImGui::SliderFloat("Volume Weight", &volumeWeight, 0.0f, 10000.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
 			ImGui::SliderFloat("Volume Floor", &volumeFloor, 0.0f, 2.0f);
-			ImGui::SliderFloat("Missing Candidate Fallback", &missingFallback, -2.0f, 1.0f);
+			ImGui::SliderFloat("Missing Candidate Fallback", &missingFallback, -5.0f, 1.0f);
 			ImGui::SameLine();
 			ImGui::TextDisabled("(TetFieldGrad's GetCornerPotential fallback, Term 1)");
 			ImGui::SliderFloat("Distance Term Weight", &distanceWeight, 0.0f, 10.0f);
 			ImGui::SameLine();
 			ImGui::TextDisabled("(term 5: same-label edge diff ~= edge length, see smoothnessJacobiCS.hlsl)");
+			ImGui::SliderFloat("Divergence Pull Weight", &divergencePullWeight, 0.0f, 10.0f);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(term 6: DIVERGENT A-node's own potential pulled toward NodeFootDist)");
 		}
 
 		ImGui::SliderFloat("Point Radius", &pointRadiusPx, 0.5f, 10.0f);
@@ -1791,13 +1815,14 @@ public:
 			commandList->SetGraphicsRootSignature(footSliceRootSig.Get());
 			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
 			int clampedSliceIndex = sliceIndex < 0 ? 0 : (sliceIndex > (int)GridRes - 1 ? (int)GridRes - 1 : sliceIndex);
-			struct { uint32_t axis; float coord; float colorScale; float pad; } sliceConsts = {
-				(uint32_t)sliceAxis, (float)clampedSliceIndex * CellSize, potentialColorScale, 0.0f
+			struct { uint32_t axis; float coord; float colorScale; uint32_t displayMode; } sliceConsts = {
+				(uint32_t)sliceAxis, (float)clampedSliceIndex * CellSize, potentialColorScale, (uint32_t)sliceDisplayMode
 			};
 			commandList->SetGraphicsRoot32BitConstants(1, 4, &sliceConsts, 0);
 			commandList->SetGraphicsRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(3, nodePotentialBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
+			commandList->SetGraphicsRootUnorderedAccessView(4, nodeFootDistBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
 			commandList->SetPipelineState(footSlicePso.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced(3, 1, 0, 0);
