@@ -117,7 +117,15 @@ void smoothnessJacobiBlockCS(uint3 gid : SV_GroupID, uint tid : SV_GroupIndex)
         uint3 inHaloPosA = uint3(tidLocal % HALO_DIM, (tidLocal / HALO_DIM) % HALO_DIM, tidLocal / (HALO_DIM * HALO_DIM));
         uint3 posA = haloOriginA + inHaloPosA;
         uint inHaloIdx = isB ? inHaloPosToInHaloIdxB(inHaloPosA) : inHaloPosToInHaloIdxA(inHaloPosA);
-        uint idx = isB ? posToIdxB(posA) : posToIdxA(posA);
+        // B's valid per-axis range [0,BDim-1] is one short of A's
+        // [0,GridRes-1], but this halo's outer corner can reach GridRes-1 on
+        // any axis for the last tile -- unclamped, posToIdxB/BIdx produces an
+        // out-of-bounds flat index (same bug confirmed via an Nsight
+        // Aftermath crash dump in smoothnessJacobiSyntheticCS.hlsl's
+        // identical Load stage -- see that file's comment). Clamp to the
+        // nearest valid B node instead.
+        uint3 bPosA = min(posA, uint3(BDim - 1u, BDim - 1u, BDim - 1u));
+        uint idx = isB ? posToIdxB(bPosA) : posToIdxA(posA);
         uint candidates0to3 = NodeCandidateLabel[idx * 2u + 0u];
         uint candidates4to7 = NodeCandidateLabel[idx * 2u + 1u];
         uint maski0to3 = ~(candidates0to3 ^ lli);

@@ -7,6 +7,7 @@
 #include <Egg/Cam/FirstPerson.h>
 #include <Egg/Compute/ComputeShader.h>
 #include <Egg/Compute/FenceChain.h>
+#include "AftermathTracker.h"
 
 #include <imgui.h>
 #include <imgui_impl_win32.h>
@@ -86,7 +87,7 @@ class DistanceApp : public Egg::SimpleApp {
 	// GridRes=20's old compile-time values exactly, so anything that
 	// (incorrectly) read them before the first Reinit would still see
 	// today's numbers.
-	int gridResSetting = 20;        // GUI: "Grid Resolution" (applied on Reinitialize)
+	int gridResSetting = 22;        // GUI: "Grid Resolution" (applied on Reinitialize) -- some grid sizes still hang on Reinitialize (root cause not yet found), 22 is a known-working default
 	// Real (grid-unit) full width of the rendered window -- 16 is the user's
 	// own original suggestion, and also happens to exactly reproduce
 	// WindowCubeDim=40 (today's whole-domain q-dispatch size) at the default
@@ -134,6 +135,15 @@ protected:
 	com_ptr<ID3D12GraphicsCommandList> uploadCommandList;
 	Egg::Compute::Fence uploadFence;
 	uint64_t uploadFenceValue = 0;
+
+	// Aftermath event-marker context for uploadCommandList -- every
+	// Dispatch() in RunTopologyBuild/RunOneRound/RunExtractSurface runs on
+	// this list (RunReinit/RunContinue), so this is the one context handle
+	// that can ever show up in a GridRes-hang crash dump. See
+	// AftermathTracker.h. Created once, right after uploadCommandList
+	// itself, in CreateResources(); stays valid across that list's later
+	// Close/Reset cycles.
+	GFSDK_Aftermath_ContextHandle aftermathUploadContext = nullptr;
 
 	// -- static lattice/topology data, built once at init (RunReinit only) --
 	// Tet connectivity (corners, incident tets, cross-cube neighbors) has NO
@@ -184,6 +194,17 @@ protected:
 	// dispatch -- writing straight into a single buffer would race.
 	com_ptr<ID3D12Resource> nodeSyntheticVolumeBuffer;        // NodeCount float, "current" (halo read buffer)
 	com_ptr<ID3D12Resource> nodeSyntheticVolumeScratchBuffer; // NodeCount float, per-sweep write buffer
+	// d(currentVolume)/d(myPot), same halo-read/scratch/commit pattern as the
+	// volume pair above -- splits a label's original volume across its
+	// currently same-labeled halo members by LEVERAGE, not equally, see
+	// smoothnessJacobiSyntheticCS.hlsl's dcontrib/targetShare.
+	com_ptr<ID3D12Resource> nodeSensitivityBuffer;
+	com_ptr<ID3D12Resource> nodeSensitivityScratchBuffer;
+	// Continuous smoothing-vs-volume alignment, same halo-read/scratch/commit
+	// pattern as the sensitivity pair above -- see
+	// smoothnessJacobiSyntheticCS.hlsl's myAlignment/Tier-1/Tier-2 split.
+	com_ptr<ID3D12Resource> nodeVolumeAlignmentBuffer;
+	com_ptr<ID3D12Resource> nodeVolumeAlignmentScratchBuffer;
 
 	Egg::Compute::ComputeShader rasterLabelCS;
 	Egg::Compute::ComputeShader computeConnectingNodesCS;
@@ -280,6 +301,8 @@ protected:
 	uint pickedCornerIsConnecting[4] = {};     // NodeIsConnecting (A-nodes only; 0 for B corners), computeConnectingNodesCS
 	float pickedCornerFootDist[4] = {};        // NodeFootDist (A-nodes only; -1 for B corners), jfaFinalizeCS -- raw, unlike pot[]'s own/suppressed sign convention
 	uint pickedCornerFootSeed[4] = {};         // raw converged JFA seed node index (A-nodes only), the input jfaFinalizeCS turned into pickedCornerFootDist -- SENTINEL_LABEL or self-index here is the smoking gun for a JFA propagation bug
+	float pickedCornerSensitivity[4] = {};     // NodeSensitivity -- d(currentVolume)/d(myPot), synthetic-field pipeline only; buffer exists but is never written outside that pipeline, so N/A elsewhere
+	float pickedCornerAlignment[4] = {};       // NodeVolumeAlignment -- smoothing-vs-volume agreement (see smoothnessJacobiSyntheticCS.hlsl's myAlignment), synthetic-field pipeline only, same N/A caveat as above
 
 	bool showNodes = false;
 	bool showSurface = true;
@@ -564,6 +587,10 @@ protected:
 			nodeCurrentVolumeBuffer    = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeCurrentVolumeBuffer");
 			nodeSyntheticVolumeBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSyntheticVolumeBuffer");
 			nodeSyntheticVolumeScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSyntheticVolumeScratchBuffer");
+			nodeSensitivityBuffer            = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSensitivityBuffer");
+			nodeSensitivityScratchBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSensitivityScratchBuffer");
+			nodeVolumeAlignmentBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeVolumeAlignmentBuffer");
+			nodeVolumeAlignmentScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeVolumeAlignmentScratchBuffer");
 		}
 		if (gridChanged || windowChanged) {
 			surfaceVertexBuffer = CreateRawUavBuffer(device.Get(), (UINT64)WindowTetCount * 6 * sizeof(float) * 8, L"surfaceVertexBuffer"); // pos(3)+normal(3)+labelI+labelJ, see DistanceSurface.hlsli
@@ -599,6 +626,7 @@ protected:
 		cmd->SetComputeRootConstantBufferView(0, torusCb.GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(1, rasterLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+		GpuCrashTracker::Mark(aftermathUploadContext, "rasterLabelCS");
 		cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(rasterLabelBuffer.Get()));
 
@@ -614,6 +642,7 @@ protected:
 		cmd->SetComputeRootUnorderedAccessView(0, rasterLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(1, jfaSeedBufferA->GetGPUVirtualAddress());
 		cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+		GpuCrashTracker::Mark(aftermathUploadContext, "jfaInitCS");
 		cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(jfaSeedBufferA.Get()));
 
@@ -630,6 +659,11 @@ protected:
 			cmd->SetComputeRootUnorderedAccessView(2, dst->GetGPUVirtualAddress());
 			cmd->SetComputeRootUnorderedAccessView(3, rasterLabelBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
+			{
+				char marker[32];
+				sprintf_s(marker, "jfaStepCS step=%u", step);
+				GpuCrashTracker::Mark(aftermathUploadContext, marker);
+			}
 			cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
 			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(dst.Get()));
 			jfaCurrentIsA = !jfaCurrentIsA;
@@ -644,6 +678,7 @@ protected:
 			cmd->SetComputeRootUnorderedAccessView(1, nodeFootDistBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootUnorderedAccessView(2, nodeFootVectorBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "jfaFinalizeCS");
 			cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
 			{
 				D3D12_RESOURCE_BARRIER b[] = {
@@ -663,6 +698,7 @@ protected:
 		cmd->SetComputeRootUnorderedAccessView(3, nodeFootDistBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(4, nodeFootVectorBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+		GpuCrashTracker::Mark(aftermathUploadContext, "computeConnectingNodesCS");
 		cmd->Dispatch(BuildCandidatesAGroups, 1, 1); // ACount-based, same as buildCandidatesCS's A dispatch
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeIsConnectingBuffer.Get()));
 
@@ -676,6 +712,7 @@ protected:
 		cmd->SetComputeRootConstantBufferView(6, distanceGridCb.GetGPUVirtualAddress());
 		cmd->SetComputeRoot32BitConstant(0, 0u, 0); // Mode = A-nodes
 		cmd->SetComputeRoot32BitConstant(0, neutralBSeed ? 1u : 0u, 1); // NeutralBSeed
+		GpuCrashTracker::Mark(aftermathUploadContext, "buildCandidatesCS A");
 		cmd->Dispatch(BuildCandidatesAGroups, 1, 1);
 		if (useSyntheticField) {
 			// Synthetic-field B-node init (buildSyntheticBCS.hlsl) replaces
@@ -693,12 +730,14 @@ protected:
 			cmd->SetComputeRootUnorderedAccessView(3, nodePotentialBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootUnorderedAccessView(4, nodeFootDistBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "buildSyntheticBCS");
 			cmd->Dispatch(BuildCandidatesBGroups, 1, 1);
 		} else {
 			cmd->SetComputeRootSignature(buildCandidatesCS.rootSig.Get());
 			cmd->SetPipelineState(buildCandidatesCS.pso.Get());
 			cmd->SetComputeRoot32BitConstant(0, 1u, 0); // Mode = B-nodes
 			cmd->SetComputeRoot32BitConstant(0, neutralBSeed ? 1u : 0u, 1); // NeutralBSeed
+			GpuCrashTracker::Mark(aftermathUploadContext, "buildCandidatesCS B");
 			cmd->Dispatch(BuildCandidatesBGroups, 1, 1);
 		}
 		{
@@ -711,15 +750,26 @@ protected:
 
 		if (useSyntheticField) {
 			// Seed nodeSyntheticVolumeBuffer with a ground-truth-confidence
-			// guess (0.999 A / 0.001 B, see initSyntheticVolumeCS.hlsl) --
-			// this can't be left uninitialized even with VolumeRatioWeight at
+			// guess (0.999 A / 0.001 B) and nodeSensitivityBuffer/
+			// nodeVolumeAlignmentBuffer with 0, see initSyntheticVolumeCS.hlsl
+			// -- can't be left uninitialized even with VolumeRatioWeight at
 			// its default of 0 (0*NaN is NaN, not 0).
 			cmd->SetComputeRootSignature(initSyntheticVolumeCS.rootSig.Get());
 			cmd->SetPipelineState(initSyntheticVolumeCS.pso.Get());
 			cmd->SetComputeRootUnorderedAccessView(0, nodeSyntheticVolumeBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootConstantBufferView(1, distanceGridCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodeSensitivityBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodeVolumeAlignmentBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "initSyntheticVolumeCS");
 			cmd->Dispatch(SmoothnessGroups, 1, 1); // NodeCount-based, same bound as smoothnessJacobiCS
-			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeSyntheticVolumeBuffer.Get()));
+			{
+				D3D12_RESOURCE_BARRIER b2[] = {
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeSyntheticVolumeBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeSensitivityBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeVolumeAlignmentBuffer.Get()),
+				};
+				cmd->ResourceBarrier(_countof(b2), b2);
+			}
 		}
 
 	}
@@ -745,6 +795,7 @@ protected:
 		cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(2, nodeFrozenWinnerBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+		GpuCrashTracker::Mark(aftermathUploadContext, "snapshotWinnerCS");
 		cmd->Dispatch(SmoothnessGroups, 1, 1); // NodeCount-based, same bound as smoothnessJacobiCS
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeFrozenWinnerBuffer.Get()));
 
@@ -775,6 +826,7 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(0, nodePotentialBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(1, nodePotentialScratchBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+				GpuCrashTracker::Mark(aftermathUploadContext, "commitPotentialCS (block pre-seed)");
 				cmd->Dispatch(CommitGroups, 1, 1);
 				cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()));
 
@@ -788,6 +840,7 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(3, nodePotentialScratchBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRoot32BitConstant(4, rotationOffset, 0);
 				cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+				GpuCrashTracker::Mark(aftermathUploadContext, "smoothnessJacobiBlockCS");
 				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
 				cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()));
 			} else if (useSyntheticField) {
@@ -806,13 +859,20 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(4, nodeSyntheticVolumeBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(5, nodeSyntheticVolumeScratchBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(6, rasterLabelBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRoot32BitConstant(7, useSyntheticLabelVote ? 1u : 0u, 0);
-				cmd->SetComputeRootConstantBufferView(8, distanceGridCb.GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(7, nodeSensitivityBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(8, nodeSensitivityScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(9, nodeVolumeAlignmentBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(10, nodeVolumeAlignmentScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRoot32BitConstant(11, useSyntheticLabelVote ? 1u : 0u, 0);
+				cmd->SetComputeRootConstantBufferView(12, distanceGridCb.GetGPUVirtualAddress());
+				GpuCrashTracker::Mark(aftermathUploadContext, "smoothnessJacobiSyntheticCS");
 				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
 				{
 					D3D12_RESOURCE_BARRIER b[] = {
 						CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()),
 						CD3DX12_RESOURCE_BARRIER::UAV(nodeSyntheticVolumeScratchBuffer.Get()),
+						CD3DX12_RESOURCE_BARRIER::UAV(nodeSensitivityScratchBuffer.Get()),
+						CD3DX12_RESOURCE_BARRIER::UAV(nodeVolumeAlignmentScratchBuffer.Get()),
 					};
 					cmd->ResourceBarrier(_countof(b), b);
 				}
@@ -828,6 +888,7 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(6, nodeFrozenWinnerBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(7, nodeFootDistBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootConstantBufferView(8, distanceGridCb.GetGPUVirtualAddress());
+				GpuCrashTracker::Mark(aftermathUploadContext, "smoothnessJacobiCS");
 				cmd->Dispatch(SmoothnessGroups, 1, 1);
 				{
 					D3D12_RESOURCE_BARRIER b[] = {
@@ -848,6 +909,7 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(0, nodePotentialScratchBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+				GpuCrashTracker::Mark(aftermathUploadContext, "commitPotentialBlockCS");
 				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
 			} else if (useSyntheticField) {
 				cmd->SetComputeRootSignature(commitSyntheticCS.rootSig.Get());
@@ -857,7 +919,12 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(3, nodeSyntheticVolumeScratchBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(4, nodeSyntheticVolumeBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(5, nodeSensitivityScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(6, nodeSensitivityBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(7, nodeVolumeAlignmentScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(8, nodeVolumeAlignmentBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootConstantBufferView(9, distanceGridCb.GetGPUVirtualAddress());
+				GpuCrashTracker::Mark(aftermathUploadContext, "commitSyntheticCS");
 				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
 			} else {
 				cmd->SetComputeRootSignature(commitPotentialCS.rootSig.Get());
@@ -865,17 +932,20 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(0, nodePotentialScratchBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+				GpuCrashTracker::Mark(aftermathUploadContext, "commitPotentialCS (final commit)");
 				cmd->Dispatch(CommitGroups, 1, 1);
 			}
 			if (useSyntheticField) {
 				// commitSyntheticCS also commits the scratch label byte into
-				// NodeCandidateLabel, and the volume-conservation buffer --
-				// barrier all three before the next sweep's Load stage or
+				// NodeCandidateLabel, and the volume-conservation buffers --
+				// barrier all five before the next sweep's Load stage or
 				// RunExtractSurface reads them.
 				D3D12_RESOURCE_BARRIER b[] = {
 					CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(nodeCandidateLabelBuffer.Get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(nodeSyntheticVolumeBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeSensitivityBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeVolumeAlignmentBuffer.Get()),
 				};
 				cmd->ResourceBarrier(_countof(b), b);
 			} else {
@@ -905,8 +975,29 @@ protected:
 		cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(2, surfaceVertexBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+		GpuCrashTracker::Mark(aftermathUploadContext, useSyntheticField ? "extractSurfaceSyntheticCS" : "extractSurfaceCS");
 		cmd->Dispatch(ExtractSurfaceGroups, 1, 1); // one thread per WINDOW tet slot (WindowTetCount), not the whole domain
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(surfaceVertexBuffer.Get()));
+	}
+
+	// Call right after every uploadFence.cpuWait() -- that wait blocks the
+	// CPU on GPU completion of whatever was just submitted on
+	// uploadCommandList, so it's the one place a device removal/hang (e.g.
+	// the GridRes-change hang, see AftermathTracker.h) would first become
+	// observable. GetDeviceRemovedReason is a cheap no-op query when the
+	// device is fine, so unconditionally checking here costs nothing.
+	// Aftermath's crash-dump callback (GpuCrashTracker::OnCrashDump) already
+	// fires asynchronously as soon as the driver detects the hang -- this
+	// just gives it a bounded extra window to finish writing the file
+	// before anything else touches the (now-dead) device.
+	void CheckDeviceRemoved() {
+		HRESULT removedReason = device->GetDeviceRemovedReason();
+		if (removedReason != S_OK) {
+			GpuCrashTracker::WaitForCrashDump();
+			char msg[256];
+			sprintf_s(msg, "D3D12 device removed (HRESULT 0x%08lX) -- see Bin\\AftermathDumps for a crash dump naming the stuck shader.", (unsigned long)removedReason);
+			MessageBoxA(NULL, msg, "Device Removed", MB_OK | MB_ICONERROR);
+		}
 	}
 
 	// Full reseed: rebuild the test scene, rasterize + rebuild lattice
@@ -930,6 +1021,7 @@ protected:
 		commandQueue->ExecuteCommandLists(1, lists);
 		uploadFence.signal(commandQueue, ++uploadFenceValue);
 		uploadFence.cpuWait();
+		CheckDeviceRemoved();
 
 		dataValid = true;
 	}
@@ -951,6 +1043,7 @@ protected:
 		commandQueue->ExecuteCommandLists(1, lists);
 		uploadFence.signal(commandQueue, ++uploadFenceValue);
 		uploadFence.cpuWait();
+		CheckDeviceRemoved();
 	}
 
 	// CPU mirrors of DistanceLattice.hlsli's q-space corner arithmetic --
@@ -1208,6 +1301,7 @@ protected:
 		}
 		uploadFence.signal(commandQueue, ++uploadFenceValue);
 		uploadFence.cpuWait();
+		CheckDeviceRemoved();
 
 		float depth = 1.0f;
 		float* mapped = nullptr;
@@ -1260,6 +1354,14 @@ protected:
 		com_ptr<ID3D12Resource> rbConnecting = CreateReadbackBuffer(device.Get(), connectingBytes);
 		com_ptr<ID3D12Resource> rbFootDist = CreateReadbackBuffer(device.Get(), footDistBytes);
 		com_ptr<ID3D12Resource> rbFootSeed = CreateReadbackBuffer(device.Get(), footSeedBytes);
+		// Both buffers exist regardless of pipeline (allocated unconditionally
+		// in EnsureGridBuffersSized), but are only ever WRITTEN by the
+		// synthetic-field pipeline (initSyntheticVolumeCS/
+		// smoothnessJacobiSyntheticCS) -- reads outside that pipeline would be
+		// uninitialized GPU memory, so the display below gates on
+		// useSyntheticField, same as pickedCornerFootDist gates on A-vs-B.
+		com_ptr<ID3D12Resource> rbSensitivity = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
+		com_ptr<ID3D12Resource> rbAlignment = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
 
 		DX_API("reset upload allocator (pick diag)") uploadAllocator->Reset();
 		DX_API("reset upload command list (pick diag)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
@@ -1273,6 +1375,8 @@ protected:
 		cmd->CopyBufferRegion(rbConnecting.Get(), 0, nodeIsConnectingBuffer.Get(), 0, connectingBytes);
 		cmd->CopyBufferRegion(rbFootDist.Get(), 0, nodeFootDistBuffer.Get(), 0, footDistBytes);
 		cmd->CopyBufferRegion(rbFootSeed.Get(), 0, (jfaFinalIsBufferA ? jfaSeedBufferA : jfaSeedBufferB).Get(), 0, footSeedBytes);
+		cmd->CopyBufferRegion(rbSensitivity.Get(), 0, nodeSensitivityBuffer.Get(), 0, nodeFloatBytes);
+		cmd->CopyBufferRegion(rbAlignment.Get(), 0, nodeVolumeAlignmentBuffer.Get(), 0, nodeFloatBytes);
 		DX_API("close upload command list (pick diag)") cmd->Close();
 		{
 			ID3D12CommandList* lists[] = { cmd.Get() };
@@ -1280,6 +1384,7 @@ protected:
 		}
 		uploadFence.signal(commandQueue, ++uploadFenceValue);
 		uploadFence.cpuWait();
+		CheckDeviceRemoved();
 
 		UINT* cand = nullptr;
 		float* pot = nullptr;
@@ -1287,12 +1392,16 @@ protected:
 		UINT* connecting = nullptr;
 		float* footDist = nullptr;
 		UINT* footSeed = nullptr;
+		float* sensitivity = nullptr;
+		float* alignment = nullptr;
 		rbCand->Map(0, nullptr, (void**)&cand);
 		rbPot->Map(0, nullptr, (void**)&pot);
 		rbVol->Map(0, nullptr, (void**)&vol);
 		rbConnecting->Map(0, nullptr, (void**)&connecting);
 		rbFootDist->Map(0, nullptr, (void**)&footDist);
 		rbFootSeed->Map(0, nullptr, (void**)&footSeed);
+		rbSensitivity->Map(0, nullptr, (void**)&sensitivity);
+		rbAlignment->Map(0, nullptr, (void**)&alignment);
 
 		for (uint c = 0; c < 4; c++) {
 			uint node = pickedTetNodes[c];
@@ -1311,6 +1420,8 @@ protected:
 				pickedCornerIsConnecting[c] = 0;
 				pickedCornerFootDist[c] = -1.0f;
 				pickedCornerFootSeed[c] = SENTINEL_LABEL;
+				pickedCornerSensitivity[c] = 0.0f;
+				pickedCornerAlignment[c] = 0.0f;
 				continue;
 			}
 			for (uint s = 0; s < MAX_CANDIDATES; s++) {
@@ -1335,6 +1446,8 @@ protected:
 			pickedCornerIsConnecting[c] = (node < ACount) ? connecting[node] : 0;
 			pickedCornerFootDist[c] = (node < ACount) ? footDist[node] : -1.0f;
 			pickedCornerFootSeed[c] = (node < ACount) ? footSeed[node] : SENTINEL_LABEL;
+			pickedCornerSensitivity[c] = sensitivity[node];
+			pickedCornerAlignment[c] = alignment[node];
 		}
 
 		// Independent per-tet dominant pair -- same frequency-vote rule as
@@ -1379,6 +1492,8 @@ protected:
 		rbPot->Unmap(0, nullptr);
 		rbVol->Unmap(0, nullptr);
 		rbConnecting->Unmap(0, nullptr);
+		rbSensitivity->Unmap(0, nullptr);
+		rbAlignment->Unmap(0, nullptr);
 	}
 
 	void BuildImGui() {
@@ -1478,20 +1593,25 @@ protected:
 			if (pickedTetValid && pickedDiagnosticsValid) {
 				float phiI[4], phiJ[4];
 				bool hasI[4], hasJ[4];
+				uint topLabel[4];
 				for (uint c = 0; c < 4; c++) {
 					phiI[c] = 0.0f; phiJ[c] = 0.0f; hasI[c] = false; hasJ[c] = false;
+					uint bestLabel = SENTINEL_CANDIDATE; float bestPot = -1.0e30f;
 					for (uint s = 0; s < MAX_CANDIDATES; s++) {
 						uint l = pickedCornerLabels[c][s];
-						if (l == pickedInterfaceLabelI) { phiI[c] = pickedCornerPots[c][s]; hasI[c] = true; }
-						if (l == pickedInterfaceLabelJ) { phiJ[c] = pickedCornerPots[c][s]; hasJ[c] = true; }
+						float p_s = pickedCornerPots[c][s];
+						if (l == pickedInterfaceLabelI) { phiI[c] = p_s; hasI[c] = true; }
+						if (l == pickedInterfaceLabelJ) { phiJ[c] = p_s; hasJ[c] = true; }
+						if (l != SENTINEL_CANDIDATE && p_s > bestPot) { bestPot = p_s; bestLabel = l; }
 					}
+					topLabel[c] = bestLabel;
 				}
 
 				ImGui::Text("Active pair: label %u vs label %u", pickedInterfaceLabelI, pickedInterfaceLabelJ);
 				for (uint c = 0; c < 4; c++) {
 					uint node = pickedTetNodes[c];
-					ImGui::Text("  Corner %u (node %u, %s): phi_i=%s%.4f  phi_j=%s%.4f",
-						c, node, (node < ACount) ? "A" : "B",
+					ImGui::Text("  Corner %u (node %u, %s, label %u): phi_i=%s%.4f  phi_j=%s%.4f",
+						c, node, (node < ACount) ? "A" : "B", topLabel[c],
 						hasI[c] ? "" : "*", phiI[c],
 						hasJ[c] ? "" : "*", phiJ[c]);
 					ImGui::Text("      Volume=%.4f%s%s%s",
@@ -1499,6 +1619,11 @@ protected:
 						(pickedCornerIsConnecting[c] & 1u) ? "  CONN" : "",
 						(pickedCornerIsConnecting[c] & 2u) ? "  LOCAL-MAX(footdist)" : "",
 						(pickedCornerIsConnecting[c] & 4u) ? "  DIVRG" : "");
+					if (useSyntheticField) {
+						ImGui::Text("      Sensitivity=%.6f  Alignment=%.4f", pickedCornerSensitivity[c], pickedCornerAlignment[c]);
+					} else {
+						ImGui::TextDisabled("      Sensitivity=N/A  Alignment=N/A (synthetic-field pipeline only)");
+					}
 					if (pickedCornerFootDist[c] >= 0.0f) {
 						uint node = pickedTetNodes[c];
 						uint seed = pickedCornerFootSeed[c];
@@ -1537,13 +1662,20 @@ protected:
 						if (pickedCornerIsConnecting[c] & 1u) strcat_s(flags, sizeof(flags), " CONN");
 						if (pickedCornerIsConnecting[c] & 2u) strcat_s(flags, sizeof(flags), " LOCAL-MAX(footdist)");
 						if (pickedCornerIsConnecting[c] & 4u) strcat_s(flags, sizeof(flags), " DIVRG");
-						sprintf_s(line, sizeof(line), "Corner %u (node %u, %s): phi_i=%s%.6f  phi_j=%s%.6f\r\n"
-							"    Volume=%.6f%s  NodeFootDist(raw)=%s\r\n",
-							c, node, (node < ACount) ? "A" : "B",
+						char sensitivityAlignmentStr[64];
+						if (useSyntheticField)
+							sprintf_s(sensitivityAlignmentStr, sizeof(sensitivityAlignmentStr), "%.6f / %.6f", pickedCornerSensitivity[c], pickedCornerAlignment[c]);
+						else
+							sprintf_s(sensitivityAlignmentStr, sizeof(sensitivityAlignmentStr), "N/A / N/A");
+						sprintf_s(line, sizeof(line), "Corner %u (node %u, %s, label %u): phi_i=%s%.6f  phi_j=%s%.6f\r\n"
+							"    Volume=%.6f%s  NodeFootDist(raw)=%s\r\n"
+							"    Sensitivity/Alignment=%s\r\n",
+							c, node, (node < ACount) ? "A" : "B", topLabel[c],
 							hasI[c] ? "" : "*", phiI[c],
 							hasJ[c] ? "" : "*", phiJ[c],
 							pickedCornerVolume[c], flags,
-							footDistStr);
+							footDistStr,
+							sensitivityAlignmentStr);
 						report += line;
 					}
 					ImGui::SetClipboardText(report.c_str());
@@ -1871,6 +2003,10 @@ public:
 				uploadAllocator.Get(), nullptr,
 				IID_PPV_ARGS(uploadCommandList.ReleaseAndGetAddressOf()));
 
+		// Must happen while the list is still in the recording state (it
+		// is here, right after CreateCommandList) -- see AftermathTracker.h.
+		aftermathUploadContext = GpuCrashTracker::CreateContextHandle(uploadCommandList.Get());
+
 		DX_API("close upload command list.") uploadCommandList->Close();
 		ID3D12CommandList* ppCommandLists[] = { uploadCommandList.Get() };
 		commandQueue->ExecuteCommandLists(1, ppCommandLists);
@@ -2092,6 +2228,10 @@ public:
 		nodeCurrentVolumeBuffer.Reset();
 		nodeSyntheticVolumeBuffer.Reset();
 		nodeSyntheticVolumeScratchBuffer.Reset();
+		nodeSensitivityBuffer.Reset();
+		nodeSensitivityScratchBuffer.Reset();
+		nodeVolumeAlignmentBuffer.Reset();
+		nodeVolumeAlignmentScratchBuffer.Reset();
 		imguiSrvHeap.Reset();
 		raymarchRootSig.Reset();
 		raymarchPso.Reset();
