@@ -81,8 +81,40 @@ DistanceCb
     // pattern, since it's a direct algebraic reduction of the same sum over
     // face-adjacent tet pairs. Was _pad3a.
     float UseFixedKernelSmoothing;
-    float _pad3b;
-    float _pad3c;
+    // Term 6 weight (smoothnessJacobiCS.hlsl): draws a DIVERGENT A-node's
+    // (NodeIsConnecting bit2, computeConnectingNodesCS.hlsl) own/input-label
+    // potential (slot 0) back toward its NodeFootDist -- a stabilizer for
+    // exactly the nodes whose footvector conflicts with a same-label
+    // neighbor's (a saddle/pinch region), where the solve is most likely to
+    // distort phi0 away from its sensible JFA-distance value. Ramped like
+    // Term 5: negligible pull for |phi0-NodeFootDist|<1, rising sharply as
+    // that gap approaches/exceeds 1 unit. 0 disables the term entirely. Was
+    // _pad3b.
+    float DivergencePullWeight;
+    // Synthetic-field pipeline (smoothnessJacobiSyntheticCS.hlsl/
+    // buildSyntheticBCS.hlsl): potential floor a node's single synthetic
+    // potential is clamped to whenever the 27-tap signed-kernel correction
+    // drives it negative ("my label no longer holds here") -- also the fixed
+    // potential a B-node gets whenever it's freshly relabeled (both at init
+    // and at runtime), matching Term 5/6's small-positive-floor role but for
+    // this entirely separate single-label/potential field, not the
+    // multi-candidate one. Was _pad3c.
+    float SyntheticEpsilon;
+
+    // Row 4 -- synthetic-field volume conservation (experimental, see
+    // smoothnessJacobiSyntheticCS.hlsl). Per-halo, per-label ratio of
+    // "current volume" (sum of NodeSyntheticVolume -- each halo node's own
+    // last-committed potential -- over halo nodes currently carrying a
+    // given label) to that label's "original volume" (count of this halo's
+    // A-nodes whose RasterLabel ground truth carries that label). Applied
+    // as a bounded confidence nudge to a target's potential AFTER this
+    // sweep's relabel decision is already made -- ratio 1 = locally
+    // conserved; doesn't reopen the relabel decision itself. 0 disables
+    // the term entirely.
+    float VolumeRatioWeight;
+    float _pad4b;
+    float _pad4c;
+    float _pad4d;
 }
 #ifndef __HLSL_VERSION
 ;

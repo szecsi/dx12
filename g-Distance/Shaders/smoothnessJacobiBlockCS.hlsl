@@ -42,6 +42,12 @@ groupshared float lijPotDiff[HALO_NODES];     // candidate potentials, 2 per nod
 groupshared uint  li;
 groupshared uint  lj;
 
+static const uint4 kernelbits = uint4(
+    3 | (5 << 5) | (12 << 10) | (15 << 15) | (17 << 20) | (20 << 25), // w 8
+    0x00100401u,  // w 192 | w 16
+    0x403F3C30u,  // w -48
+    0x3B2F2C2Bu);
+
 uint posToIdxA(uint3 l) { return AIdx(l.x, l.y, l.z); }
 uint posToIdxB(uint3 l) { return BIdx(l.x, l.y, l.z); }
         
@@ -70,10 +76,19 @@ void smoothnessJacobiBlockCS(uint3 gid : SV_GroupID, uint tid : SV_GroupIndex)
                 uint3((RotationOffset >> 0) & 1u, (RotationOffset >> 1) & 1u, (RotationOffset >> 2) & 1u)
                 + 1u;
         uint authIdx = posToIdxA(authA);
-        float myPot = NodePotential[authIdx * MAX_CANDIDATES + tid];
-        uint myLabel = (NodeCandidateLabel[authIdx * 2u + tid / 4u] >> ((tid % 4u) * 8u)) & 0xFFu;
-        myLabel = myLabel | myLabel << 8u; // 16-bit label, repeated in both bytes
+        uint myRawLabel = (NodeCandidateLabel[authIdx * 2u + tid / 4u] >> ((tid % 4u) * 8u)) & 0xFFu;
+        uint myLabel = myRawLabel | myRawLabel << 8u; // 16-bit label, repeated in both bytes
         myLabel = myLabel | myLabel << 16u; // 32-bit label, repeated four times
+        // buildCandidatesCS.hlsl seeds unused slots to a plain 0.0 (never
+        // overridden -- other terms, e.g. smoothnessJacobiCS.hlsl's Term 3
+        // regularizer, sum all 8 raw potentials unconditionally and rely on
+        // that being a harmless neutral value, so it can't just be changed
+        // to something very negative there). A genuine *other* real
+        // candidate seeds to -myDist+jitter, which is typically well BELOW
+        // 0.0 -- so an unused slot's 0.0 was silently beating real
+        // candidates in this max search. Exclude sentinel-labeled slots by
+        // their LABEL instead of trusting potential ordering.
+        float myPot = (myRawLabel == SENTINEL_CANDIDATE) ? -1.0e30 : NodePotential[authIdx * MAX_CANDIDATES + tid];
         float maxPot = WaveActiveMax(myPot);
         if (myPot == maxPot) { li = myLabel; }
         float myPot2 = (myPot == maxPot) ? -1.0e30 : myPot; // knock the winner out for the runner-up pass
@@ -82,43 +97,72 @@ void smoothnessJacobiBlockCS(uint3 gid : SV_GroupID, uint tid : SV_GroupIndex)
     }               
     GroupMemoryBarrierWithGroupSync();
 
-    // mine slots and potentials for Li, Lj
-    {
-        uint3 inHaloPosA = uint3(tid % HALO_DIM, (tid / HALO_DIM) % HALO_DIM, tid / (HALO_DIM * HALO_DIM));
-        uint3 posA = haloOriginA + inHaloPosA;
-        uint inHaloIdx = inHaloPosToInHaloIdxA(inHaloPosA);
-        uint idx = posToIdxA(posA);
-        uint candidates0to3 = NodeCandidateLabel[idx * 2u + 0u];
-        uint candidates4to7 = NodeCandidateLabel[idx * 2u + 1u];
-        uint maski0to3 = ~(candidates0to3 ^ li);
-        maski0to3 =  maski0to3 & (maski0to3 >> 4u);
-        maski0to3 =  maski0to3 & (maski0to3 >> 2u);
-        maski0to3 = (maski0to3 & (maski0to3 >> 1u)) & 0x01010101u;
-        uint maski4to7 = ~(candidates4to7 ^ li);
-        maski4to7 = maski4to7 & (maski4to7 >> 4u);
-        maski4to7 = maski4to7 & (maski4to7 >> 2u);
-        maski4to7 = (maski4to7 & (maski4to7 >> 1u)) & 0x01010101u;
-        uint iSlot = ((maski0to3 != 0u) ? (uint) firstbithigh(maski0to3) : (uint) firstbithigh(maski4to7) + 4u) / 8u;
-
-        uint maskj0to3 = ~(candidates0to3 ^ lj);
-        maskj0to3 =  maskj0to3 & (maskj0to3 >> 4u);
-        maskj0to3 =  maskj0to3 & (maskj0to3 >> 2u);
-        maskj0to3 = (maskj0to3 & (maskj0to3 >> 1u)) & 0x01010101u;
-        uint maskj4to7 = ~(candidates4to7 ^ lj);
-        maskj4to7 = maskj4to7 & (maskj4to7 >> 4u);
-        maskj4to7 = maskj4to7 & (maskj4to7 >> 2u);
-        maskj4to7 = (maskj4to7 & (maskj4to7 >> 1u)) & 0x01010101u;
-        uint jSlot = ((maskj0to3 != 0u) ? (uint) firstbithigh(maskj0to3) : (uint) firstbithigh(maskj4to7) + 4u) / 8u;
-
-        lijSlots[inHaloIdx] = iSlot << 16u | jSlot;
-        lijPotDiff[inHaloIdx] = NodePotential[idx * MAX_CANDIDATES + iSlot]
-                    - NodePotential[idx * MAX_CANDIDATES + jSlot];
-    }
-    GroupMemoryBarrierWithGroupSync();
-                
     uint lli = li;
     uint llj = lj;
 
+    // If the authority node has fewer than 2 real candidates this rotation,
+    // the "knock out the winner, take the max of what's left" pass in Stage
+    // 1 has nothing but unused slots to pick from -- buildCandidatesCS fills
+    // those with SENTINEL_CANDIDATE(255), which myLabel's 4x byte-replicate
+    // turns into exactly 0xFFFFFFFF. Bail the whole tile uniformly: every
+    // thread just saw the same li/lj write behind the same barrier, so this
+    // branch is identical across all 128 threads (no divergence), safe to
+    // return before any further GroupMemoryBarrierWithGroupSync() call.
+    if (llj == 0xFFFFFFFFu) return;
+
+    // mine slots and potentials for Li, Lj
+    {
+        bool isB = tid >= 64u;
+        uint tidLocal = tid & 63u; // rebase B half (tid 64..127) back to local 0..63
+        uint3 inHaloPosA = uint3(tidLocal % HALO_DIM, (tidLocal / HALO_DIM) % HALO_DIM, tidLocal / (HALO_DIM * HALO_DIM));
+        uint3 posA = haloOriginA + inHaloPosA;
+        uint inHaloIdx = isB ? inHaloPosToInHaloIdxB(inHaloPosA) : inHaloPosToInHaloIdxA(inHaloPosA);
+        uint idx = isB ? posToIdxB(posA) : posToIdxA(posA);
+        uint candidates0to3 = NodeCandidateLabel[idx * 2u + 0u];
+        uint candidates4to7 = NodeCandidateLabel[idx * 2u + 1u];
+        uint maski0to3 = ~(candidates0to3 ^ lli);
+        maski0to3 =  maski0to3 & (maski0to3 >> 4u);
+        maski0to3 =  maski0to3 & (maski0to3 >> 2u);
+        maski0to3 = (maski0to3 & (maski0to3 >> 1u)) & 0x01010101u;
+        uint maski4to7 = ~(candidates4to7 ^ lli);
+        maski4to7 = maski4to7 & (maski4to7 >> 4u);
+        maski4to7 = maski4to7 & (maski4to7 >> 2u);
+        maski4to7 = (maski4to7 & (maski4to7 >> 1u)) & 0x01010101u;
+
+        uint maskj0to3 = ~(candidates0to3 ^ llj);
+        maskj0to3 =  maskj0to3 & (maskj0to3 >> 4u);
+        maskj0to3 =  maskj0to3 & (maskj0to3 >> 2u);
+        maskj0to3 = (maskj0to3 & (maskj0to3 >> 1u)) & 0x01010101u;
+        uint maskj4to7 = ~(candidates4to7 ^ llj);
+        maskj4to7 = maskj4to7 & (maskj4to7 >> 4u);
+        maskj4to7 = maskj4to7 & (maskj4to7 >> 2u);
+        maskj4to7 = (maskj4to7 & (maskj4to7 >> 1u)) & 0x01010101u;
+
+        uint iSlot = 0xFFu;
+        float potLi = MissingFallback;
+        if (maski0to3 != 0u) {
+            iSlot = (uint) firstbithigh(maski0to3) / 8u;
+            potLi = NodePotential[idx * MAX_CANDIDATES + iSlot];
+        } else if (maski4to7 != 0u) {
+            iSlot = (uint) firstbithigh(maski4to7) / 8u + 4u;
+            potLi = NodePotential[idx * MAX_CANDIDATES + iSlot];
+        }
+
+        uint jSlot = 0xFFu;
+        float potLj = MissingFallback;
+        if (maskj0to3 != 0u) {
+            jSlot = (uint) firstbithigh(maskj0to3) / 8u;
+            potLj = NodePotential[idx * MAX_CANDIDATES + jSlot];
+        } else if (maskj4to7 != 0u) {
+            jSlot = (uint) firstbithigh(maskj4to7) / 8u + 4u;
+            potLj = NodePotential[idx * MAX_CANDIDATES + jSlot];
+        }
+
+        lijSlots[inHaloIdx] = (iSlot << 16u) | jSlot;
+        lijPotDiff[inHaloIdx] = potLi - potLj;
+    }
+    GroupMemoryBarrierWithGroupSync();
+                
     // four warps, targets split in four groups
     uint warpId = tid / 32u;
     uint wid = tid % 32u;
@@ -126,55 +170,47 @@ void smoothnessJacobiBlockCS(uint3 gid : SV_GroupID, uint tid : SV_GroupIndex)
     if(wid < 27u){
         for (int iTarget = warpId; iTarget < 16; iTarget += 4)
         {
-            uint3 inTilePos = uint3(iTarget % HALO_DIM, (iTarget / HALO_DIM) % HALO_DIM, iTarget / (HALO_DIM * HALO_DIM));
+            uint local = iTarget & 7u;
+            uint3 inTilePos = uint3(local & 1u, (local >> 1u) & 1u, (local >> 2u) & 1u);        
             bool isB = iTarget >= 8u;
             uint3 inHaloPos = inTilePos + 1u;
             uint centerIdx = isB ? inHaloPosToInHaloIdxB(inHaloPos) : inHaloPosToInHaloIdxA(inHaloPos);
             
             // multiply by kernel term
-            int offset = 0x10u;
-            uint widh = (wid+1)/2;
-            offset = (offset << (widh * 2u)) >> 6u;
-
-            if(wid > 6u){
-                
+            uint wid18 = wid % 18u;
+            int offset;
+            float weight;
+            if(wid18 < 6u){
+                offset = kernelbits.x >> (wid18 * 5u) & 0x1Fu;
+                weight = 8.0;
+            } else {
+                offset = (kernelbits[(wid18-2u) / 4u] >> ((wid18 + 2u) % 4u) * 8u) & 0xFFu;
+                weight = 16.0;
             }
-            
-            offset *= (wid%2)?-1:1;
-            
-            if(wid >= 20u){ //cross-B
-              offset += 64;
-            }
-            float contrib = lijPotDiff[centerIdx + offset] * 1.0/*weights[wid]*/;
-                    
-                    
+            bool negate = (wid >= 18u) || (isB && wid18 >= 10u);
+            if(negate) offset = -offset;
+            if(wid18 >= 9u) weight = 192.0;
+            if(wid18 >= 10u) weight = -48.0;
+            float contrib = lijPotDiff[centerIdx + offset] * weight;
             // group reduce to sum getting grad and dial                    
             float total = WaveActiveSum(contrib);
-            if(wid == 0u){}
-        
-        
-        // compute step from grad and diag
-        // apply change to buffer in-place?
-        }
-    }
-            
-    GroupMemoryBarrierWithGroupSync();
-
-/*        // Write scratch: li/lj get the Term-1 Jacobi step, every other slot
-        // is copied through unchanged (this kernel doesn't touch Terms 2-5,
-        // and commitPotentialCS reads scratch for every node/slot).
-        for (uint s = 0; s < MAX_CANDIDATES; s++) {
-            float phi = gsmPot[haloIdx * 8u + s];
-            float newPhi = phi;
-            if ((int)s == siLi) {
+            if(wid < 8u){
+                uint targetSlots = lijSlots[centerIdx];
+                uint targetTarget = isB ? posToIdxB(haloOriginA + inHaloPos) : posToIdxA(haloOriginA + inHaloPos);
+                float phi = NodePotential[targetTarget * MAX_CANDIDATES + wid];
+                float w = SmoothnessWeight;
+                float gradLi = w * total;
+                float diagLi = w * 192.0; // sum of absolute kernel weights
                 float step = clamp(-gradLi / (diagLi + JacobiDiagEpsilon), -MaxPotentialStep, MaxPotentialStep);
-                newPhi = phi + step;
-            } else if ((int)s == siLj) {
-                float step = clamp(-gradLj / (diagLj + JacobiDiagEpsilon), -MaxPotentialStep, MaxPotentialStep);
-                newPhi = phi + step;
+                if(wid == (targetSlots & 0xffffu)){
+                    phi -= step;
+                }
+                else if(wid == (targetSlots >> 16u)){
+                    phi += step;
+                }
+                NodePotentialScratch[targetTarget * MAX_CANDIDATES + wid] = phi;
             }
-            NodePotentialScratch[node * MAX_CANDIDATES + s] = newPhi;
         }
     }
-*/
+          
 }

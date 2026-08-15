@@ -72,6 +72,7 @@
     "UAV(u3)," \
     "UAV(u4)," \
     "UAV(u5)," \
+    "UAV(u6)," \
     "CBV(b1)"
 
 RWStructuredBuffer<uint>   NodeCandidateLabel : register(u0);
@@ -86,6 +87,9 @@ RWStructuredBuffer<uint>   NodeIsConnecting : register(u4);
 // Written once per outer round by snapshotWinnerCS.hlsl -- UNUSED here now,
 // see Term 1's header comment above (frozen winner removed, back to live).
 RWStructuredBuffer<uint>   NodeFrozenWinner : register(u5);
+// ACount-sized (jfaFinalizeCS.hlsl) -- only ever index with node<ACount.
+// Bound for availability, not yet read by any term here.
+RWStructuredBuffer<float>  NodeFootDist : register(u6);
 
 // Finds a REAL node's own slot for a label (works for any real node index,
 // not just the dispatched thread's own -- it's a plain NodeCandidateLabel
@@ -304,6 +308,8 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             
     if(myValidCount == 0) return;
 
+    float footnodeDist = NodeFootDist[node] - 0.5;
+    
     // Term 1: either the closed-form fixed-kernel fast path (see
     // FixedKernelSmoothness above -- exact, no tet geometry at all) or the
     // original brute-force tet-walk traversal, GUI-selected
@@ -364,7 +370,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             sumPhi += NodePotential[node * MAX_CANDIDATES + s];
             validCount++;
         }
-        if (validCount > 0) {
+        if (validCount > 1) {
             float residual = sumPhi; // target sum is 0
             for (uint s = 0; s < MAX_CANDIDATES; s++) {
                 if (GetCandidateLabelAt(NodeCandidateLabel, node, s) == SENTINEL_CANDIDATE) continue;
@@ -438,7 +444,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
     // NodeIsConnecting is a 2-bit flag field now (see computeConnectingNodesCS.hlsl)
     // -- bit 0 (value 1) is this "connecting" flag; bit 1 is an unrelated
     // local-max-of-NodeFootDist flag not consulted by the solve, so mask it.
-    if (ownSlot >= 0 && node < ACount && (NodeIsConnecting[node] > 0)) {
+    if (ownSlot >= 0 && node < ACount && (NodeIsConnecting[node] & 1u) != 0u) {
         float violation = VolumeFloor - myCurrentVolume;
         if (violation > 0.0 && myKSum != 0.0) {
             grad[ownSlot] += -2.0 * VolumeWeight * violation * myKSum;
@@ -524,6 +530,23 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
         }
     }
 
+    // Term 6: divergence pull. A DIVERGENT A-node (NodeIsConnecting bit2,
+    // computeConnectingNodesCS.hlsl) has a same-label neighbor whose
+    // footvector disagrees with its own -- a saddle/pinch region where the
+    // solve is most likely to distort this node's own potential away from
+    // its sensible JFA-distance value. Draws phi0 (A's own/input label,
+    // same slot-0 convention as Term 2 below) back toward NodeFootDist,
+    // ramped like Term 5: negligible pull while the gap is under 1 unit,
+    // rising sharply as it approaches/exceeds 1.
+    if (DivergencePullWeight > 0.0 && node < ACount && (
+        (NodeIsConnecting[node] & 4u) != 0u || footnodeDist > 2.0)) {
+        float phi0_6 = NodePotential[node * MAX_CANDIDATES + 0];
+        float diff6 = phi0_6 - footnodeDist;
+        float w6 = DivergencePullWeight * saturate(abs(diff6) / 1.0);
+        grad[0] += 2.0 * w6 * diff6;
+        diag[0] += 2.0 * w6;
+    }
+
     // Term 2: margin hinge. A-nodes: own/input label (slot 0) must stay
     // above every other candidate by MarginTarget -- this is a correctness
     // anchor (corrects a wrong current winner back toward ground truth).
@@ -534,7 +557,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
         for (uint s = 1; s < MAX_CANDIDATES; s++) {
             if (GetCandidateLabelAt(NodeCandidateLabel, node, s) == SENTINEL_CANDIDATE) continue;
             float phiS = NodePotential[node * MAX_CANDIDATES + s];
-            float violation = MarginTarget - (phi0 - phiS);
+            float violation = MarginTarget * footnodeDist - (phi0 - phiS);
             if (violation > 0.0) {
                 grad[0] += -2.0 * MarginWeight * violation;
                 diag[0] += 2.0 * MarginWeight;
@@ -566,8 +589,7 @@ void smoothnessJacobiCS(uint3 tid : SV_DispatchThreadID)
             // Hard step clamp -- plain per-unknown-diagonal Jacobi on this
             // coupled system (each unknown's diagonal ignores that the other
             // unknowns feeding the same residual are moving simultaneously
-            // this same sweep) overshoots and diverges without one. Same
-            // role/necessity as g-Aequor's MaxStep.
+            // this same sweep) overshoots and diverges without one.
             float step = -grad[s] / (diag[s] + JacobiDiagEpsilon);
             step = clamp(step, -MaxPotentialStep, MaxPotentialStep);
             newPhi = phi + step;

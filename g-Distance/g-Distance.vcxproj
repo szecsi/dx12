@@ -78,11 +78,17 @@
     <FxCompile Include="Shaders\jfaStepCS.hlsl" />
     <FxCompile Include="Shaders\jfaFinalizeCS.hlsl" />
     <FxCompile Include="Shaders\buildCandidatesCS.hlsl" />
+    <FxCompile Include="Shaders\buildSyntheticBCS.hlsl" />
     <FxCompile Include="Shaders\snapshotWinnerCS.hlsl" />
     <FxCompile Include="Shaders\smoothnessJacobiCS.hlsl" />
     <FxCompile Include="Shaders\smoothnessJacobiBlockCS.hlsl" />
+    <FxCompile Include="Shaders\smoothnessJacobiSyntheticCS.hlsl" />
     <FxCompile Include="Shaders\commitPotentialCS.hlsl" />
+    <FxCompile Include="Shaders\commitPotentialBlockCS.hlsl" />
+    <FxCompile Include="Shaders\commitSyntheticCS.hlsl" />
+    <FxCompile Include="Shaders\initSyntheticVolumeCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl" />
+    <FxCompile Include="Shaders\extractSurfaceSyntheticCS.hlsl" />
     <FxCompile Include="Shaders\raymarchVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
@@ -117,6 +123,7 @@
   <ItemGroup>
     <None Include="Shaders\DistanceConfig.hlsli" />
     <None Include="Shaders\DistanceLattice.hlsli" />
+    <None Include="Shaders\SyntheticField.hlsli" />
     <None Include="Shaders\DistanceCb.hlsli" />
     <None Include="Shaders\DistanceFrameCb.hlsli" />
     <None Include="Shaders\DistanceSurface.hlsli" />
