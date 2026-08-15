@@ -1,6 +1,7 @@
 #include "DistanceFrameCb.hlsli"
 #define DISTANCE_GRID_CB_REGISTER b2
 #include "DistanceLattice.hlsli"
+#include "LabelPalette.hlsli"
 
 // No [RootSignature(...)] here -- declared once by footSliceVS.hlsl, reused
 // for both stages of this draw (this codebase's convention).
@@ -95,6 +96,21 @@ PsOut footSlicePS(VsOut input)
     uint node = (distA <= distB)
         ? AIdx((uint)aGi.x, (uint)aGi.y, (uint)aGi.z)
         : BIdx((uint)bGi.x, (uint)bGi.y, (uint)bGi.z);
+
+    // DisplayMode==2: synthetic-field mode's "Potentials" view -- a node
+    // carries exactly ONE (label, potential) pair now (slot 0, see
+    // smoothnessJacobiSyntheticCS.hlsl), not competing label-0/label-1
+    // candidates, so the label-0-vs-label-1 heatmap below doesn't apply
+    // (slots 1-7 are stale leftover multi-candidate data in this mode, not
+    // meaningful). Color = this node's own label's palette color, scaled by
+    // its potential (brighter = more confident).
+    if (DisplayMode == 2u) {
+        uint synLabel = GetCandidateLabelAt(NodeCandidateLabel, node, 0u);
+        float synPot = NodePotential[node * MAX_CANDIDATES + 0u];
+        float3 col = LabelColorA(synLabel) * saturate(synPot / scale);
+        result.color = float4(col, 1.0);
+        return result;
+    }
 
     bool has0 = false, has1 = false;
     float phi0 = 0.0, phi1 = 0.0;

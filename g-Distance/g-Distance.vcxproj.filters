@@ -43,6 +43,9 @@
     <FxCompile Include="Shaders\buildCandidatesCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\buildSyntheticBCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\snapshotWinnerCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
@@ -52,13 +55,22 @@
     <FxCompile Include="Shaders\smoothnessJacobiBlockCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\smoothnessJacobiSyntheticCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\commitPotentialCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\commitPotentialBlockCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\commitSyntheticCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\extractSurfaceSyntheticCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\raymarchVS.hlsl">
@@ -97,6 +109,9 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\DistanceLattice.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\SyntheticField.hlsli">
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\DistanceCb.hlsli">

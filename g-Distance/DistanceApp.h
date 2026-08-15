@@ -175,12 +175,16 @@ protected:
 	Egg::Compute::ComputeShader jfaStepCS;
 	Egg::Compute::ComputeShader jfaFinalizeCS;
 	Egg::Compute::ComputeShader buildCandidatesCS;
+	Egg::Compute::ComputeShader buildSyntheticBCS; // B-node init for the synthetic-field path ONLY, see buildSyntheticBCS.hlsl
 	Egg::Compute::ComputeShader snapshotWinnerCS;
 	Egg::Compute::ComputeShader smoothnessJacobiCS;
 	Egg::Compute::ComputeShader smoothnessJacobiBlockCS; // Term-1-only tile/groupshared reimplementation, see smoothnessJacobiBlockCS.hlsl
+	Egg::Compute::ComputeShader smoothnessJacobiSyntheticCS; // single-label/potential competitive field, see smoothnessJacobiSyntheticCS.hlsl
 	Egg::Compute::ComputeShader commitPotentialCS;
 	Egg::Compute::ComputeShader commitPotentialBlockCS; // scratch->main commit for the block-smoothing path ONLY, see commitPotentialBlockCS.hlsl
+	Egg::Compute::ComputeShader commitSyntheticCS; // scratch->main commit for the synthetic-field path ONLY, see commitSyntheticCS.hlsl
 	Egg::Compute::ComputeShader extractSurfaceCS;
+	Egg::Compute::ComputeShader extractSurfaceSyntheticCS; // synthetic-field surface extraction, see extractSurfaceSyntheticCS.hlsl
 
 	com_ptr<ID3D12RootSignature> raymarchRootSig;
 	com_ptr<ID3D12PipelineState> raymarchPso;
@@ -204,6 +208,7 @@ protected:
 	int testShapeKind = TestShape_SingleTorus;
 	bool needsReinit = false;
 	bool needsContinue = false;
+	bool profileIterateEveryFrame = false; // Nsight profiling aid: run RunContinue every frame, not just on 'C' -- off by default
 	bool dataValid = false; // true once a Reinit/Continue has actually produced node data
 
 	int iterations = 0;          // outer Lloyd-loop rounds on Reinitialize
@@ -215,7 +220,7 @@ protected:
 	float marginTarget = 0.5f;
 	float regularizerWeight = 10.0f;
 	float jacobiDiagEpsilon = 0.05f;
-	float seedJitter = 0.05f;
+	float seedJitter = 0.0f;
 	float ownLabelSeed = 1.0f;
 	bool neutralBSeed = true; // B-nodes seed with pure jitter instead of a majority-vote confidence boost, see buildCandidatesCS.hlsl
 	bool edgeConnectivityOnly = true; // 18-connectivity (vs 26-connectivity) for computeConnectingNodesCS.hlsl's local flood-fill
@@ -227,6 +232,14 @@ protected:
 	bool useFixedKernelSmoothing = false; // Term 1 fast path: closed-form 27-tap lattice kernel instead of tet-walking, see smoothnessJacobiCS.hlsl's FixedKernelSmoothness (exact, not an approximation)
 	bool useBlockSmoothing = false; // experimental: replace smoothnessJacobiCS entirely with the tile/groupshared Term-1-only smoothnessJacobiBlockCS.hlsl for the Jacobi sweep loop (Terms 2-5 are NOT applied while this is on)
 	int blockSmoothingSweepCounter = 0; // advances every block-smoothing sweep; RotationOffset = counter % 8 (see smoothnessJacobiBlockCS.hlsl Stage 1)
+	// Experimental: entirely separate single-label/potential "synthetic
+	// field" pipeline (smoothnessJacobiSyntheticCS.hlsl/buildSyntheticBCS.hlsl/
+	// commitSyntheticCS.hlsl/extractSurfaceSyntheticCS.hlsl) -- reinterprets
+	// the SAME buffers as the multi-candidate scheme, so mutually exclusive
+	// with useBlockSmoothing (enforced where the GUI checkboxes are drawn).
+	bool useSyntheticField = false;
+	float syntheticEpsilon = 0.01f; // potential floor on relabel/negative-clamp, see DistanceCb.hlsli's SyntheticEpsilon
+	bool useSyntheticLabelVote = false; // B-node relabel method, see smoothnessJacobiSyntheticCS.hlsl's UseLabelVote: true = SyntheticVote8 over the 8 own A-corners, false = dumb binary flip (1-oldLabel), test-only, two-label case
 	float missingFallback = -3.0f; // TetFieldGrad's GetCornerPotential missing-candidate fallback, see DistanceCb.hlsli
 	float distanceWeight = 0.0f; // term 5 (distance/Eikonal shaping) weight, see DistanceCb.hlsli -- default 0, off until tuned
 	float divergencePullWeight = 0.0f; // term 6 weight: pulls a DIVERGENT A-node's own potential back toward NodeFootDist, see DistanceCb.hlsli -- default 0, off until tuned
@@ -362,7 +375,7 @@ protected:
 		distanceCb.data.DistanceWeight = distanceWeight;
 		distanceCb.data.UseFixedKernelSmoothing = useFixedKernelSmoothing ? 1.0f : 0.0f;
 		distanceCb.data.DivergencePullWeight = divergencePullWeight;
-		distanceCb.data._pad3c = 0.0f;
+		distanceCb.data.SyntheticEpsilon = syntheticEpsilon;
 		distanceCb.Upload();
 	}
 
@@ -643,9 +656,30 @@ protected:
 		cmd->SetComputeRoot32BitConstant(0, 0u, 0); // Mode = A-nodes
 		cmd->SetComputeRoot32BitConstant(0, neutralBSeed ? 1u : 0u, 1); // NeutralBSeed
 		cmd->Dispatch(BuildCandidatesAGroups, 1, 1);
-		cmd->SetComputeRoot32BitConstant(0, 1u, 0); // Mode = B-nodes
-		cmd->SetComputeRoot32BitConstant(0, neutralBSeed ? 1u : 0u, 1); // NeutralBSeed
-		cmd->Dispatch(BuildCandidatesBGroups, 1, 1);
+		if (useSyntheticField) {
+			// Synthetic-field B-node init (buildSyntheticBCS.hlsl) replaces
+			// buildCandidatesCS's own Mode=1 (B) dispatch for this pipeline --
+			// A's slot-0 output above is already exactly what the synthetic
+			// field wants and needs no swap. No barrier needed between this and
+			// the A dispatch above: buildSyntheticBCS only reads
+			// RasterLabel/NodeFootDist (already barriered earlier in this
+			// function) and only writes the disjoint B index range.
+			cmd->SetComputeRootSignature(buildSyntheticBCS.rootSig.Get());
+			cmd->SetPipelineState(buildSyntheticBCS.pso.Get());
+			cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, rasterLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(3, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(4, nodeFootDistBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+			cmd->Dispatch(BuildCandidatesBGroups, 1, 1);
+		} else {
+			cmd->SetComputeRootSignature(buildCandidatesCS.rootSig.Get());
+			cmd->SetPipelineState(buildCandidatesCS.pso.Get());
+			cmd->SetComputeRoot32BitConstant(0, 1u, 0); // Mode = B-nodes
+			cmd->SetComputeRoot32BitConstant(0, neutralBSeed ? 1u : 0u, 1); // NeutralBSeed
+			cmd->Dispatch(BuildCandidatesBGroups, 1, 1);
+		}
 		{
 			D3D12_RESOURCE_BARRIER b[] = {
 				CD3DX12_RESOURCE_BARRIER::UAV(nodeCandidateLabelBuffer.Get()),
@@ -722,6 +756,23 @@ protected:
 				cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
 				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
 				cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()));
+			} else if (useSyntheticField) {
+				// Single-label/potential competitive field -- see
+				// smoothnessJacobiSyntheticCS.hlsl. Unlike block smoothing,
+				// every node ALWAYS has a valid label+potential (no missing-
+				// candidate/authority-lacks-2-candidates case), so every tile
+				// always writes every one of its 16 targets every sweep --
+				// no reseed-before-sweep pass needed.
+				cmd->SetComputeRootSignature(smoothnessJacobiSyntheticCS.rootSig.Get());
+				cmd->SetPipelineState(smoothnessJacobiSyntheticCS.pso.Get());
+				cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(3, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRoot32BitConstant(4, useSyntheticLabelVote ? 1u : 0u, 0);
+				cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
+				cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()));
 			} else {
 				cmd->SetComputeRootSignature(smoothnessJacobiCS.rootSig.Get());
 				cmd->SetPipelineState(smoothnessJacobiCS.pso.Get());
@@ -755,6 +806,14 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
 				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
+			} else if (useSyntheticField) {
+				cmd->SetComputeRootSignature(commitSyntheticCS.rootSig.Get());
+				cmd->SetPipelineState(commitSyntheticCS.pso.Get());
+				cmd->SetComputeRootUnorderedAccessView(0, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
 			} else {
 				cmd->SetComputeRootSignature(commitPotentialCS.rootSig.Get());
 				cmd->SetPipelineState(commitPotentialCS.pso.Get());
@@ -763,7 +822,18 @@ protected:
 				cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
 				cmd->Dispatch(CommitGroups, 1, 1);
 			}
-			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()));
+			if (useSyntheticField) {
+				// commitSyntheticCS also commits the scratch label byte into
+				// NodeCandidateLabel -- barrier that too, not just potential,
+				// before the next sweep's Load stage or RunExtractSurface reads it.
+				D3D12_RESOURCE_BARRIER b[] = {
+					CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeCandidateLabelBuffer.Get()),
+				};
+				cmd->ResourceBarrier(_countof(b), b);
+			} else {
+				cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()));
+			}
 		}
 	}
 
@@ -777,8 +847,13 @@ protected:
 	// Jacobi sweep, and re-run whenever the solve state actually changes
 	// (end of RunReinit/RunContinue), never every frame.
 	void RunExtractSurface(com_ptr<ID3D12GraphicsCommandList>& cmd) {
-		cmd->SetComputeRootSignature(extractSurfaceCS.rootSig.Get());
-		cmd->SetPipelineState(extractSurfaceCS.pso.Get());
+		if (useSyntheticField) {
+			cmd->SetComputeRootSignature(extractSurfaceSyntheticCS.rootSig.Get());
+			cmd->SetPipelineState(extractSurfaceSyntheticCS.pso.Get());
+		} else {
+			cmd->SetComputeRootSignature(extractSurfaceCS.rootSig.Get());
+			cmd->SetPipelineState(extractSurfaceCS.pso.Get());
+		}
 		cmd->SetComputeRootUnorderedAccessView(0, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(2, surfaceVertexBuffer->GetGPUVirtualAddress());
@@ -1189,6 +1264,20 @@ protected:
 				continue;
 			}
 			for (uint s = 0; s < MAX_CANDIDATES; s++) {
+				// Synthetic-field mode only ever has ONE real slot (0) --
+				// slots 1-7 are stale multi-candidate leftovers (A: real but
+				// frozen labels/potentials from buildCandidatesCS's Mode=0
+				// discovery scan, never touched again; B: zeroed/garbage from
+				// buildSyntheticBCS, see that file). Mask them out right here
+				// so every downstream consumer (the corner-top-label vote and
+				// the phi_i/phi_j search below) only ever sees the single
+				// real (label, potential) pair, not stale data that could
+				// otherwise win an argmax/label-match against it.
+				if (useSyntheticField && s > 0) {
+					pickedCornerLabels[c][s] = SENTINEL_CANDIDATE;
+					pickedCornerPots[c][s] = 0.0f;
+					continue;
+				}
 				pickedCornerLabels[c][s] = (cand[node * 2u + s / 4u] >> ((s % 4u) * 8u)) & 0xFFu;
 				pickedCornerPots[c][s] = pot[node * MAX_CANDIDATES + s];
 			}
@@ -1299,6 +1388,9 @@ protected:
 			if (ImGui::Button("Continue")) needsContinue = true;
 			ImGui::SameLine();
 			ImGui::TextDisabled("('C' key)");
+			ImGui::Checkbox("Iterate Every Frame (Profiling)", &profileIterateEveryFrame);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(for Nsight capture -- runs Continue every frame, not just on 'C')");
 		}
 		if (ImGui::Button("Reinitialize")) needsReinit = true;
 		ImGui::SameLine();
@@ -1342,6 +1434,9 @@ protected:
 					}
 				}
 
+				if (useSyntheticField) {
+					ImGui::TextDisabled("(Synthetic Field mode: each node carries exactly ONE label+potential -- phi_i/phi_j below both just read that single value, whichever of the pair it matches)");
+				}
 				ImGui::Text("Active pair: label %u vs label %u", pickedInterfaceLabelI, pickedInterfaceLabelJ);
 				for (uint c = 0; c < 4; c++) {
 					uint node = pickedTetNodes[c];
@@ -1350,6 +1445,9 @@ protected:
 						hasI[c] ? "" : "*", phiI[c],
 						hasJ[c] ? "" : "*", phiJ[c],
 						phiI[c] - phiJ[c]);
+					if (useSyntheticField) {
+						ImGui::TextDisabled("      (CurVol below is stale -- Term 4 doesn't run in synthetic-field mode; IsConnecting/FootDist flags are still live)");
+					}
 					ImGui::Text("      CurVol=%.4f%s%s%s",
 						pickedCornerCurrentVolume[c],
 						(pickedCornerIsConnecting[c] & 1u) ? "  CONNECTING (floor pinned)" : "",
@@ -1406,9 +1504,24 @@ protected:
 		}
 
 		if (ImGui::CollapsingHeader("Energy Weights")) {
-			ImGui::Checkbox("Use Block Smoothing (experimental)", &useBlockSmoothing);
+			if (ImGui::Checkbox("Use Block Smoothing (experimental)", &useBlockSmoothing)) {
+				if (useBlockSmoothing) useSyntheticField = false; // mutually exclusive -- both reinterpret the same buffers differently
+			}
 			ImGui::SameLine();
 			ImGui::TextDisabled("(Term 1 ONLY, tile/groupshared, see smoothnessJacobiBlockCS.hlsl -- Terms 2-5 off while enabled)");
+			if (ImGui::Checkbox("Use Synthetic Field (experimental)", &useSyntheticField)) {
+				if (useSyntheticField) useBlockSmoothing = false; // mutually exclusive, see above
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("(single label+potential per node, 27-tap signed-kernel competition, see smoothnessJacobiSyntheticCS.hlsl -- applied on Reinitialize)");
+			if (useSyntheticField) {
+				ImGui::SliderFloat("Synthetic Epsilon", &syntheticEpsilon, 0.0001f, 1.0f, "%.4f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(potential floor on relabel/negative-clamp, see DistanceCb.hlsli)");
+				ImGui::Checkbox("Synthetic: Use Label Vote", &useSyntheticLabelVote);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(off = dumb binary flip 1-oldLabel, test-only, two-label case; on = SyntheticVote8 over the 8 own A-corners)");
+			}
 			ImGui::Checkbox("Term 1: Edge-Walk Traversal", &useEdgeWalkTraversal);
 			ImGui::SameLine();
 			ImGui::TextDisabled("(off = node-adjacent-tets, see smoothnessJacobiCS.hlsl; ignored by Block Smoothing)");
@@ -1525,12 +1638,16 @@ public:
 		jfaStepCS.createResources(device, "Shaders/jfaStepCS.cso");
 		jfaFinalizeCS.createResources(device, "Shaders/jfaFinalizeCS.cso");
 		buildCandidatesCS.createResources(device, "Shaders/buildCandidatesCS.cso");
+		buildSyntheticBCS.createResources(device, "Shaders/buildSyntheticBCS.cso");
 		snapshotWinnerCS.createResources(device, "Shaders/snapshotWinnerCS.cso");
 		smoothnessJacobiCS.createResources(device, "Shaders/smoothnessJacobiCS.cso");
 		smoothnessJacobiBlockCS.createResources(device, "Shaders/smoothnessJacobiBlockCS.cso");
+		smoothnessJacobiSyntheticCS.createResources(device, "Shaders/smoothnessJacobiSyntheticCS.cso");
 		commitPotentialCS.createResources(device, "Shaders/commitPotentialCS.cso");
 		commitPotentialBlockCS.createResources(device, "Shaders/commitPotentialBlockCS.cso");
+		commitSyntheticCS.createResources(device, "Shaders/commitSyntheticCS.cso");
 		extractSurfaceCS.createResources(device, "Shaders/extractSurfaceCS.cso");
+		extractSurfaceSyntheticCS.createResources(device, "Shaders/extractSurfaceSyntheticCS.cso");
 
 		{
 			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/raymarchVS.cso");
@@ -1736,7 +1853,7 @@ public:
 		if (needsReinit) {
 			RunReinit();
 			needsReinit = false;
-		} else if (needsContinue) {
+		} else if (needsContinue || (profileIterateEveryFrame && dataValid)) {
 			RunContinue();
 			needsContinue = false;
 			if (pickedTetValid) ReadBackPickedTetDiagnostics(); // keep the Picked Tet panel current, not a stale snapshot from before this Continue
@@ -1815,8 +1932,13 @@ public:
 			commandList->SetGraphicsRootSignature(footSliceRootSig.Get());
 			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
 			int clampedSliceIndex = sliceIndex < 0 ? 0 : (sliceIndex > (int)GridRes - 1 ? (int)GridRes - 1 : sliceIndex);
+			// DisplayMode 2 = synthetic-field "Potentials" view (footSlicePS.hlsl)
+			// -- the combo only offers Potentials(0)/FootDist(1), so remap 0->2
+			// here when the synthetic pipeline is active; FootDist(1) needs no
+			// remap, NodeFootDist means the same thing in both modes.
+			uint32_t effectiveDisplayMode = (useSyntheticField && sliceDisplayMode == 0) ? 2u : (uint32_t)sliceDisplayMode;
 			struct { uint32_t axis; float coord; float colorScale; uint32_t displayMode; } sliceConsts = {
-				(uint32_t)sliceAxis, (float)clampedSliceIndex * CellSize, potentialColorScale, (uint32_t)sliceDisplayMode
+				(uint32_t)sliceAxis, (float)clampedSliceIndex * CellSize, potentialColorScale, effectiveDisplayMode
 			};
 			commandList->SetGraphicsRoot32BitConstants(1, 4, &sliceConsts, 0);
 			commandList->SetGraphicsRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());

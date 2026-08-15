@@ -91,7 +91,15 @@ DistanceCb
     // that gap approaches/exceeds 1 unit. 0 disables the term entirely. Was
     // _pad3b.
     float DivergencePullWeight;
-    float _pad3c;
+    // Synthetic-field pipeline (smoothnessJacobiSyntheticCS.hlsl/
+    // buildSyntheticBCS.hlsl): potential floor a node's single synthetic
+    // potential is clamped to whenever the 27-tap signed-kernel correction
+    // drives it negative ("my label no longer holds here") -- also the fixed
+    // potential a B-node gets whenever it's freshly relabeled (both at init
+    // and at runtime), matching Term 5/6's small-positive-floor role but for
+    // this entirely separate single-label/potential field, not the
+    // multi-candidate one. Was _pad3c.
+    float SyntheticEpsilon;
 }
 #ifndef __HLSL_VERSION
 ;

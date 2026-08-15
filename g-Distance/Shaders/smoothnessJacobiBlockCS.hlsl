@@ -158,7 +158,7 @@ void smoothnessJacobiBlockCS(uint3 gid : SV_GroupID, uint tid : SV_GroupIndex)
             potLj = NodePotential[idx * MAX_CANDIDATES + jSlot];
         }
 
-        lijSlots[inHaloIdx] = iSlot << 16u | jSlot;
+        lijSlots[inHaloIdx] = (iSlot << 16u) | jSlot;
         lijPotDiff[inHaloIdx] = potLi - potLj;
     }
     GroupMemoryBarrierWithGroupSync();
@@ -202,12 +202,12 @@ void smoothnessJacobiBlockCS(uint3 gid : SV_GroupID, uint tid : SV_GroupIndex)
                 float gradLi = w * total;
                 float diagLi = w * 192.0; // sum of absolute kernel weights
                 float step = clamp(-gradLi / (diagLi + JacobiDiagEpsilon), -MaxPotentialStep, MaxPotentialStep);
-                if(wid == (targetSlots & 0xffu)){
+                if(wid == (targetSlots & 0xffffu)){
                     phi -= step;
                 }
                 else if(wid == (targetSlots >> 16u)){
                     phi += step;
-                }                
+                }
                 NodePotentialScratch[targetTarget * MAX_CANDIDATES + wid] = phi;
             }
         }
