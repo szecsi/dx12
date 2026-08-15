@@ -92,13 +92,17 @@ DistanceCb
     // _pad3b.
     float DivergencePullWeight;
     // Synthetic-field pipeline (smoothnessJacobiSyntheticCS.hlsl/
-    // buildSyntheticBCS.hlsl): potential floor a node's single synthetic
-    // potential is clamped to whenever the 27-tap signed-kernel correction
-    // drives it negative ("my label no longer holds here") -- also the fixed
-    // potential a B-node gets whenever it's freshly relabeled (both at init
-    // and at runtime), matching Term 5/6's small-positive-floor role but for
-    // this entirely separate single-label/potential field, not the
-    // multi-candidate one. Was _pad3c.
+    // buildSyntheticBCS.hlsl): the potential a B-node gets whenever it's
+    // freshly relabeled -- at init (a non-unanimous own-cube) and at runtime
+    // (the 27-tap signed-kernel correction drives it negative and
+    // SyntheticVote8 picks a new label). Deliberately a real HEAD START
+    // (default 0.1), not a near-zero floor: every potential update is
+    // clamped to +-MaxPotentialStep per sweep, so a node left near zero would
+    // take dozens of sweeps to reach its long-settled same-region neighbors'
+    // scale, and the closed-form volume formula's per-tet contribution is a
+    // PRODUCT of three myPot/(myPot+neighborPot) ratios -- that scale gap
+    // gets punished cubically, reporting near-zero volume for a node that
+    // may genuinely hold real territory. Was _pad3c.
     float SyntheticEpsilon;
 
     // Row 4 -- synthetic-field volume conservation (experimental, see

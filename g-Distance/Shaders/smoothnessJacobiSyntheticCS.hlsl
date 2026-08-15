@@ -21,10 +21,15 @@
 // clamp-stepped Jacobi update (SmoothnessWeight/JacobiDiagEpsilon/
 // MaxPotentialStep, all reused from DistanceCb.hlsli). If the corrected
 // potential goes negative -- this node's label is no longer locally
-// supported -- clamp it to SyntheticEpsilon, and for a B-node (no fixed
-// ground truth) pick a new label via SyntheticVote8 over its own 8 A-corners
-// (SyntheticField.hlsli, the SAME formula buildSyntheticBCS.hlsl uses to
-// seed a non-unanimous B-node at init). A-nodes never change label.
+// supported -- it's reflected (sign-flipped) for an A-node, which never
+// changes label; for a B-node (no fixed ground truth) it instead picks a new
+// label via SyntheticVote8 over its own 8 A-corners (SyntheticField.hlsli,
+// the SAME formula buildSyntheticBCS.hlsl uses to seed a non-unanimous
+// B-node at init) and its potential is reset to SyntheticEpsilon -- a real
+// head start, not a near-zero floor, so its potential doesn't take dozens of
+// sweeps (MaxPotentialStep-limited growth) to catch up to its long-settled
+// same-region neighbors' scale, which would otherwise starve the closed-form
+// volume formula's per-tet product of potential ratios.
 //
 // Buffers are the SAME multi-candidate ones (NodeCandidateLabel/
 // NodePotential/NodePotentialScratch), reinterpreted: byte 0 of
@@ -111,8 +116,20 @@
         // Every BCC tet in this lattice is a congruent disphenoid (verified
         // computationally across many cube origins/slots) -- volume is a
         // fixed constant, not something that needs QWorldPos/cross-products
-        // at runtime.
-        static const float kVtetConst = CELL_SIZE * CELL_SIZE * CELL_SIZE / 12.0;
+        // at runtime. The raw per-tet volume is CELL_SIZE^3/12, but this
+        // formula ALWAYS evaluates the 1-3 split (exactly 1 agreeing corner
+        // -- itself -- and 3 unconditionally "opposing" ones, since labels
+        // aren't consulted at all), even where all 4 corners genuinely agree.
+        // The label-aware general construction (smoothnessJacobiCS's Term 4)
+        // recognizes that case (countPos==4, VPos=full Vtet, split 4 ways =
+        // Vtet/4 per corner); this formula can never see it and always
+        // produces the smaller Vtet*0.5^3=Vtet/8 corner-cut share instead --
+        // exactly half, a fixed structural gap, not a per-configuration
+        // error, verified by comparing both constructions' uniform-potential
+        // steady state (CELL_SIZE^3/2 vs CELL_SIZE^3/4 over the 24 incident
+        // tets). The *2 below recalibrates against that reference so a
+        // uniform node reports the expected 0.5, not 0.25.
+        static const float kVtetConst = CELL_SIZE * CELL_SIZE * CELL_SIZE / 12.0 * 2.0;
 
         uint posToIdxA(uint3 l)
         {
@@ -205,9 +222,21 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
             // tet (24 of them), WaveActiveSum reduces (not Max: the 24 tets
             // tile a neighborhood without overlapping, so their positive-side
             // volumes are strictly additive). See kFanRim's comment above and
-            // plan soft-stargazing-biscuit.md for the full derivation --
-            // labels are NOT consulted here at all (unlike the 27-tap block
-            // above), so this reads only gPot, never gLabel.
+            // plan soft-stargazing-biscuit.md for the full derivation.
+            //
+            // Same-label taps use the TARGET's own potential in place of
+            // their own, not their own potential -- treating every neighbor
+            // as unconditionally "opposing" (using its own raw potential
+            // regardless of label) is wrong even deep inside a single
+            // homogeneous region, since potentials are distances, more or
+            // less, and vary node to node even where every node agrees on
+            // the label; there is no real interface to locate along a
+            // same-label edge at all. Substituting myPotFan for a same-label
+            // tap's own potential forces that edge's crossing fraction to
+            // exactly 0.5 (myPot/(myPot+myPot)) unconditionally -- the
+            // correct "no boundary here, split stays at the midpoint"
+            // behavior -- while a genuinely differently-labeled tap still
+            // uses its own real potential, unchanged.
             if (wid < 24u)
             {
                 for (int iTarget = warpId; iTarget < 16; iTarget += 4)
@@ -239,10 +268,11 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
                     uint idxRimA = centerIdx + offR0;
                     uint idxRimB = centerIdx + offR1;
 
+                    uint myLabelAtTarget = gLabel[centerIdx];
                     float myPotFan = gPot[centerIdx];
-                    float potA = gPot[idxCenter];
-                    float potB = gPot[idxRimA];
-                    float potC = gPot[idxRimB];
+                    float potA = (gLabel[idxCenter] == myLabelAtTarget) ? myPotFan : gPot[idxCenter];
+                    float potB = (gLabel[idxRimA] == myLabelAtTarget) ? myPotFan : gPot[idxRimA];
+                    float potC = (gLabel[idxRimB] == myLabelAtTarget) ? myPotFan : gPot[idxRimB];
                     const float epsFloor = 1.0e-4;
                     float t0 = myPotFan / max(myPotFan + potA, epsFloor);
                     float t1 = myPotFan / max(myPotFan + potB, epsFloor);
@@ -273,9 +303,10 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
 
             if (newPot < 0.0)
             {
-        // TEST: instead of resetting to the SyntheticEpsilon
-        // floor, carry over the OLD (pre-correction) potential's
-        // magnitude, sign-flipped -- was: newPot = SyntheticEpsilon;
+                // A-nodes never relabel, so this reflected magnitude is their
+                // final newPot. For a B-node this is only a placeholder,
+                // overwritten below with a real head-start once it's actually
+                // relabeled -- see SyntheticEpsilon's use after the vote.
                 newPot = -newPot;
                 if (isB)
                 {
@@ -337,6 +368,19 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
                         // between the correct winner and 7 stale (unchanged) values.
                         newLabel = WaveReadLaneAt(label8, bestLane);
                     }
+                    // Head start, not the reflected magnitude above: a
+                    // freshly relabeled B-node's potential would otherwise
+                    // climb from near-MaxPotentialStep at a rate of at most
+                    // +-MaxPotentialStep per sweep, staying far below its
+                    // long-settled same-region neighbors' potentials for many
+                    // sweeps -- and the closed-form volume formula's
+                    // per-tet contribution is a PRODUCT of three
+                    // myPot/(myPot+neighborPot) ratios, so that scale gap
+                    // gets punished cubically, reporting a near-zero volume
+                    // for a node that may genuinely hold real territory.
+                    // SyntheticEpsilon (DistanceCb.hlsli) is exactly this
+                    // head start, not a floor -- see its comment there.
+                    newPot = SyntheticEpsilon;
                 }
             }
 
