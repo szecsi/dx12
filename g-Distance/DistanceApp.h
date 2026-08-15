@@ -254,10 +254,10 @@ protected:
 	// commitSyntheticCS.hlsl/extractSurfaceSyntheticCS.hlsl) -- reinterprets
 	// the SAME buffers as the multi-candidate scheme, so mutually exclusive
 	// with useBlockSmoothing (enforced where the GUI checkboxes are drawn).
-	bool useSyntheticField = false;
+	bool useSyntheticField = true;
 	float syntheticEpsilon = 0.1f; // head-start potential a B-node gets when it's freshly relabeled, see DistanceCb.hlsli's SyntheticEpsilon
-	bool useSyntheticLabelVote = false; // B-node relabel method, see smoothnessJacobiSyntheticCS.hlsl's UseLabelVote: true = SyntheticVote8 over the 8 own A-corners, false = dumb binary flip (1-oldLabel), test-only, two-label case
-	float volumeRatioWeight = 0.0f; // synthetic-field volume conservation weight, see DistanceCb.hlsli's VolumeRatioWeight -- default 0, off until tuned
+	bool useSyntheticLabelVote = true; // B-node relabel method, see smoothnessJacobiSyntheticCS.hlsl's UseLabelVote: true = SyntheticVote8 over the 8 own A-corners, false = dumb binary flip (1-oldLabel), test-only, two-label case
+	float volumeRatioWeight = 0.5f; // synthetic-field volume conservation weight, see DistanceCb.hlsli's VolumeRatioWeight
 	float missingFallback = -3.0f; // TetFieldGrad's GetCornerPotential missing-candidate fallback, see DistanceCb.hlsli
 	float distanceWeight = 0.0f; // term 5 (distance/Eikonal shaping) weight, see DistanceCb.hlsli -- default 0, off until tuned
 	float divergencePullWeight = 0.0f; // term 6 weight: pulls a DIVERGENT A-node's own potential back toward NodeFootDist, see DistanceCb.hlsli -- default 0, off until tuned
