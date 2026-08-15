@@ -86,6 +86,7 @@
     <FxCompile Include="Shaders\commitPotentialCS.hlsl" />
     <FxCompile Include="Shaders\commitPotentialBlockCS.hlsl" />
     <FxCompile Include="Shaders\commitSyntheticCS.hlsl" />
+    <FxCompile Include="Shaders\initSyntheticVolumeCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceSyntheticCS.hlsl" />
     <FxCompile Include="Shaders\raymarchVS.hlsl">

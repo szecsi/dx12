@@ -169,6 +169,19 @@ protected:
 	// -- volume floor (connecting nodes only, see smoothnessJacobiCS.hlsl) --
 	com_ptr<ID3D12Resource> nodeCurrentVolumeBuffer;    // NodeCount float: node's own winning-label reconstructed volume, written by smoothnessJacobiCS every sweep
 
+	// -- synthetic-field volume conservation (experimental, see
+	// smoothnessJacobiSyntheticCS.hlsl/commitSyntheticCS.hlsl/
+	// initSyntheticVolumeCS.hlsl) -- SEPARATE from nodeCurrentVolumeBuffer
+	// above: that one is an exact tet-walked reconstruction consumed only by
+	// the non-synthetic smoothnessJacobiCS; this pair is a cheap "node's own
+	// potential" proxy, scratch/commit-buffered just like
+	// nodePotentialBuffer/nodePotentialScratchBuffer since a node is a
+	// smoothing TARGET in exactly one tile per sweep but a HALO read in
+	// several neighboring tiles' concurrent thread groups within the SAME
+	// dispatch -- writing straight into a single buffer would race.
+	com_ptr<ID3D12Resource> nodeSyntheticVolumeBuffer;        // NodeCount float, "current" (halo read buffer)
+	com_ptr<ID3D12Resource> nodeSyntheticVolumeScratchBuffer; // NodeCount float, per-sweep write buffer
+
 	Egg::Compute::ComputeShader rasterLabelCS;
 	Egg::Compute::ComputeShader computeConnectingNodesCS;
 	Egg::Compute::ComputeShader jfaInitCS;
@@ -183,6 +196,7 @@ protected:
 	Egg::Compute::ComputeShader commitPotentialCS;
 	Egg::Compute::ComputeShader commitPotentialBlockCS; // scratch->main commit for the block-smoothing path ONLY, see commitPotentialBlockCS.hlsl
 	Egg::Compute::ComputeShader commitSyntheticCS; // scratch->main commit for the synthetic-field path ONLY, see commitSyntheticCS.hlsl
+	Egg::Compute::ComputeShader initSyntheticVolumeCS; // Reinit-time seed for nodeSyntheticVolumeBuffer, see initSyntheticVolumeCS.hlsl
 	Egg::Compute::ComputeShader extractSurfaceCS;
 	Egg::Compute::ComputeShader extractSurfaceSyntheticCS; // synthetic-field surface extraction, see extractSurfaceSyntheticCS.hlsl
 
@@ -240,6 +254,7 @@ protected:
 	bool useSyntheticField = false;
 	float syntheticEpsilon = 0.01f; // potential floor on relabel/negative-clamp, see DistanceCb.hlsli's SyntheticEpsilon
 	bool useSyntheticLabelVote = false; // B-node relabel method, see smoothnessJacobiSyntheticCS.hlsl's UseLabelVote: true = SyntheticVote8 over the 8 own A-corners, false = dumb binary flip (1-oldLabel), test-only, two-label case
+	float volumeRatioWeight = 0.0f; // synthetic-field volume conservation weight, see DistanceCb.hlsli's VolumeRatioWeight -- default 0, off until tuned
 	float missingFallback = -3.0f; // TetFieldGrad's GetCornerPotential missing-candidate fallback, see DistanceCb.hlsli
 	float distanceWeight = 0.0f; // term 5 (distance/Eikonal shaping) weight, see DistanceCb.hlsli -- default 0, off until tuned
 	float divergencePullWeight = 0.0f; // term 6 weight: pulls a DIVERGENT A-node's own potential back toward NodeFootDist, see DistanceCb.hlsli -- default 0, off until tuned
@@ -376,6 +391,7 @@ protected:
 		distanceCb.data.UseFixedKernelSmoothing = useFixedKernelSmoothing ? 1.0f : 0.0f;
 		distanceCb.data.DivergencePullWeight = divergencePullWeight;
 		distanceCb.data.SyntheticEpsilon = syntheticEpsilon;
+		distanceCb.data.VolumeRatioWeight = volumeRatioWeight;
 		distanceCb.Upload();
 	}
 
@@ -543,6 +559,8 @@ protected:
 			nodePotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialScratchBuffer");
 			nodeFrozenWinnerBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeFrozenWinnerBuffer");
 			nodeCurrentVolumeBuffer    = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeCurrentVolumeBuffer");
+			nodeSyntheticVolumeBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSyntheticVolumeBuffer");
+			nodeSyntheticVolumeScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSyntheticVolumeScratchBuffer");
 		}
 		if (gridChanged || windowChanged) {
 			surfaceVertexBuffer = CreateRawUavBuffer(device.Get(), (UINT64)WindowTetCount * 6 * sizeof(float) * 8, L"surfaceVertexBuffer"); // pos(3)+normal(3)+labelI+labelJ, see DistanceSurface.hlsli
@@ -688,6 +706,20 @@ protected:
 			cmd->ResourceBarrier(_countof(b), b);
 		}
 
+		if (useSyntheticField) {
+			// Seed nodeSyntheticVolumeBuffer from the potentials just written
+			// above (A via buildCandidatesCS, B via buildSyntheticBCS) -- see
+			// initSyntheticVolumeCS.hlsl for why this can't be left
+			// uninitialized even with VolumeRatioWeight at its default of 0.
+			cmd->SetComputeRootSignature(initSyntheticVolumeCS.rootSig.Get());
+			cmd->SetPipelineState(initSyntheticVolumeCS.pso.Get());
+			cmd->SetComputeRootUnorderedAccessView(0, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodeSyntheticVolumeBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+			cmd->Dispatch(SmoothnessGroups, 1, 1); // NodeCount-based, same bound as smoothnessJacobiCS
+			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeSyntheticVolumeBuffer.Get()));
+		}
+
 	}
 
 	// One outer Lloyd-loop round: snapshot each node's current winning label
@@ -769,10 +801,19 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(3, nodePotentialScratchBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRoot32BitConstant(4, useSyntheticLabelVote ? 1u : 0u, 0);
-				cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(4, nodeSyntheticVolumeBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(5, nodeSyntheticVolumeScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(6, rasterLabelBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRoot32BitConstant(7, useSyntheticLabelVote ? 1u : 0u, 0);
+				cmd->SetComputeRootConstantBufferView(8, distanceGridCb.GetGPUVirtualAddress());
 				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
-				cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()));
+				{
+					D3D12_RESOURCE_BARRIER b[] = {
+						CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()),
+						CD3DX12_RESOURCE_BARRIER::UAV(nodeSyntheticVolumeScratchBuffer.Get()),
+					};
+					cmd->ResourceBarrier(_countof(b), b);
+				}
 			} else {
 				cmd->SetComputeRootSignature(smoothnessJacobiCS.rootSig.Get());
 				cmd->SetPipelineState(smoothnessJacobiCS.pso.Get());
@@ -812,7 +853,9 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(0, nodePotentialScratchBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(3, nodeSyntheticVolumeScratchBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootUnorderedAccessView(4, nodeSyntheticVolumeBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
 				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
 			} else {
 				cmd->SetComputeRootSignature(commitPotentialCS.rootSig.Get());
@@ -824,11 +867,13 @@ protected:
 			}
 			if (useSyntheticField) {
 				// commitSyntheticCS also commits the scratch label byte into
-				// NodeCandidateLabel -- barrier that too, not just potential,
-				// before the next sweep's Load stage or RunExtractSurface reads it.
+				// NodeCandidateLabel, and the volume-conservation buffer --
+				// barrier all three before the next sweep's Load stage or
+				// RunExtractSurface reads them.
 				D3D12_RESOURCE_BARRIER b[] = {
 					CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(nodeCandidateLabelBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeSyntheticVolumeBuffer.Get()),
 				};
 				cmd->ResourceBarrier(_countof(b), b);
 			} else {
@@ -1521,6 +1566,9 @@ protected:
 				ImGui::Checkbox("Synthetic: Use Label Vote", &useSyntheticLabelVote);
 				ImGui::SameLine();
 				ImGui::TextDisabled("(off = dumb binary flip 1-oldLabel, test-only, two-label case; on = SyntheticVote8 over the 8 own A-corners)");
+				ImGui::SliderFloat("Synthetic: Volume Ratio Weight", &volumeRatioWeight, 0.0f, 20.0f);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(0 = off; pulls each target's potential toward local per-label volume conservation vs. this halo's original A-node label counts, see DistanceCb.hlsli's VolumeRatioWeight)");
 			}
 			ImGui::Checkbox("Term 1: Edge-Walk Traversal", &useEdgeWalkTraversal);
 			ImGui::SameLine();
@@ -1646,6 +1694,7 @@ public:
 		commitPotentialCS.createResources(device, "Shaders/commitPotentialCS.cso");
 		commitPotentialBlockCS.createResources(device, "Shaders/commitPotentialBlockCS.cso");
 		commitSyntheticCS.createResources(device, "Shaders/commitSyntheticCS.cso");
+		initSyntheticVolumeCS.createResources(device, "Shaders/initSyntheticVolumeCS.cso");
 		extractSurfaceCS.createResources(device, "Shaders/extractSurfaceCS.cso");
 		extractSurfaceSyntheticCS.createResources(device, "Shaders/extractSurfaceSyntheticCS.cso");
 
@@ -2032,6 +2081,8 @@ public:
 		nodeFrozenWinnerBuffer.Reset();
 		surfaceVertexBuffer.Reset();
 		nodeCurrentVolumeBuffer.Reset();
+		nodeSyntheticVolumeBuffer.Reset();
+		nodeSyntheticVolumeScratchBuffer.Reset();
 		imguiSrvHeap.Reset();
 		raymarchRootSig.Reset();
 		raymarchPso.Reset();

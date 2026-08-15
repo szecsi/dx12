@@ -100,6 +100,21 @@ DistanceCb
     // this entirely separate single-label/potential field, not the
     // multi-candidate one. Was _pad3c.
     float SyntheticEpsilon;
+
+    // Row 4 -- synthetic-field volume conservation (experimental, see
+    // smoothnessJacobiSyntheticCS.hlsl). Per-halo, per-label ratio of
+    // "current volume" (sum of NodeSyntheticVolume -- each halo node's own
+    // last-committed potential -- over halo nodes currently carrying a
+    // given label) to that label's "original volume" (count of this halo's
+    // A-nodes whose RasterLabel ground truth carries that label). Applied
+    // as a bounded confidence nudge to a target's potential AFTER this
+    // sweep's relabel decision is already made -- ratio 1 = locally
+    // conserved; doesn't reopen the relabel decision itself. 0 disables
+    // the term entirely.
+    float VolumeRatioWeight;
+    float _pad4b;
+    float _pad4c;
+    float _pad4d;
 }
 #ifndef __HLSL_VERSION
 ;

@@ -38,6 +38,9 @@
     "UAV(u0)," \
     "UAV(u1)," \
     "UAV(u2)," \
+    "UAV(u3)," \
+    "UAV(u4)," \
+    "UAV(u5)," \
     "RootConstants(num32BitConstants=1, b1)," \
     "CBV(b2)"
 
@@ -49,6 +52,18 @@
         RWStructuredBuffer<uint> NodeCandidateLabel : register(u0);
         RWStructuredBuffer<float> NodePotential : register(u1);
         RWStructuredBuffer<float> NodePotentialScratch : register(u2);
+        // Volume-conservation buffers (see the correction block below and
+        // DistanceCb.hlsli's VolumeRatioWeight) -- NodeSyntheticVolume is
+        // read for the WHOLE halo (last round's committed values, same
+        // one-round-stale staggering as NodeCandidateLabel/NodePotential
+        // above), NodeSyntheticVolumeScratch is written only for this
+        // tile's 16 targets and picked up by commitSyntheticCS.hlsl next.
+        RWStructuredBuffer<float> NodeSyntheticVolume : register(u3);
+        RWStructuredBuffer<float> NodeSyntheticVolumeScratch : register(u4);
+        // Ground-truth per-A-node label (ACount-sized, same indexing as
+        // posToIdxA/AIdx) -- gives each halo's local "original volume"
+        // baseline for the volume-conservation correction.
+        RWStructuredBuffer<uint> RasterLabel : register(u5);
 
 #define HALO_DIM 4u
 #define HALO_NODES 128u // 64 A + 64 B
@@ -57,12 +72,47 @@
         groupshared uint gLabel[HALO_NODES];
         groupshared float gPot[HALO_NODES];
         groupshared float gTotal[TARGET_NODES];
+        groupshared float gVolume[HALO_NODES];
+        groupshared uint gRasterLabel[64]; // A-halo only -- RasterLabel has no B entries
+        // Per-target CURRENT node volume (see the wid<24 fan-tet block below and
+        // plan soft-stargazing-biscuit.md) -- distinct from gVolume[HALO_NODES]
+        // above, which holds each halo node's own LAST-COMMITTED volume (read
+        // for the ratio correction); this one is THIS sweep's freshly computed
+        // value for this tile's 16 targets only, written to
+        // NodeSyntheticVolumeScratch at the end of Stage 2.
+        groupshared float gTetVolume[TARGET_NODES];
 
         static const uint4 kernelbits = uint4(
     3 | (5 << 5) | (12 << 10) | (15 << 15) | (17 << 20) | (20 << 25), // w 8
     0x00100401u, // w 192 | w 16
     0x403F3C30u, // w -48
     0x3B2F2C2Bu);
+
+        // Closed-form "current volume" tap table -- see plan
+        // soft-stargazing-biscuit.md for the full derivation. A node's 24
+        // incident tets (GatherIncidentTets, ring-1) decompose into 3 closed
+        // 4-tet fans, one per axis, centered on that axis's same-sublattice
+        // ("cube face") neighbor; the other 3 fans (opposite face per axis)
+        // are the exact mirror. Each uint packs one axis's fan as 5-bit
+        // fields [rim0,rim1,rim2,rim3,rim0-repeat] (verified computationally,
+        // not hand-derived, given this project's own history of a bug from a
+        // similar hand derivation) -- values are each rim corner's flat
+        // halo-index delta from the target's own centerIdx, RE-BASED by a
+        // fixed per-target-type bias (+43 for A-targets, -64 for B-targets)
+        // so they land in [0,21] for BOTH sublattices identically. The
+        // mirrored (opposite-face) half of each fan is exactly
+        // `21 - storedValue`; centers need no storage at all -- they're just
+        // the halo's own flat-index axis strides (+-1,+-4,+-16).
+        static const uint3 kFanRim = uint3(
+            0u | (16u << 5) | (20u << 10) | (4u << 15) | (0u << 20),  // axis0 (center=1):  rim=[0,16,20,4,0]
+            0u | (1u << 5) | (17u << 10) | (16u << 15) | (0u << 20),  // axis1 (center=4):  rim=[0,1,17,16,0]
+            0u | (4u << 5) | (5u << 10) | (1u << 15) | (0u << 20));   // axis2 (center=16): rim=[0,4,5,1,0]
+
+        // Every BCC tet in this lattice is a congruent disphenoid (verified
+        // computationally across many cube origins/slots) -- volume is a
+        // fixed constant, not something that needs QWorldPos/cross-products
+        // at runtime.
+        static const float kVtetConst = CELL_SIZE * CELL_SIZE * CELL_SIZE / 12.0;
 
         uint posToIdxA(uint3 l)
         {
@@ -100,6 +150,10 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
         uint inHaloIdx = isBHalo ? inHaloPosToInHaloIdxB(inHaloPos) : inHaloPosToInHaloIdxA(inHaloPos);
         gLabel[inHaloIdx] = GetCandidateLabelAt(NodeCandidateLabel, idx, 0u);
         gPot[inHaloIdx] = NodePotential[idx * MAX_CANDIDATES + 0u];
+        gVolume[inHaloIdx] = NodeSyntheticVolume[idx];
+        // A-node global index (idx, via posToIdxA) is exactly RasterLabel's
+        // own indexing -- no separate lookup needed.
+        if (!isBHalo) gRasterLabel[inHaloIdx] = RasterLabel[idx];
     }
     GroupMemoryBarrierWithGroupSync();
 
@@ -146,7 +200,58 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
                     gTotal[iTarget] = WaveActiveSum(contrib);
                 }
             }
-        
+
+            // Current-volume fan-tet evaluation -- one thread per incident
+            // tet (24 of them), WaveActiveSum reduces (not Max: the 24 tets
+            // tile a neighborhood without overlapping, so their positive-side
+            // volumes are strictly additive). See kFanRim's comment above and
+            // plan soft-stargazing-biscuit.md for the full derivation --
+            // labels are NOT consulted here at all (unlike the 27-tap block
+            // above), so this reads only gPot, never gLabel.
+            if (wid < 24u)
+            {
+                for (int iTarget = warpId; iTarget < 16; iTarget += 4)
+                {
+                    uint local = iTarget & 7u;
+                    uint3 inTilePos = uint3(local & 1u, (local >> 1u) & 1u, (local >> 2u) & 1u);
+                    bool isB = iTarget >= 8u;
+                    uint3 inHaloPos = inTilePos + 1u;
+                    uint centerIdx = isB ? inHaloPosToInHaloIdxB(inHaloPos) : inHaloPosToInHaloIdxA(inHaloPos);
+
+                    uint fanHalf = wid / 12u;   // 0 = stored (-axis) fans, 1 = mirrored (+axis) fans
+                    uint localTet = wid % 12u;
+                    uint fanIdx = localTet / 4u; // 0,1,2 -> which axis
+                    uint tetIdx = localTet % 4u; // which of the 4 tets in that fan
+
+                    uint centerMag = 1u << (fanIdx * 2u); // 1,4,16 -- the halo's own flat-index axis strides
+                    int centerD = (fanHalf == 0u) ? -(int)centerMag : (int)centerMag;
+
+                    uint packed = kFanRim[fanIdx];
+                    uint r0 = (packed >> (tetIdx * 5u)) & 0x1Fu;
+                    uint r1 = (packed >> ((tetIdx + 1u) * 5u)) & 0x1Fu;
+                    if (fanHalf == 1u) { r0 = 21u - r0; r1 = 21u - r1; }
+
+                    int bias = isB ? -64 : 43;
+                    int offR0 = (int)r0 + bias;
+                    int offR1 = (int)r1 + bias;
+
+                    uint idxCenter = centerIdx + centerD;
+                    uint idxRimA = centerIdx + offR0;
+                    uint idxRimB = centerIdx + offR1;
+
+                    float myPotFan = gPot[centerIdx];
+                    float potA = gPot[idxCenter];
+                    float potB = gPot[idxRimA];
+                    float potC = gPot[idxRimB];
+                    const float epsFloor = 1.0e-4;
+                    float t0 = myPotFan / max(myPotFan + potA, epsFloor);
+                    float t1 = myPotFan / max(myPotFan + potB, epsFloor);
+                    float t2 = myPotFan / max(myPotFan + potC, epsFloor);
+                    float contrib = t0 * t1 * t2;
+                    gTetVolume[iTarget] = kVtetConst * WaveActiveSum(contrib);
+                }
+            }
+
             GroupMemoryBarrierWithGroupSync();
 
             uint iTarget = tid / 8u;
@@ -186,12 +291,26 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
                         uint3 cornerHaloPos = inHaloPos + uint3(c & 1u, (c >> 1) & 1u, (c >> 2) & 1u);
                         uint cornerIdx = inHaloPosToInHaloIdxA(cornerHaloPos);
                         uint label8 = gLabel[cornerIdx];
-                        uint label8WithTarget = myLabelAtTarget | (iTarget << 8u);
+                        // Group by the CANDIDATE's own label (label8), not
+                        // myLabelAtTarget -- the latter is identical across all 8
+                        // corners of a target, so keying on it collapses every corner
+                        // into a single WaveMatch group regardless of which label it
+                        // actually holds, and the "vote" degenerates to picking
+                        // whichever corner lands in a fixed lane slot instead of
+                        // comparing distinct candidate labels.
+                        uint label8WithTarget = label8 | (iTarget << 8u);
                         float pot8 = (label8 != myLabelAtTarget) ? gPot[cornerIdx] : 0.0;
                         uint sameLabelSameTargetMask = WaveMatch(label8WithTarget);
                         float totalPot8 = WaveMultiPrefixSum(sameLabelSameTargetMask, pot8) + pot8;
                         uint lastlane = firstbithigh(sameLabelSameTargetMask.x);
-                        uint lastlanesForThisTargetMask = WaveActiveBallot(lastlane).x & (0xff << (iTarget % 4));
+                        // Ballot on "am I my subgroup's representative lane"
+                        // (wid==lastlane), not on the raw lane index (which is
+                        // nonzero for virtually every lane, so WaveActiveBallot(lastlane)
+                        // marks almost the whole warp as "representatives"). Then
+                        // restrict to this target's own byte-aligned 8-lane slice of
+                        // the warp -- shift by BYTES (*8u), not bits, or this mask
+                        // pulls in neighboring targets' representative lanes too.
+                        uint lastlanesForThisTargetMask = WaveActiveBallot(wid == lastlane).x & (0xffu << ((iTarget % 4) * 8u));
                         bool candidate =    (lastlanesForThisTargetMask & (1u << wid)) != 0;
 
                         float bestValue = candidate ? totalPot8 : -3.402823466e+38F;
@@ -211,15 +330,60 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
                                 bestLane = otherLane;
                             }
                         }
-                        if (wid == bestLane)
-                        {
-                            newLabel = WaveReadLaneAt(label8, wid);
-                        }
+                        // Broadcast the winner to all 8 lanes sharing this target,
+                        // not just wid==bestLane -- all 8 threads redundantly write
+                        // NodeCandidateLabel for this target below (unguarded), so
+                        // they must all agree on newLabel or that write is a race
+                        // between the correct winner and 7 stale (unchanged) values.
+                        newLabel = WaveReadLaneAt(label8, bestLane);
                     }
                 }
             }
 
+            // Volume-conservation nudge (DistanceCb.hlsli's VolumeRatioWeight)
+            // -- applied AFTER newLabel/newPot are already finalized above, as
+            // a confidence-only correction: it does NOT reopen the relabel
+            // decision this round, it only pulls this target's potential
+            // toward local per-label volume conservation for whichever label
+            // it ends up with. Local, per-halo, no tet-walking: "current
+            // volume" for a label is just the sum of gVolume (each halo
+            // node's own last-committed potential, see the Load stage above)
+            // over halo nodes presently carrying that label; "original
+            // volume" is the count of this halo's A-nodes whose RasterLabel
+            // ground truth carries it. Ratio 1 = locally conserved; >1 means
+            // newLabel has locally grown past its original footprint here
+            // (push potential down); <1 means it's under-represented (push
+            // up). Redundantly computed by all 8 lanes sharing this target
+            // (same as the relabel vote above) -- harmless, gLabel/gVolume/
+            // gRasterLabel and newLabel are already identical across them.
+            {
+                float currentVolume = 0.0;
+                for (uint hv = 0; hv < HALO_NODES; hv++)
+                {
+                    if (gLabel[hv] == newLabel) currentVolume += gVolume[hv];
+                }
+                float originalVolume = 0.0;
+                for (uint hr = 0; hr < 64u; hr++)
+                {
+                    if (gRasterLabel[hr] == newLabel) originalVolume += 1.0;
+                }
+                // No local baseline for this label in this halo at all --
+                // skip the correction rather than divide by ~0 (which would
+                // otherwise blow up to +-inf for any nonzero currentVolume).
+                if (originalVolume > 0.5)
+                {
+                    float ratio = currentVolume / originalVolume;
+                    float correction = VolumeRatioWeight * (1.0 - ratio);
+                    newPot += clamp(correction, -MaxPotentialStep, MaxPotentialStep);
+                }
+            }
+
             NodePotentialScratch[targetGlobalIdx * MAX_CANDIDATES + 0u] = newPot;
+            // "Node volume" == this target's own closed-form fan-tet volume,
+            // computed in the wid<24 block above (gTetVolume) -- see
+            // commitSyntheticCS.hlsl for the scratch->main commit and
+            // initSyntheticVolumeCS.hlsl for the matching Reinit-time seed.
+            NodeSyntheticVolumeScratch[targetGlobalIdx] = gTetVolume[iTarget];
             uint word0 = NodeCandidateLabel[targetGlobalIdx * 2u + 0u];
             NodeCandidateLabel[targetGlobalIdx * 2u + 0u] = (word0 & 0xFFFF00FFu) | ((newLabel & 0xFFu) << 8u);
         }

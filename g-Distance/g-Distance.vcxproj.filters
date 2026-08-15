@@ -67,6 +67,9 @@
     <FxCompile Include="Shaders\commitSyntheticCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\initSyntheticVolumeCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
