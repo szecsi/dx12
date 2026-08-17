@@ -43,11 +43,16 @@ TorusListCb
 	// uniformly to every entry in torii[] this frame; BccApp::BuildShapeList
 	// rebuilds the whole list per shape kind, never mixed.
 	uint      ShapeKind;
-#ifndef __HLSL_VERSION
-	float     _padList[2];
-#else
-	float2    _padList;
-#endif
+	// Only read by the ported synthetic scenes (ShapeKind >= 9, see
+	// SyntheticScenes.hlsli/rasterLabelCS.hlsl); ignored by every analytic and
+	// grid-pattern shape. SceneThreshold's meaning is per-scene -- an iso-level
+	// for Marschner-Lobb, a uniform radius offset for the tree -- and
+	// SceneMaterialCount is MlMultiLabel's Voronoi-cell count, clamped to
+	// [1,16] there. Named to match the Vulkan side's "Vol. Threshold" /
+	// "LM multi-material count" controls, which they must be set equal to for
+	// the two renderers to produce the same field.
+	float     SceneThreshold;
+	uint      SceneMaterialCount;
 }
 #ifndef __HLSL_VERSION
 ;

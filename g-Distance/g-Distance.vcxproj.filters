@@ -118,6 +118,9 @@
     <None Include="Shaders\SyntheticField.hlsli">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="Shaders\SyntheticScenes.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
     <None Include="Shaders\DistanceCb.hlsli">
       <Filter>Shaders</Filter>
     </None>

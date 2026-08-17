@@ -1,5 +1,6 @@
 #include "TorusListCb.hlsli"
 #include "TorusSdf.hlsli"
+#include "SyntheticScenes.hlsli"
 #define DISTANCE_GRID_CB_REGISTER b0
 #include "DistanceLattice.hlsli"
 
@@ -33,6 +34,20 @@
 //                      -- the smallest genuinely-3D solid feature, exercises
 //                      every B-node/tet fully interior to one filled A-cube
 //                      without any of Line/Slab's 1D/2D degeneracy.
+//
+// ShapeKind 9-11: synthetic SDF/analytic fields ported from the Vulkan
+// renderer (SyntheticScenes.hlsli) -- evaluated on the normalized [-1,1)
+// domain p = tid/GridRes*2-1 rather than in world space, so they are
+// resolution-independent and identical in both renderers. They keep
+// SyntheticPadding nodes of background around the domain edge, matching the
+// Vulkan side's kSyntheticPadding.
+//   9 Tree:            branching capsule/round-cone skeleton, radii tapering
+//                      ~12x from trunk to thinnest twig -- a thin-feature
+//                      stress test with a continuous, hand-verifiable SDF.
+//  10 MarschnerLobb:   the classic high-frequency two-label test field.
+//  11 MarschnerLobbMulti: same iso-shell, interior partitioned into
+//                      SceneMaterialCount Voronoi materials -- the multi-label
+//                      counterpart, with genuine interior junctions.
 #define RasterSig "RootFlags(0)," \
     "CBV(b1)," \
     "UAV(u0)," \
@@ -55,6 +70,17 @@ void rasterLabelCS(uint3 tid : SV_DispatchThreadID)
         for (uint i = 0; i < nTorii; i++) {
             if (ShapeSd(pos, torii[i]) <= 0.0)
                 label = torii[i].label;
+        }
+    } else if (ShapeKind >= 9) {
+        // Ported Vulkan scenes: normalized domain + guaranteed background
+        // border, exactly as label_common.glsl's getLabel() does it.
+        bool inPadding = any((int3)tid < SyntheticPadding) ||
+                         any((int3)tid >= (int3)(GridRes - (uint)SyntheticPadding));
+        if (!inPadding) {
+            float3 p = float3(tid) / float3(GridRes, GridRes, GridRes) * 2.0 - 1.0;
+            if (ShapeKind == 9)       label = TreeLabel(p, SceneThreshold);
+            else if (ShapeKind == 10) label = MlLabel(p, SceneThreshold);
+            else if (ShapeKind == 11) label = MlMultiLabel(p, SceneThreshold, SceneMaterialCount);
         }
     } else {
         int c = (int)(GridRes / 2);

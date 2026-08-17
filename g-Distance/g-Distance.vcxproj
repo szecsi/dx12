@@ -126,6 +126,7 @@
     <None Include="Shaders\DistanceConfig.hlsli" />
     <None Include="Shaders\DistanceLattice.hlsli" />
     <None Include="Shaders\SyntheticField.hlsli" />
+    <None Include="Shaders\SyntheticScenes.hlsli" />
     <None Include="Shaders\DistanceCb.hlsli" />
     <None Include="Shaders\DistanceFrameCb.hlsli" />
     <None Include="Shaders\DistanceSurface.hlsli" />
