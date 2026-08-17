@@ -54,7 +54,7 @@
       <ShaderType>Compute</ShaderType>
     </FxCompile>
     <FxCompile>
-      <ShaderModel>6.4</ShaderModel>
+      <ShaderModel>6.5</ShaderModel>
       <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).cso</ObjectFileOutput>
       <AdditionalIncludeDirectories>$(SolutionDir)Egg\Shaders</AdditionalIncludeDirectories>
     </FxCompile>
