@@ -18,16 +18,24 @@
     "UAV(u2)," \
     "UAV(u3)," \
     "UAV(u4)," \
+    "UAV(u5)," \
+    "UAV(u6)," \
+    "UAV(u7)," \
+    "UAV(u8)," \
     "CBV(b0)"
 
 RWStructuredBuffer<float> NodePotentialScratch : register(u0);
 RWStructuredBuffer<float> NodePotential : register(u1);
 RWStructuredBuffer<uint>  NodeCandidateLabel : register(u2);
-// Volume-conservation buffer (see smoothnessJacobiSyntheticCS.hlsl) --
+// Volume-conservation buffers (see smoothnessJacobiSyntheticCS.hlsl) --
 // same scratch->main commit pattern as NodePotential/NodePotentialScratch,
-// just a plain single-float copy (no packed-byte label handling needed).
+// just plain single-float copies (no packed-byte label handling needed).
 RWStructuredBuffer<float> NodeSyntheticVolumeScratch : register(u3);
 RWStructuredBuffer<float> NodeSyntheticVolume : register(u4);
+RWStructuredBuffer<float> NodeSensitivityScratch : register(u5);
+RWStructuredBuffer<float> NodeSensitivity : register(u6);
+RWStructuredBuffer<float> NodeVolumeAlignmentScratch : register(u7);
+RWStructuredBuffer<float> NodeVolumeAlignment : register(u8);
 
 [RootSignature(CommitSyntheticSig)]
 [numthreads(16, 1, 1)]
@@ -43,6 +51,8 @@ void commitSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupIndex)
 
     NodePotential[targetIdx * MAX_CANDIDATES + 0u] = NodePotentialScratch[targetIdx * MAX_CANDIDATES + 0u];
     NodeSyntheticVolume[targetIdx] = NodeSyntheticVolumeScratch[targetIdx];
+    NodeSensitivity[targetIdx] = NodeSensitivityScratch[targetIdx];
+    NodeVolumeAlignment[targetIdx] = NodeVolumeAlignmentScratch[targetIdx];
 
     uint word0 = NodeCandidateLabel[targetIdx * 2u + 0u];
     uint scratchLabel = (word0 >> 8u) & 0xFFu;

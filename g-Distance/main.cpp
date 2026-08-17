@@ -2,6 +2,7 @@
 #include <Egg/App.h>
 #include <Egg/Utility.h>
 #include <chrono>
+#include "AftermathTracker.h"
 #include "DistanceApp.h"
 #include <imgui.h>
 #include <imgui_impl_win32.h>
@@ -108,6 +109,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 
 	_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_WNDW);
 
+	// Must be enabled before any D3D12 device is created -- see
+	// AftermathTracker.h and GFSDK_Aftermath_EnableGpuCrashDumps's own doc
+	// comment. Targets the GridRes-change device hang (DistanceApp.h's
+	// RunReinit) -- a live Nsight Graphics capture can't complete for that
+	// hang, but Aftermath's crash-dump path doesn't need the frame to finish.
+	GpuCrashTracker::EnableGpuCrashDumps();
+
 	HWND windowHandle = InitWindow(hInstance);
 	com_ptr<ID3D12Debug> debugController{ nullptr };
 	com_ptr<IDXGIFactory6> dxgiFactory{ nullptr };
@@ -142,6 +150,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 
 	DX_API("Failed to create D3D Device")
 		D3D12CreateDevice(selectedAdapter, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(device.GetAddressOf()));
+
+	GpuCrashTracker::InitializeDevice(device.Get());
 
 	D3D12_FEATURE_DATA_D3D12_OPTIONS1 fedup;
 	device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &fedup, sizeof(fedup));

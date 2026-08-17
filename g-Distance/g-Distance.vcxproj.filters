@@ -23,6 +23,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DistanceApp.h" />
+    <ClInclude Include="AftermathTracker.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\rasterLabelCS.hlsl">
