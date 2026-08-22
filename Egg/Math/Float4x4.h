@@ -83,6 +83,11 @@ namespace Egg {
 
 			static float4x4 Proj(float fovy, float aspect, float zn, float zf) noexcept;
 
+			// Off-center (asymmetric-frustum) projection, for stereo rendering.
+			// Same row-vector z/w convention as Proj (_22=zf/(zf-zn), _32=-zn*zf/(zf-zn), _23=1);
+			// left/right/bottom/top are the near-plane extents, shifted to allow asymmetric shear.
+			static float4x4 ProjOffCenter(float left, float right, float bottom, float top, float zn, float zf) noexcept;
+
 			float4x4 Transpose() const noexcept;
 
 			float4x4 _Invert() const noexcept;

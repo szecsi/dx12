@@ -236,6 +236,15 @@ namespace Egg {
 				0.0f, 0.0f, -zn * zf / (zf - zn), 0);
 		}
 
+		float4x4 float4x4::ProjOffCenter(float left, float right, float bottom, float top, float zn, float zf) noexcept
+		{
+			return float4x4(
+				2.0f * zn / (right - left), 0.0f, 0.0f, 0.0f,
+				0.0f, 2.0f * zn / (top - bottom), 0.0f, 0.0f,
+				-(right + left) / (right - left), -(top + bottom) / (top - bottom), zf / (zf - zn), 1,
+				0.0f, 0.0f, -zn * zf / (zf - zn), 0);
+		}
+
 		float4x4 float4x4::Transpose() const noexcept
 		{
 			return float4x4(
