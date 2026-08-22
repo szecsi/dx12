@@ -56,6 +56,17 @@ enum DistanceTestShape {
 	// opposed to Line/DiagonalLine3D's 1-node-wide curves or Slab's 1-node-
 	// thick sheet.
 	TestShape_Box2x2x2 = 8,
+	// Synthetic fields ported from the Vulkan renderer (render-engine-ng's
+	// VoxelDataComponent::VolumeOverride Tree/LM/LMMulti) so both renderers can
+	// be pointed at the same scene when comparing volumetric-fairing results.
+	// Like the grid patterns above they have no raymarch reference (torii stays
+	// empty) -- rasterLabelCS.hlsl evaluates them straight from grid index, on
+	// the normalized [-1,1) domain the Vulkan side uses, so the shape is
+	// resolution-independent and identical in both. Both read
+	// syntheticThreshold; MarschnerLobbMulti also reads syntheticMaterialCount.
+	TestShape_Tree = 9,
+	TestShape_MarschnerLobb = 10,
+	TestShape_MarschnerLobbMulti = 11,
 };
 
 // g-Distance: replaces g-Aequor's particle relaxation with a direct scalar
@@ -244,6 +255,13 @@ protected:
 	com_ptr<ID3D12DescriptorHeap> imguiSrvHeap;
 
 	int testShapeKind = TestShape_SingleTorus;
+	// Ported-scene parameters (TestShape_Tree/MarschnerLobb/MarschnerLobbMulti
+	// only). Defaults match the Vulkan renderer's own defaults -- its "Vol.
+	// Threshold" (VoxelDataComponent::mDoThreshold) and "LM multi-material
+	// count" (mLmMultiMaterialCount) -- so the two produce identical label
+	// fields out of the box. Applied on Reinitialize like the shape itself.
+	float syntheticThreshold = 0.5f;
+	int syntheticMaterialCount = 4; // clamped to [1,16] by MlMultiLabel (16 Voronoi seeds exist)
 	bool needsReinit = false;
 	bool needsContinue = false;
 	bool profileIterateEveryFrame = false; // Nsight profiling aid: run RunContinue every frame, not just on 'C' -- off by default
@@ -327,8 +345,26 @@ protected:
 	void BuildShapeList() {
 		using namespace Egg::Math;
 		float3 center(GridRes * CellSize * 0.5f, GridRes * CellSize * 0.5f, GridRes * CellSize * 0.5f);
+		// Every analytic shape below is sized as a FRACTION of the domain's half
+		// width, then scaled by this. Radii used to be absolute world lengths
+		// (6.0, 2.5, ...) and CELL_SIZE is 1, so they were really a fixed voxel
+		// count: raising GridRes grew the empty domain around the shape without
+		// ever refining the shape itself, which is why a high-resolution torus
+		// stayed just as coarse as a low-resolution one. The fractions are the
+		// old numbers divided by 10, so GridRes=20 reproduces the previous scene
+		// to within float rounding of the multiply below (~1e-7 world units, far
+		// under any voxel-classification boundary) and every other resolution
+		// now actually refines it.
+		// This also makes them scale-invariant the same way the ported scenes
+		// (SyntheticScenes.hlsli, normalized [-1,1) domain) already are, so the
+		// two renderers agree at any matching resolution rather than only at 20.
+		const float halfExtent = GridRes * CellSize * 0.5f;
 
 		torusCb.data.ShapeKind = (uint)testShapeKind;
+		// Read only by the ported synthetic scenes, but uploaded unconditionally
+		// so the CB never carries a stale value from a previous shape.
+		torusCb.data.SceneThreshold = syntheticThreshold;
+		torusCb.data.SceneMaterialCount = (uint)syntheticMaterialCount;
 
 		if (testShapeKind == TestShape_SingleTorus) {
 			// Reuses the exact ShapeKind<=1 analytic-SDF raymarch path --
@@ -339,8 +375,8 @@ protected:
 			torusCb.data.nTorii = 1;
 			torusCb.data.torii[0].center      = center;
 			torusCb.data.torii[0].axis        = float3(0, 1, 0).Normalize();
-			torusCb.data.torii[0].majorRadius = 6.0f;
-			torusCb.data.torii[0].minorRadius = 2.5f;
+			torusCb.data.torii[0].majorRadius = 0.60f * halfExtent;
+			torusCb.data.torii[0].minorRadius = 0.25f * halfExtent;
 			torusCb.data.torii[0].label       = 1;
 			return;
 		}
@@ -348,7 +384,9 @@ protected:
 		if (testShapeKind == TestShape_Ellipsoid) {
 			torusCb.data.nTorii = 1;
 			torusCb.data.torii[0].center      = center;
-			torusCb.data.torii[0].axis        = float3(7.0f, 5.0f, 4.0f);
+			// .axis holds the three semi-axis radii for this shape kind, not a
+			// rotation axis -- see TorusSdf.hlsli's SdEllipsoid.
+			torusCb.data.torii[0].axis        = float3(0.70f, 0.50f, 0.40f) * halfExtent;
 			torusCb.data.torii[0].majorRadius = 0.0f;
 			torusCb.data.torii[0].minorRadius = 0.0f;
 			torusCb.data.torii[0].label       = 1;
@@ -356,10 +394,13 @@ protected:
 		}
 
 		if (testShapeKind >= TestShape_SinglePoint) {
-			// No analytic SDF -- rasterLabelCS.hlsl sets these labels
-			// directly from grid index (ShapeKind >= 2 branch), torii stays
-			// empty (no raymarch reference makes sense for a lone voxel, a
-			// 1-voxel-wide diagonal line, or a 1-voxel-thick slab anyway).
+			// Nothing torii can express -- rasterLabelCS.hlsl derives these
+			// labels straight from grid index (its ShapeKind >= 2 branches),
+			// torii stays empty. No raymarch reference makes sense for a lone
+			// voxel, a 1-voxel-wide diagonal line or a 1-voxel-thick slab; the
+			// ported scenes (>= TestShape_Tree) do have real SDFs, but they
+			// live in the normalized grid domain, not the world-space one the
+			// raymarch path shares with torii.
 			torusCb.data.nTorii = 0;
 			return;
 		}
@@ -383,19 +424,22 @@ protected:
 		// v1 simplification -- at a genuine 3-label junction like torus
 		// 0/1's crossing, no single pair can represent all 3 simultaneously
 		// present labels at once.
+		// offset/major/minor are fractions of halfExtent (see its comment above);
+		// these are the old world-unit values divided by 10, i.e. unchanged at
+		// GridRes=20. They match volume_funcs.glsl's torus_multi_label exactly.
 		struct { float3 offset, axis; float major, minor; uint label; } list[] = {
-			{ float3(0, 0, 0),  float3(0, 1, 0), 6.0f, 2.5f, 1 },
-			{ float3(0, 0, 0),  float3(1, 0, 0), 4.5f, 2.0f, 2 },
-			{ float3(0, -4, 0), float3(0, 0, 1), 3.5f, 1.5f, 3 },
+			{ float3(0, 0, 0),     float3(0, 1, 0), 0.60f, 0.25f, 1 },
+			{ float3(0, 0, 0),     float3(1, 0, 0), 0.45f, 0.20f, 2 },
+			{ float3(0, -0.4f, 0), float3(0, 0, 1), 0.35f, 0.15f, 3 },
 		};
 
 		uint n = (uint)(sizeof(list) / sizeof(list[0]));
 		torusCb.data.nTorii = n;
 		for (uint i = 0; i < n; i++) {
-			torusCb.data.torii[i].center      = center + list[i].offset;
+			torusCb.data.torii[i].center      = center + list[i].offset * halfExtent;
 			torusCb.data.torii[i].axis        = list[i].axis.Normalize();
-			torusCb.data.torii[i].majorRadius = list[i].major;
-			torusCb.data.torii[i].minorRadius = list[i].minor;
+			torusCb.data.torii[i].majorRadius = list[i].major * halfExtent;
+			torusCb.data.torii[i].minorRadius = list[i].minor * halfExtent;
 			torusCb.data.torii[i].label       = list[i].label;
 		}
 	}
@@ -1504,14 +1548,31 @@ protected:
 		ImGui::SetNextWindowSize(ImVec2(280, 0), ImGuiCond_FirstUseEver);
 		ImGui::Begin("g-Distance Controls");
 		static const char* testShapeItems[] = {
-			"3 Tori (multi-label)", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D", "Slab", "Single Torus (2-label)", "2x2x2 Box"
+			"3 Tori (multi-label)", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D", "Slab", "Single Torus (2-label)", "2x2x2 Box",
+			"Tree (ported)", "Marschner-Lobb (ported)", "Marschner-Lobb multi-label (ported)"
 		};
 		ImGui::Combo("Test Shape", &testShapeKind, testShapeItems, IM_ARRAYSIZE(testShapeItems));
+		if (testShapeKind >= TestShape_Tree) {
+			ImGui::SliderFloat("Scene Threshold", &syntheticThreshold, 0.0f, 1.0f);
+			ImGui::TextDisabled("(iso-level for Marschner-Lobb, uniform radius offset around 0.5 for Tree -- match the Vulkan renderer's \"Vol. Threshold\")");
+			if (testShapeKind == TestShape_MarschnerLobbMulti) {
+				ImGui::SliderInt("Scene Materials", &syntheticMaterialCount, 1, 16);
+				ImGui::TextDisabled("(Voronoi cells filling the iso-shell -- matches the Vulkan renderer's \"LM multi-material count\")");
+			}
+			ImGui::TextDisabled("(ported scenes are defined on the normalized grid domain, so they need a fairly high Grid Resolution to resolve -- especially Marschner-Lobb's high-frequency shell and Tree's thinnest twigs)");
+		}
 		ImGui::SliderInt("Grid Resolution", &gridResSetting, 4, 256, "%d", ImGuiSliderFlags_Logarithmic);
 		ImGui::SameLine();
 		ImGui::TextDisabled("(applied: %d -- rounded down to even for block-smoothing edge symmetry)", gridResSetting & ~1);
-		ImGui::SliderInt("Render Window Size", &windowCubeDimSetting, 8, 48);
-		ImGui::TextDisabled("(real grid units, GridRes-independent -- only this much of the domain, centered, is ever extracted/rendered)");
+		// Upper bound matches EnsureGridBuffersSized's own clamp. It used to stop
+		// at 48, which silently made a whole-domain view unreachable past
+		// GridRes=48: the window is in REAL grid units and does not scale with
+		// GridRes, so at GridRes=128 a 48-unit window shows only the middle
+		// ~37% of each axis and a centered test shape gets cut down to a core
+		// slice. The memory estimate below is the guard rail -- this buffer
+		// grows as (2*W+8)^3, so the high end of this slider is expensive.
+		ImGui::SliderInt("Render Window Size", &windowCubeDimSetting, 8, 128);
+		ImGui::TextDisabled("(real grid units, GridRes-independent -- only this much of the domain, centered, is ever extracted/rendered; set it to GridRes to see the whole domain, and watch the memory estimate)");
 		{
 			// ~0.125 KB * GridRes^3 for the per-node arrays (scale with the
 			// whole solved domain, not just the render window -- see the

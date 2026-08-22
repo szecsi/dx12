@@ -46,6 +46,14 @@ Cam::FirstPerson::P Cam::FirstPerson::SetProj(float fov, float aspect, float nea
 	this->aspect = aspect;
 	this->nearPlane = nearPlane;
 	this->farPlane = farPlane;
+	// Without this the stored values sat unused until something else happened
+	// to call SetAspect (in practice: swapchain creation or a window resize),
+	// so a mid-session SetProj -- e.g. moving the far plane out to match a
+	// domain that just got bigger -- silently did nothing and geometry stayed
+	// clipped at the old far plane. UpdateView() too, because rayDirMatrix is
+	// built from projMatrix and would otherwise keep the stale projection.
+	UpdateProj();
+	UpdateView();
 	return GetShared();
 }
 

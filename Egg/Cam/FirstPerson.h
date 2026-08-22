@@ -4,7 +4,7 @@
 #include "Base.h"
 
 namespace Egg { namespace Cam {
-	//TODO: shiftpressed false, gyorsul dt/t, updateproj
+	//TODO: shiftpressed false, gyorsul dt/t
 	GG_SUBCLASS(FirstPerson, Cam::Base)
 		Egg::Math::float3 position;
 		Egg::Math::float3 ahead;
