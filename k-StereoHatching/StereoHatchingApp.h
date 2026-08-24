@@ -24,6 +24,7 @@
 #include "MetaballCharacters.h"
 #include "MarchingTetrahedra.h"
 #include "CurvatureDirection.h"
+#include "ImportedCharacter.h"
 #include "StereoCamera.h"
 #include "HatchVertex.h"
 
@@ -68,6 +69,7 @@ class StereoHatchingApp : public Egg::SimpleApp {
 	};
 
 	enum class RenderMode { Unsynced = 0, CrossProjected = 1 };
+	enum class SceneType { Metaballs = 0, LsdMolecule = 1, NoseyKnight = 2 };
 
 	EyeResources eyes[2]; // 0 = left, 1 = right
 	D3D12_GPU_DESCRIPTOR_HANDLE compositeTableGpu{}; // {leftStrokeMask, rightStrokeMask, leftLuminance, rightLuminance, leftCrossMask, rightCrossMask} SRV sextuple, for compositePS
@@ -134,6 +136,7 @@ class StereoHatchingApp : public Egg::SimpleApp {
 	bool  showCrossProjectedHatching = true;
 	static constexpr float CrossProjectDepthEpsilon = 0.002f; // NDC-z tolerance for "is this the same surface point the other eye sees"
 
+	SceneType currentScene = SceneType::Metaballs;
 	int   tessellationGridRes = 56;
 	float curvatureBlendRadius = 0.25f;
 	bool  needsRebuildCharacters = false;
@@ -184,8 +187,23 @@ class StereoHatchingApp : public Egg::SimpleApp {
 	}
 
 	void RebuildCharacters() {
-		characters = Hatch::BuildCharacters(curvatureBlendRadius);
 		characterGeometry.clear();
+
+		// Imported-mesh scene: one shared geometry (loaded once from FBX,
+		// no marching-tetrahedra/SDF involved) drawn at several world
+		// offsets -- entirely bypasses the procedural per-character loop
+		// below, which needs a CharacterSdf to tessellate.
+		if (currentScene == SceneType::NoseyKnight) {
+			characters = Hatch::BuildNoseyKnightPlacements();
+			Egg::Mesh::IndexedGeometry::P geom = Hatch::LoadMeshCharacter(device.Get(), "nosey-knight.fbx");
+			for (size_t i = 0; i < characters.size(); ++i)
+				characterGeometry.push_back(geom);
+			return;
+		}
+
+		characters = (currentScene == SceneType::LsdMolecule)
+			? Hatch::BuildLsdMolecule(curvatureBlendRadius)
+			: Hatch::BuildCharacters(curvatureBlendRadius);
 		for (auto& ch : characters) {
 			Hatch::AABB bbox = Hatch::ComputeLocalBounds(ch.sdf);
 			std::vector<Hatch::HatchVertex> verts;
@@ -369,6 +387,15 @@ class StereoHatchingApp : public Egg::SimpleApp {
 
 		ImGui::SetNextWindowSize(ImVec2(320, 0), ImGuiCond_FirstUseEver);
 		ImGui::Begin("k-StereoHatching Controls");
+
+		if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
+			static const char* sceneItems[] = { "Metaball Characters", "LSD Molecule", "Nosey Knight" };
+			int sceneIdx = (int)currentScene;
+			if (ImGui::Combo("Active Scene", &sceneIdx, sceneItems, IM_ARRAYSIZE(sceneItems))) {
+				currentScene = (SceneType)sceneIdx;
+				needsRebuildCharacters = true;
+			}
+		}
 
 		if (ImGui::CollapsingHeader("Stereo", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderFloat("Eye Separation", &eyeSeparation, 0.0f, 0.3f);

@@ -100,11 +100,11 @@ float4 retam256CollectPS(VSOutput input) : SV_Target{
 			uint hash = ((j-1u) << 12) | ((hash2.x & 0x3f) << 6)  | (hash2.y &  0x3f);
 				
 			float2 strokeTexPos = frac(fromSeed) - float2(0.5, 0.5);
-			if(strokeTexPos.x * strokeTexPos.x + strokeTexPos.y * strokeTexPos.y 
-					> safeDist * safeDist / 1600.0){
-				bits = cycle(bits);
-                continue;
-			}
+//			if(strokeTexPos.x * strokeTexPos.x + strokeTexPos.y * strokeTexPos.y 
+//					> safeDist * safeDist / 1600.0){
+//				bits = cycle(bits);
+//                continue;
+//			}
 			uint2 quadrant = uint2(
 				(frac(fromSeed.x * 0.5) > 0.5) ? 1u : 0u,
 				(frac(fromSeed.y * 0.5) > 0.5) ? 1u : 0u

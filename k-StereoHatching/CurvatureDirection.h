@@ -28,6 +28,49 @@ namespace Hatch {
 			b2 = Egg::Math::float3(b, sign + n.y * n.y * a, -n.y);
 		}
 
+		struct PrincipalCurvature {
+			Egg::Math::float3 dir;
+			float kappa; // SIGNED curvature of the chosen direction
+		};
+
+		// Closed-form 2x2 symmetric eigen-decomposition of the tangent-plane
+		// curvature tensor [[a,b],[b,c]] (expressed in the (t1,t2) basis),
+		// shared by both the analytic-SDF path (below) and ImportedMesh.h's
+		// discrete one-ring tensor fit -- same tensor-to-direction logic
+		// regardless of how a/b/c were obtained.
+		inline PrincipalCurvature PrincipalDirectionFromTensor(const Egg::Math::float3& t1, const Egg::Math::float3& t2, float a, float b, float c) {
+			float discriminant = (a - c) * (a - c) + 4.0f * b * b;
+			PrincipalCurvature result;
+
+			if (discriminant < 1e-8f) {
+				// Near-umbilic point -- direction is undefined, fall back
+				// deterministically. No temporal coherence requirement to
+				// preserve, so this is safe.
+				result.dir = t1;
+				result.kappa = 0.5f * (a + c);
+				return result;
+			}
+
+			float theta = 0.5f * std::atan2(2.0f * b, a - c);
+			float ct = std::cos(theta), st = std::sin(theta);
+			Egg::Math::float3 d1 = t1 * ct + t2 * st;
+			Egg::Math::float3 d2 = t1 * (-st) + t2 * ct;
+			float r = std::sqrt(0.25f * (a - c) * (a - c) + b * b);
+			float k1 = 0.5f * (a + c) + r;
+			float k2 = 0.5f * (a + c) - r;
+
+			// Stroke direction follows the MOST-curved principal direction
+			// (larger |curvature|) -- e.g. around a cylinder's
+			// circumference, not along its axis -- so strokes read as
+			// wrapping tightly around the form. The SIGN of that
+			// direction's own curvature is kept (not discarded via fabs)
+			// so stroke arcs bend consistently concave/convex instead of
+			// all bowing the same way.
+			if (std::fabs(k1) >= std::fabs(k2)) { result.dir = d1; result.kappa = k1; }
+			else { result.dir = d2; result.kappa = k2; }
+			return result;
+		}
+
 	}
 
 	// eps is an absolute world-space offset for the central-difference
@@ -75,38 +118,9 @@ namespace Hatch {
 			float c = t2.Dot(Ht2);
 			float b = t1.Dot(Ht2);
 
-			float discriminant = (a - c) * (a - c) + 4.0f * b * b;
-			float3 dir;
-			float kappa; // SIGNED curvature of the chosen direction -- sign preserved (see HatchVertex.h)
-
-			if (discriminant < 1e-8f) {
-				// Near-umbilic point (e.g. a sphere tip) -- direction is
-				// undefined, fall back deterministically. No temporal
-				// coherence requirement to preserve, so this is safe.
-				dir = t1;
-				kappa = 0.5f * (a + c);
-			} else {
-				float theta = 0.5f * std::atan2(2.0f * b, a - c);
-				float ct = std::cos(theta), st = std::sin(theta);
-				float3 d1 = t1 * ct + t2 * st;
-				float3 d2 = t1 * (-st) + t2 * ct;
-				float r = std::sqrt(0.25f * (a - c) * (a - c) + b * b);
-				float k1 = 0.5f * (a + c) + r;
-				float k2 = 0.5f * (a + c) - r;
-
-				// Stroke direction follows the MOST-curved principal direction
-				// (larger |curvature|) -- e.g. around a cylinder's
-				// circumference, not along its axis -- so strokes read as
-				// wrapping tightly around the form. The SIGN of that
-				// direction's own curvature is kept (not discarded via fabs)
-				// so stroke arcs bend consistently concave/convex instead of
-				// all bowing the same way.
-				if (std::fabs(k1) >= std::fabs(k2)) { dir = d1; kappa = k1; }
-				else { dir = d2; kappa = k2; }
-			}
-
-			v.hatchDirection = dir;
-			v.curvature = kappa;
+			Detail::PrincipalCurvature pc = Detail::PrincipalDirectionFromTensor(t1, t2, a, b, c);
+			v.hatchDirection = pc.dir;
+			v.curvature = pc.kappa; // SIGNED curvature of the chosen direction (see HatchVertex.h)
 		}
 	}
 

@@ -75,6 +75,7 @@
     <ClInclude Include="MetaballCharacters.h" />
     <ClInclude Include="MarchingTetrahedra.h" />
     <ClInclude Include="CurvatureDirection.h" />
+    <ClInclude Include="ImportedCharacter.h" />
     <ClInclude Include="StereoCamera.h" />
     <ClInclude Include="Common\GpuBuffer.h" />
     <ClInclude Include="Common\DescriptorAllocator.h" />

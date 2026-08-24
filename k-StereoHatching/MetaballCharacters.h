@@ -108,4 +108,63 @@ namespace Hatch {
 		return chars;
 	}
 
+	// LSD (lysergic acid diethylamide): a topologically-faithful but
+	// hand-placed (not force-field-relaxed) stylization of the ergoline
+	// skeleton -- fused benzene+pyrrole (indole) rings, two further fused
+	// six-membered rings (one carrying N6), an N6-methyl, and a C8
+	// carbonyl-diethylamide tail -- rendered as one metaball "ball and
+	// stick" character, atoms as spheres and bonds as thin capsules, all
+	// smooth-min blended together like the other characters' body parts.
+	inline std::vector<Character> BuildLsdMolecule(float blendRadius) {
+		using Egg::Math::float3;
+		std::vector<Character> chars;
+
+		CharacterSdf sdf; sdf.blendRadius = blendRadius;
+		auto& P = sdf.primitives;
+
+		const float rC = 0.11f;   // ring carbon / nitrogen
+		const float rO = 0.13f;   // oxygen (carbonyl)
+		const float rMe = 0.09f;  // terminal methyl/ethyl carbon
+		const float rBond = 0.045f;
+
+		auto atom = [&](const float3& p, float r) { P.push_back(Primitive::MakeSphere(p, r)); };
+		auto bond = [&](const float3& a, const float3& b) { P.push_back(Primitive::MakeCapsule(a, b, rBond)); };
+
+		// Indole benzo ring (aromatic 6-ring)
+		float3 a1(-0.24f, 1.47f, -0.03f), a2(-0.24f, 1.73f, -0.03f), a3(0.00f, 1.86f, 0.00f);
+		float3 a4(0.24f, 1.73f, 0.05f), a5(0.24f, 1.47f, 0.05f), a6(0.00f, 1.34f, 0.02f);
+		// Indole pyrrole ring, fused at a1-a6
+		float3 n1(-0.46f, 1.60f, -0.10f), c2(-0.50f, 1.34f, -0.12f), c3(-0.28f, 1.19f, -0.02f);
+		// Ring C, fused at c3-a6
+		float3 m1(-0.30f, 0.95f, 0.05f), m2(-0.10f, 0.79f, 0.10f), m3(0.16f, 0.85f, 0.10f), m4(0.22f, 1.11f, 0.06f);
+		// Ring D (carries N6 = d1), fused at m2-m3
+		float3 d1(-0.14f, 0.53f, 0.15f), d2(0.02f, 0.37f, 0.20f), d3(0.24f, 0.47f, 0.20f), d4(0.30f, 0.73f, 0.15f);
+		// N6-methyl
+		float3 me1(-0.34f, 0.43f, 0.20f);
+		// C8 carbonyl-diethylamide tail
+		float3 co1(0.44f, 0.52f, 0.30f), o1(0.54f, 0.72f, 0.35f), namide(0.66f, 0.42f, 0.35f);
+		float3 e1a(0.86f, 0.57f, 0.40f), e1b(1.06f, 0.67f, 0.45f);
+		float3 e2a(0.84f, 0.22f, 0.45f), e2b(1.04f, 0.10f, 0.55f);
+
+		for (const float3& p : { a1, a2, a3, a4, a5, a6, n1, c2, c3, m1, m2, m3, m4, d2, d3, d4, co1, e1a, e2a })
+			atom(p, rC);
+		atom(d1, rC);   // N6
+		atom(o1, rO);   // carbonyl oxygen
+		atom(me1, rMe); // N6-methyl
+		atom(e1b, rMe); // ethyl terminal
+		atom(e2b, rMe); // ethyl terminal
+
+		bond(a1, a2); bond(a2, a3); bond(a3, a4); bond(a4, a5); bond(a5, a6); bond(a6, a1);
+		bond(a1, n1); bond(n1, c2); bond(c2, c3); bond(c3, a6);
+		bond(c3, m1); bond(m1, m2); bond(m2, m3); bond(m3, m4); bond(m4, a6);
+		bond(m2, d1); bond(d1, d2); bond(d2, d3); bond(d3, d4); bond(d4, m3);
+		bond(d1, me1);
+		bond(d3, co1); bond(co1, o1); bond(co1, namide);
+		bond(namide, e1a); bond(e1a, e1b);
+		bond(namide, e2a); bond(e2a, e2b);
+
+		chars.push_back({ sdf, float3(0, 0, 0), "LSD Molecule" });
+		return chars;
+	}
+
 }
