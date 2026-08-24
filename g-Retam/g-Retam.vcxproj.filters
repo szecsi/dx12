@@ -74,6 +74,8 @@
     <FxCompile Include="Shaders\Retam\retamSkinnedVS.hlsl" />
     <FxCompile Include="Shaders\Retam\retamSkinnedCollectVS.hlsl" />
     <FxCompile Include="Shaders\Retam\retam256SkinnedCollectPS.hlsl" />
+    <FxCompile Include="Shaders\Retam\retamAnaglyphVS.hlsl" />
+    <FxCompile Include="Shaders\Retam\retamAnaglyphPS.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -82,6 +84,7 @@
     <ClInclude Include="RetamApp.h" />
     <ClInclude Include="WaveSort.h" />
     <ClInclude Include="HipHopAnimation.h" />
+    <ClInclude Include="StereoCamera.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\Billboard\billboard.hlsli">

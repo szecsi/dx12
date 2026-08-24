@@ -9,19 +9,19 @@
 #include "Egg/Compute/RawBuffer.h"
 #include "Egg/Compute/TypedBuffer.h"
 #include "Egg/Compute/ComputePass.h"
-#include "Egg/Compute/FenceChain.h"
+#include "Egg/Compute/Fence.h"
 #include "Egg/Shader.h"
 
 #include "Shaders/Retam/RetamCb.hlsli"
 #include "Egg/Script/StructReflectionMap.h"
 #include "Egg/ConstantBuffer.hpp"
+#include "StereoCamera.h"
 
 #include <commctrl.h>
 #pragma comment(lib, "comctl32.lib")
 
 class RetamApp : public Egg::Script::ScriptedApp {
 
-	uint frameCount;
 	bool showStrokes;
 	bool showRetam;
 	bool showReCollect;
@@ -89,6 +89,29 @@ class RetamApp : public Egg::Script::ScriptedApp {
 		const int RH = 30, LW = 110, SW = 130, VW = 58, M = 8;
 		int y = M;
 
+		auto addFloatSlider = [&](const std::wstring& label, float* ptr, float minVal, float maxVal) {
+			CreateWindowW(L"STATIC", label.c_str(), WS_CHILD | WS_VISIBLE | SS_RIGHT,
+				M, y + 6, LW, 20, guiHwnd, nullptr, nullptr, nullptr);
+
+			HWND slider = CreateWindowW(TRACKBAR_CLASSW, nullptr,
+				WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS,
+				M + LW + 4, y, SW, RH, guiHwnd, nullptr, nullptr, nullptr);
+			SendMessage(slider, TBM_SETRANGE, TRUE, MAKELONG(0, GUI_STEPS));
+			int initPos = (int)((*ptr - minVal) / (maxVal - minVal) * GUI_STEPS + 0.5f);
+			SendMessage(slider, TBM_SETPOS, TRUE, std::max(0, std::min(GUI_STEPS, initPos)));
+
+			wchar_t valBuf[32];
+			swprintf_s(valBuf, L"%.3f", *ptr);
+			HWND valLabel = CreateWindowW(L"STATIC", valBuf, WS_CHILD | WS_VISIBLE,
+				M + LW + 4 + SW + 4, y + 6, VW, 20, guiHwnd, nullptr, nullptr, nullptr);
+
+			floatControls.push_back({ slider, valLabel, ptr, minVal, maxVal });
+			y += RH + 4;
+		};
+
+		addFloatSlider(L"Eye Separation", &eyeSeparation, 0.0f, 0.5f);
+		addFloatSlider(L"Focus Distance", &convergenceDistance, 0.1f, 20.0f);
+
 		for (auto& member : it->second) {
 			float minVal = 0.f, maxVal = 1.f;
 			if (member.name == "lineSize")   { minVal = 0.f; maxVal = 2.f; }
@@ -108,23 +131,7 @@ class RetamApp : public Egg::Script::ScriptedApp {
 					reinterpret_cast<char*>(&retamMaterialCb.data) + member.offset + i * sizeof(float));
 
 				std::wstring label = wname + L"." + (wchar_t)('x' + i);
-				CreateWindowW(L"STATIC", label.c_str(), WS_CHILD | WS_VISIBLE | SS_RIGHT,
-					M, y + 6, LW, 20, guiHwnd, nullptr, nullptr, nullptr);
-
-				HWND slider = CreateWindowW(TRACKBAR_CLASSW, nullptr,
-					WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS,
-					M + LW + 4, y, SW, RH, guiHwnd, nullptr, nullptr, nullptr);
-				SendMessage(slider, TBM_SETRANGE, TRUE, MAKELONG(0, GUI_STEPS));
-				int initPos = (int)((*ptr - minVal) / (maxVal - minVal) * GUI_STEPS + 0.5f);
-				SendMessage(slider, TBM_SETPOS, TRUE, std::max(0, std::min(GUI_STEPS, initPos)));
-
-				wchar_t valBuf[32];
-				swprintf_s(valBuf, L"%.3f", *ptr);
-				HWND valLabel = CreateWindowW(L"STATIC", valBuf, WS_CHILD | WS_VISIBLE,
-					M + LW + 4 + SW + 4, y + 6, VW, 20, guiHwnd, nullptr, nullptr, nullptr);
-
-				floatControls.push_back({ slider, valLabel, ptr, minVal, maxVal });
-				y += RH + 4;
+				addFloatSlider(label, ptr, minVal, maxVal);
 			}
 		}
 
@@ -143,13 +150,24 @@ protected:
 	com_ptr<ID3D12GraphicsCommandList> uploadCommandList;
 
 	Egg::Compute::Fence uploadFence;
-	Egg::Compute::FenceChain computeFenceChain;
-	Egg::Compute::FenceChain graphicsFenceChain;
+	uint64_t frameSyncValue = 1; // monotonically increasing value for uploadFence, reused as a hard per-stage GPU barrier within PopulateCommandList
 
 	com_ptr<ID3D12Resource> collectDepthBuffer;
 	com_ptr<ID3D12DescriptorHeap> collectDsvHeap;
 	com_ptr<ID3D12Resource> collectColorBuffer;
 	com_ptr<ID3D12DescriptorHeap> collectRtvHeap;
+
+	// -- Stereo: each eye's fully-shaded retam render (the entire collect ->
+	// compute -> stroke-extrude pipeline run once per eye, see
+	// PopulateCommandList()), composited into a red/cyan anaglyph as the
+	// final pass (RecordAndSubmitComposite()).
+	float eyeSeparation = 0.065f;
+	float convergenceDistance = 4.5f;
+	com_ptr<ID3D12Resource> eyeColorBuffer[2]; // 0 = left, 1 = right
+	D3D12_CPU_DESCRIPTOR_HANDLE eyeColorRtv[2]{};
+	com_ptr<ID3D12DescriptorHeap> eyeColorRtvHeap;
+	com_ptr<ID3D12RootSignature> anaglyphRootSig;
+	com_ptr<ID3D12PipelineState> anaglyphPso;
 
 	com_ptr<ID3D12DescriptorHeap> uavHeap;
 	Egg::Compute::RawBuffer   fragmentCountsBuffer;
@@ -204,7 +222,6 @@ public:
 	virtual void CreateResources() override {
 		Egg::Script::ScriptedApp::CreateResources();
 
-		frameCount = 0;
 		showRetam = true;
 		showStrokes = true;
 		showReCollect = false;
@@ -214,7 +231,7 @@ public:
 		D3D12_DESCRIPTOR_HEAP_DESC dhd;
 		dhd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		dhd.NodeMask = 0;
-		dhd.NumDescriptors = 12;
+		dhd.NumDescriptors = 14;
 		dhd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
@@ -319,6 +336,32 @@ public:
 				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(cubicExtrudePSO.GetAddressOf()));
 		}
 
+		{
+			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/Retam/retamAnaglyphVS.cso");
+			com_ptr<ID3DBlob> ps = Egg::Shader::LoadCso("Shaders/Retam/retamAnaglyphPS.cso");
+			anaglyphRootSig = Egg::Shader::LoadRootSignature(device.Get(), vs.Get());
+
+			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = anaglyphRootSig.Get();
+			psoDesc.VS = { vs->GetBufferPointer(), vs->GetBufferSize() };
+			psoDesc.PS = { ps->GetBufferPointer(), ps->GetBufferSize() };
+			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+			psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+			psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+			psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+			psoDesc.DepthStencilState.DepthEnable = FALSE;
+			psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+			D3D12_INPUT_LAYOUT_DESC emptyLayout = { nullptr, 0 };
+			psoDesc.InputLayout = emptyLayout;
+			psoDesc.NumRenderTargets = 1;
+			psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+			psoDesc.SampleMask = UINT_MAX;
+			psoDesc.SampleDesc.Count = 1;
+			DX_API("create anaglyph composite PSO")
+				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(anaglyphPso.GetAddressOf()));
+		}
+
 		sortCS.createResources(device, "Shaders/Retam/sortCS.cso");
 		prefixSumCS.createResources(device, "Shaders/Retam/prefixSumCS.cso");
 		compactCS.createResources(device, "Shaders/Retam/compactCS.cso");
@@ -352,9 +395,6 @@ public:
 
 	virtual void CreateSwapChainResources() override {
 		__super::CreateSwapChainResources();
-
-		computeFenceChain.createResources(device, swapChainBackBufferCount);
-		graphicsFenceChain.createResources(device, swapChainBackBufferCount);
 
 		computeCommandLists.resize(swapChainBackBufferCount);
 		computeAllocators.resize(swapChainBackBufferCount);
@@ -422,6 +462,43 @@ public:
 		collectRtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		collectRtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
 		device->CreateRenderTargetView(collectColorBuffer.Get(), &collectRtvDesc, collectRtvHeap->GetCPUDescriptorHandleForHeapStart());
+
+		D3D12_DESCRIPTOR_HEAP_DESC eyeColorRtvHeapDesc = {};
+		eyeColorRtvHeapDesc.NumDescriptors = 2;
+		eyeColorRtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+		eyeColorRtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		DX_API("create eye color RTV heap")
+			device->CreateDescriptorHeap(&eyeColorRtvHeapDesc, IID_PPV_ARGS(eyeColorRtvHeap.ReleaseAndGetAddressOf()));
+		uint eyeRtvIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		uint eyeCbvSrvUavIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		UINT ew = (UINT)viewPort.Width, eh = (UINT)viewPort.Height;
+		const wchar_t* eyeNames[2] = { L"EyeColorL", L"EyeColorR" };
+		for (int e = 0; e < 2; e++) {
+			D3D12_CLEAR_VALUE eyeColorClearVal = {};
+			eyeColorClearVal.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			eyeColorClearVal.Color[0] = eyeColorClearVal.Color[1] = eyeColorClearVal.Color[2] = eyeColorClearVal.Color[3] = 1.0f;
+			DX_API("create eye color buffer")
+				device->CreateCommittedResource(
+					&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+					D3D12_HEAP_FLAG_NONE,
+					&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, ew, eh, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET),
+					D3D12_RESOURCE_STATE_RENDER_TARGET,
+					&eyeColorClearVal,
+					IID_PPV_ARGS(eyeColorBuffer[e].ReleaseAndGetAddressOf()));
+			eyeColorBuffer[e]->SetName(eyeNames[e]);
+
+			eyeColorRtv[e] = CD3DX12_CPU_DESCRIPTOR_HANDLE(eyeColorRtvHeap->GetCPUDescriptorHandleForHeapStart(), e, eyeRtvIncrSize);
+			device->CreateRenderTargetView(eyeColorBuffer[e].Get(), nullptr, eyeColorRtv[e]);
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC eyeColorSrvDesc = {};
+			eyeColorSrvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			eyeColorSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+			eyeColorSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			eyeColorSrvDesc.Texture2D.MipLevels = 1;
+			CD3DX12_CPU_DESCRIPTOR_HANDLE eyeColorSrvHandle(uavHeap->GetCPUDescriptorHandleForHeapStart(), 12 + e, eyeCbvSrvUavIncrSize);
+			device->CreateShaderResourceView(eyeColorBuffer[e].Get(), &eyeColorSrvDesc, eyeColorSrvHandle);
+		}
 	}
 
 	void SceneUploadResources() {
@@ -572,172 +649,54 @@ public:
 		//claudetest cubicBuffer.copyBack(cmd);
 	}
 
-	virtual void PopulateCommandList() override {
+	// Forces the GPU to fully catch up before the CPU proceeds. Needed
+	// between the stages below because, unlike the rest of this codebase's
+	// per-swapchain-frame double buffering, the stereo eye loop reuses the
+	// SAME single-buffered collect/UAV/cubic-stroke resources twice within
+	// one real frame (once per eye) -- the next stage may not start
+	// recording into them until the GPU has actually finished the previous
+	// one.
+	void HardSync(com_ptr<ID3D12CommandQueue> queue) {
+		frameSyncValue++;
+		uploadFence.signal(queue, frameSyncValue);
+		uploadFence.cpuWait();
+	}
 
-		// --- Compute pass ---
-		computeAllocators[swapChainBackBufferIndex]->Reset();
-		auto& computeCommandList = computeCommandLists[swapChainBackBufferIndex];
-		computeCommandList->Reset(computeAllocators[swapChainBackBufferIndex].Get(), nullptr);
+	// Derives eye's off-axis view/projection from the single head camera
+	// (see StereoCamera.h) and pushes it into perFrameCb -- every shader in
+	// the retam pipeline (collect, base shading, cubic stroke extrude) reads
+	// its transform from there, so this alone is enough to steer the whole
+	// process at one eye.
+	void UpdateEyeCamera(int eye) {
+		using namespace Egg::Math;
+		auto headCam = std::dynamic_pointer_cast<Egg::Cam::FirstPerson>(cameras[currentCameraIndex]);
+		if (!headCam) return;
 
-		recordComputeCommands();
+		bool rightEye = (eye == 1);
+		float4x4 view = Stereo::ComputeEyeView(headCam, eyeSeparation, rightEye);
+		float4x4 proj = Stereo::ComputeEyeProj(headCam->GetFov(), headCam->GetAspect(), headCam->GetNearPlane(), headCam->GetFarPlane(),
+			eyeSeparation, convergenceDistance, rightEye);
+		float3 eyePos = headCam->GetEyePosition() + Stereo::HeadRight(headCam) * (rightEye ? 0.5f : -0.5f) * eyeSeparation;
 
-		DX_API("close compute command list")
-			computeCommandLists[swapChainBackBufferIndex]->Close();
+		perFrameCb->viewProjTransform = view * proj;
+		perFrameCb->cameraPos = float4(eyePos, 1.0f);
+		perFrameCb->ahead = float4(headCam->GetAhead(), 0.0f);
+		perFrameCb.Upload();
+	}
 
-		graphicsFenceChain.gpuWait(computeCommandQueue, swapChainBackBufferIndex);
-		{
-			ID3D12CommandList* ppCommandLists[] = { computeCommandLists[swapChainBackBufferIndex].Get() };
-			computeCommandQueue->ExecuteCommandLists(1, ppCommandLists);
-		}
-		computeFenceChain.signal(computeCommandQueue, swapChainBackBufferIndex);
+	// Lays down depth and collects fragments (UV/curvature seeds for the
+	// strokes) into the 1024x1024 offscreen collect targets, for whichever
+	// eye's transform is currently in perFrameCb. Self-contained: submitted
+	// and hard-synced before returning, so the compute pass that consumes
+	// fragmentCountsBuffer/fragmentsBuffer right after is guaranteed to see
+	// THIS eye's fragments, not a stale or in-flight write.
+	void RecordAndSubmitCollectPass() {
+		DX_API("Failed to reset command allocator (Collect)")
+			commandAllocator->Reset();
+		DX_API("Failed to reset command list (Collect)")
+			commandList->Reset(commandAllocator.Get(), nullptr);
 
-		// Wait for compute before graphics
-		computeFenceChain.gpuWait(commandQueue, swapChainBackBufferIndex);
-
-		if (false /*frameCount > 300*/) {
-			// check compute results
-			//uint* fragmentsData = (uint*)fragmentsBuffer.mapReadback(); //xex
-			uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();
-			uint* strokeCountsData = strokeCountsBuffer.mapReadback();
-			uint* strokeOffsetsData = strokeOffsetsBuffer.mapReadback();
-			uint* strokeListData = strokeListBuffer.mapReadback();
-			//uint* debugData = debugBuffer.mapReadback();
-			float* cubicData = (float*)cubicBuffer.mapReadback();
-			float* designData = (float*)designBuffer.mapReadback();
-
-			/* claudetest
-			if (frameCount == 400) {
-				uint* fragmentsData      = (uint*)fragmentsBuffer.mapReadback();
-				uint* fragmentCountsData = fragmentCountsBuffer.mapReadback();
-				uint* strokeCountsData   = strokeCountsBuffer.mapReadback();
-				float* designData        = (float*)designBuffer.mapReadback();
-
-				constexpr uint pageSize         = 1024u;
-				constexpr uint nPages           = 16u * 1024u;
-				constexpr uint nStrokesPerPage  = 16u;
-				constexpr uint designFloat4Size = 5u;
-				constexpr uint designPagesInBuf = 16u * 5u * 1024u * 16u / (nStrokesPerPage * designFloat4Size);
-
-				uint strokeMismatches = 0, designMismatches = 0;
-				char buf[256];
-
-				for (uint p = 0; p < nPages; p++) {
-					uint nValid = std::min(fragmentCountsData[p], pageSize);
-					if (nValid == 0) continue;
-
-					const uint* page = fragmentsData + (size_t)p * pageSize * 4u;
-
-					// Aggregate fragment count per unique stroke ID
-					std::unordered_map<uint, uint> cpuCount;
-					for (uint i = 0; i < nValid; i++)
-						cpuCount[page[i * 4]]++;
-
-					// Verify strokeCounts
-					uint cpuUnique = (uint)cpuCount.size();
-					uint gpuUnique = strokeCountsData[p];
-					if (cpuUnique != gpuUnique) {
-						snprintf(buf, sizeof(buf),
-							"MISMATCH strokeCount p=%u cpu=%u gpu=%u nValid=%u\n",
-							p, cpuUnique, gpuUnique, nValid);
-						OutputDebugStringA(buf);
-						strokeMismatches++;
-					}
-
-					// Verify design0.x (fragment count per stroke) against designBuffer
-					// SIDs sorted ascending matches the GPU serial assignment order
-					if (p < designPagesInBuf) {
-						std::vector<uint> sortedSids;
-						sortedSids.reserve(cpuCount.size());
-						for (auto& kv : cpuCount) sortedSids.push_back(kv.first);
-						std::sort(sortedSids.begin(), sortedSids.end());
-
-						for (uint s = 0; s < (uint)sortedSids.size() && s < nStrokesPerPage; s++) {
-							float cpuFragCount = (float)cpuCount[sortedSids[s]];
-							// design0 is slot 2; x component = sum of 1 per fragment = fragment count
-							uint d0xIdx = ((p * nStrokesPerPage + s) * designFloat4Size + 2u) * 4u;
-							float gpuFragCount = designData[d0xIdx];
-							if (fabsf(gpuFragCount - cpuFragCount) > 0.5f) {
-								snprintf(buf, sizeof(buf),
-									"MISMATCH design0.x p=%u s=%u sid=%u cpu=%.0f gpu=%.2f\n",
-									p, s, sortedSids[s], cpuFragCount, gpuFragCount);
-								OutputDebugStringA(buf);
-								designMismatches++;
-							}
-						}
-					}
-				}
-
-				snprintf(buf, sizeof(buf),
-					"VERIFY: strokeMismatches=%u designMismatches=%u\n",
-					strokeMismatches, designMismatches);
-				OutputDebugStringA(buf);
-
-				designBuffer.unmapReadback();
-				strokeCountsBuffer.unmapReadback();
-				fragmentCountsBuffer.unmapReadback();
-				fragmentsBuffer.unmapReadback();
-			}
-			*/
-/* {
-				uint nValid = fragmentCountsData[142];
-				uint* page = fragmentsBufferData + 142 * 1024 * 4;
-				uint ids[1024];
-				for (uint i = 0; i < nValid; i++)
-					ids[i] = page[i * 4];
-				std::sort(ids, ids + nValid);
-				uint nUnique = 0;
-				char dbgBuf[128];
-				for (uint i = 0; i < nValid; ) {
-					uint j = i + 1;
-					while (j < nValid && ids[j] == ids[i]) j++;
-					nUnique++;
-					snprintf(dbgBuf, sizeof(dbgBuf), "  ID: %u  count: %u\n", ids[i], j - i);
-					OutputDebugStringA(dbgBuf);
-					i = j;
-				}
-				snprintf(dbgBuf, sizeof(dbgBuf), "Page 142: %u valid fragments, %u unique IDs\n", nValid, nUnique);
-				OutputDebugStringA(dbgBuf);
-			}
-			*/
-	/*		for (int si = 0; si < 1024 * 16; si++) {
-				uint count = fragmentCountsData[si];
-				if (count > 0) {
-					printf("Stroke %d: %d fragments\n", si, count);
-					uint* con = fragmentsBufferData + si * 1024 * 4;
-
-					for (int i = 0; i < count; i++) {
-						uint f = con[i];
-						uint x = f & 0xFFFF;
-						uint y = (f >> 16) & 0xFFFF;
-						printf("\tFragment %d: (%d, %d)\n", i, x, y);
-					}
-
-				}
-			}*/
-
-			//for (int k = 0; k < 16382; k++) {
-			//	if(fragmentCountsData[k] > 1024)
-			//		bool kame = true;
-			//}
-
-			designBuffer.unmapReadback();
-			cubicBuffer.unmapReadback();
-			//debugBuffer.unmapReadback();
-			strokeOffsetsData = strokeOffsetsBuffer.mapReadback();
-			strokeListBuffer.unmapReadback();
-			strokeCountsBuffer.unmapReadback();
-			fragmentCountsBuffer.unmapReadback();
-			//fragmentsBuffer.unmapReadback();
-		}
-
-		// --- Graphics/render pass ---
-		commandAllocator->Reset();
-		commandList->Reset(commandAllocator.Get(), nullptr);
-
-		CD3DX12_CPU_DESCRIPTOR_HANDLE rHandle(rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), swapChainBackBufferIndex, rtvDescriptorHandleIncrementSize);
-		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(dsvHeap->GetCPUDescriptorHandleForHeapStart());
 		CD3DX12_CPU_DESCRIPTOR_HANDLE collectDsvHandle(collectDsvHeap->GetCPUDescriptorHandleForHeapStart());
-
 		D3D12_VIEWPORT collectViewPort = { 0.0f, 0.0f, 1024.0f, 1024.0f, 0.0f, 1.0f };
 		D3D12_RECT collectScissor = { 0, 0, 1024, 1024 };
 		commandList->RSSetViewports(1, &collectViewPort);
@@ -777,23 +736,54 @@ public:
 					entities[i]->Draw(commandList.Get(), 1, i);
 			}
 		}
-		
 
 		D3D12_RESOURCE_BARRIER b[] = { fragmentCountsBuffer.uavBarrier(), fragmentsBuffer.uavBarrier() };
 		commandList->ResourceBarrier(2, b);
 
-		//fragmentCountsBuffer.copyBack(commandList);
-		//fragmentsBuffer.copyBack(commandList);
-		//debugBuffer.copyBack(commandList);
+		DX_API("close collect command list")
+			commandList->Close();
+		ID3D12CommandList* lists[] = { commandList.Get() };
+		commandQueue->ExecuteCommandLists(1, lists);
+		HardSync(commandQueue);
+	}
 
-		// Restore main viewport and render to swap chain
+	// Sort/prefix-sum/compact/extract strokes from the fragments the collect
+	// pass just wrote. Self-contained (submitted + hard-synced) so the final
+	// draw pass right after sees THIS eye's finished cubicBuffer/strokeList,
+	// not a partially-written one.
+	void RecordAndSubmitComputePass() {
+		auto& cmd = computeCommandLists[swapChainBackBufferIndex];
+		DX_API("Failed to reset compute command allocator")
+			computeAllocators[swapChainBackBufferIndex]->Reset();
+		DX_API("Failed to reset compute command list")
+			cmd->Reset(computeAllocators[swapChainBackBufferIndex].Get(), nullptr);
+
+		recordComputeCommands();
+
+		DX_API("close compute command list")
+			cmd->Close();
+		ID3D12CommandList* lists[] = { cmd.Get() };
+		computeCommandQueue->ExecuteCommandLists(1, lists);
+		HardSync(computeCommandQueue);
+	}
+
+	// Draws this eye's fully-shaded retam image (base pass + cubic-extruded
+	// strokes) into eyeColorBuffer[eye], cleared to white paper first. Left
+	// in an SRV-readable state on return, ready for RecordAndSubmitComposite().
+	void RecordAndSubmitFinalDrawPass(int eye) {
+		DX_API("Failed to reset command allocator (FinalDraw)")
+			commandAllocator->Reset();
+		DX_API("Failed to reset command list (FinalDraw)")
+			commandList->Reset(commandAllocator.Get(), nullptr);
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(dsvHeap->GetCPUDescriptorHandleForHeapStart());
+
 		commandList->RSSetViewports(1, &viewPort);
 		commandList->RSSetScissorRects(1, &scissorRect);
-		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
-		commandList->OMSetRenderTargets(1, &rHandle, FALSE, &dsvHandle);
+		commandList->OMSetRenderTargets(1, &eyeColorRtv[eye], FALSE, &dsvHandle);
 
-		const float clearColor[] = { 0.9f, 0.9f, 0.6f, 1.0f };
-		commandList->ClearRenderTargetView(rHandle, clearColor, 0, nullptr);
+		const float whiteClear[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+		commandList->ClearRenderTargetView(eyeColorRtv[eye], whiteClear, 0, nullptr);
 		commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 		if (showRetam) {
@@ -831,25 +821,18 @@ public:
 			commandList->SetGraphicsRootConstantBufferView(2, retamMaterialCb.GetGPUVirtualAddress());
 			commandList->SetPipelineState(cubicExtrudePSO.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
-			commandList->OMSetRenderTargets(1, &rHandle, FALSE, &dsvHandle);
-
-			//const float clearColor[] = { 0.0f, 0.2f, 0.7f, 1.0f };
-			//commandList->ClearRenderTargetView(rHandle, clearColor, 0, nullptr);
-			//commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+			commandList->OMSetRenderTargets(1, &eyeColorRtv[eye], FALSE, &dsvHandle);
 
 			if (showReCollect) {
-				if (showAnim) {
-				}
-				else {
+				if (!showAnim) {
 					for (int i = 0; i < (int)entities.size(); i++)
 						entities[i]->Draw(commandList.Get(), 3, i);
 				}
 			}
-			
+
 			if (showStrokes) {
 				commandList->ExecuteIndirect(drawCommandSignature.Get(), 1, dispatchArgsResource.Get(), 12, nullptr, 0);
 			}
-
 		}
 		{
 			D3D12_RESOURCE_BARRIER barriers[] = {
@@ -861,20 +844,80 @@ public:
 			};
 			commandList->ResourceBarrier(2, barriers);
 		}
-		
-		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+
+		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			eyeColorBuffer[eye].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
+			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+
+		DX_API("close final draw command list")
+			commandList->Close();
+		ID3D12CommandList* lists[] = { commandList.Get() };
+		commandQueue->ExecuteCommandLists(1, lists);
+		HardSync(commandQueue);
+	}
+
+	// Pass D: red/cyan anaglyph combine of both eyes' finished renders into
+	// the swap chain backbuffer (cleared white — see retamAnaglyphPS.hlsl).
+	// Left open (closed but not executed) for the base App::Render() call
+	// that follows PopulateCommandList() to execute and present.
+	void RecordAndSubmitComposite() {
+		DX_API("Failed to reset command allocator (Composite)")
+			commandAllocator->Reset();
+		DX_API("Failed to reset command list (Composite)")
+			commandList->Reset(commandAllocator.Get(), nullptr);
+
+		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			renderTargets[swapChainBackBufferIndex].Get(),
+			D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE rHandle(rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), swapChainBackBufferIndex, rtvDescriptorHandleIncrementSize);
+		commandList->OMSetRenderTargets(1, &rHandle, FALSE, nullptr);
+		commandList->RSSetViewports(1, &viewPort);
+		commandList->RSSetScissorRects(1, &scissorRect);
+		const float whiteBg[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+		commandList->ClearRenderTargetView(rHandle, whiteBg, 0, nullptr);
+
+		uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		CD3DX12_GPU_DESCRIPTOR_HANDLE eyeColorSrvGpu(uavHeap->GetGPUDescriptorHandleForHeapStart(), 12, dhIncrSize);
+		ID3D12DescriptorHeap* heaps[] = { uavHeap.Get() };
+		commandList->SetDescriptorHeaps(1, heaps);
+		commandList->SetGraphicsRootSignature(anaglyphRootSig.Get());
+		commandList->SetGraphicsRootDescriptorTable(0, eyeColorSrvGpu);
+		commandList->SetPipelineState(anaglyphPso.Get());
+		commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		commandList->DrawInstanced(3, 1, 0, 0);
+
+		D3D12_RESOURCE_BARRIER backToRt[] = {
+			CD3DX12_RESOURCE_BARRIER::Transition(eyeColorBuffer[0].Get(),
+				D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+				D3D12_RESOURCE_STATE_RENDER_TARGET),
+			CD3DX12_RESOURCE_BARRIER::Transition(eyeColorBuffer[1].Get(),
+				D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+				D3D12_RESOURCE_STATE_RENDER_TARGET),
+		};
+		commandList->ResourceBarrier(2, backToRt);
+
+		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(
+			renderTargets[swapChainBackBufferIndex].Get(),
+			D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
 		DX_API("close graphics command list")
 			commandList->Close();
+	}
 
-		ID3D12CommandList* cLists[] = { commandList.Get() };
-		commandQueue->ExecuteCommandLists(_countof(cLists), cLists);
-
-		graphicsFenceChain.signal(commandQueue, swapChainBackBufferIndex);
-
-		WaitForPreviousFrame();
-
-		frameCount++;
+	// The entire retam process (collect -> compute -> stroke extrude) run
+	// once per eye into its own offscreen color target, then combined into
+	// a red/cyan anaglyph. Each stage is hard-synced before the next
+	// begins (see HardSync()), since both eyes share the same single-
+	// buffered collect/UAV/cubic-stroke resources.
+	virtual void PopulateCommandList() override {
+		for (int eye = 0; eye < 2; eye++) {
+			UpdateEyeCamera(eye);
+			RecordAndSubmitCollectPass();
+			RecordAndSubmitComputePass();
+			RecordAndSubmitFinalDrawPass(eye);
+		}
+		RecordAndSubmitComposite();
 	}
 
 	virtual void Resize(int width, int height) override {
@@ -912,6 +955,9 @@ public:
 		collectDsvHeap.Reset();
 		collectColorBuffer.Reset();
 		collectRtvHeap.Reset();
+		eyeColorBuffer[0].Reset();
+		eyeColorBuffer[1].Reset();
+		eyeColorRtvHeap.Reset();
 		__super::ReleaseSwapChainResources();
 	}
 
@@ -928,6 +974,8 @@ public:
 		drawCommandSignature.Reset();
 		cubicExtrudePSO.Reset();
 		cubicExtrudeRootSig.Reset();
+		anaglyphPso.Reset();
+		anaglyphRootSig.Reset();
 		uavHeap.Reset();
 		Egg::Script::ScriptedApp::ReleaseResources();
 	}

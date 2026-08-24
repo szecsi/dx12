@@ -65,6 +65,7 @@
   <ItemGroup>
     <ClInclude Include="HipHopAnimation.h" />
     <ClInclude Include="RetamApp.h" />
+    <ClInclude Include="StereoCamera.h" />
     <ClInclude Include="WaveSort.h" />
   </ItemGroup>
   <ItemGroup>
@@ -146,6 +147,12 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Geometry</ShaderType>
     </FxCompile>
     <FxCompile Include="Shaders\Retam\extrudeCubicPS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\retamAnaglyphVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\Retam\retamAnaglyphPS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
     </FxCompile>
   </ItemGroup>

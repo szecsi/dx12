@@ -56,6 +56,15 @@ namespace Egg { namespace Cam {
 		/// Returns projection matrix to be used in shaders.
 		const Egg::Math::float4x4& GetProjMatrix() override;
 
+		/// Returns the vertical field of view (radians) passed to SetProj().
+		float GetFov() const { return fov; }
+		/// Returns the aspect ratio currently in effect (SetProj() or SetAspect()).
+		float GetAspect() const { return aspect; }
+		/// Returns the near clipping plane distance passed to SetProj().
+		float GetNearPlane() const { return nearPlane; }
+		/// Returns the far clipping plane distance passed to SetProj().
+		float GetFarPlane() const { return farPlane; }
+
 		/// Moves camera. To be implemented if the camera has its own animation mechanism.
 		virtual void Animate (double dt) override;
 
