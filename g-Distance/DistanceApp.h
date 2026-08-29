@@ -190,33 +190,6 @@ protected:
 	// -- volume floor (connecting nodes only, see smoothnessJacobiCS.hlsl) --
 	com_ptr<ID3D12Resource> nodeCurrentVolumeBuffer;    // NodeCount float: node's own winning-label reconstructed volume, written by smoothnessJacobiCS every sweep
 
-	// -- synthetic-field volume conservation (experimental, see
-	// smoothnessJacobiSyntheticCS.hlsl/commitSyntheticCS.hlsl/
-	// initSyntheticVolumeCS.hlsl) -- SEPARATE from nodeCurrentVolumeBuffer
-	// above: that one is the general (multi-candidate) construction's exact
-	// marching-tetrahedra reconstruction, consumed only by the non-synthetic
-	// smoothnessJacobiCS; this pair holds the synthetic single-label
-	// construction's own closed-form tet-fan "current volume" instead (NOT a
-	// potential proxy -- see smoothnessJacobiSyntheticCS.hlsl's wid<24 block),
-	// scratch/commit-buffered just like nodePotentialBuffer/
-	// nodePotentialScratchBuffer since a node is a smoothing TARGET in
-	// exactly one tile per sweep but a HALO read in several neighboring
-	// tiles' concurrent thread groups within the SAME
-	// dispatch -- writing straight into a single buffer would race.
-	com_ptr<ID3D12Resource> nodeSyntheticVolumeBuffer;        // NodeCount float, "current" (halo read buffer)
-	com_ptr<ID3D12Resource> nodeSyntheticVolumeScratchBuffer; // NodeCount float, per-sweep write buffer
-	// d(currentVolume)/d(myPot), same halo-read/scratch/commit pattern as the
-	// volume pair above -- splits a label's original volume across its
-	// currently same-labeled halo members by LEVERAGE, not equally, see
-	// smoothnessJacobiSyntheticCS.hlsl's dcontrib/targetShare.
-	com_ptr<ID3D12Resource> nodeSensitivityBuffer;
-	com_ptr<ID3D12Resource> nodeSensitivityScratchBuffer;
-	// Continuous smoothing-vs-volume alignment, same halo-read/scratch/commit
-	// pattern as the sensitivity pair above -- see
-	// smoothnessJacobiSyntheticCS.hlsl's myAlignment/Tier-1/Tier-2 split.
-	com_ptr<ID3D12Resource> nodeVolumeAlignmentBuffer;
-	com_ptr<ID3D12Resource> nodeVolumeAlignmentScratchBuffer;
-
 	Egg::Compute::ComputeShader rasterLabelCS;
 	Egg::Compute::ComputeShader computeConnectingNodesCS;
 	Egg::Compute::ComputeShader jfaInitCS;
@@ -231,7 +204,6 @@ protected:
 	Egg::Compute::ComputeShader commitPotentialCS;
 	Egg::Compute::ComputeShader commitPotentialBlockCS; // scratch->main commit for the block-smoothing path ONLY, see commitPotentialBlockCS.hlsl
 	Egg::Compute::ComputeShader commitSyntheticCS; // scratch->main commit for the synthetic-field path ONLY, see commitSyntheticCS.hlsl
-	Egg::Compute::ComputeShader initSyntheticVolumeCS; // Reinit-time seed for nodeSyntheticVolumeBuffer, see initSyntheticVolumeCS.hlsl
 	Egg::Compute::ComputeShader extractSurfaceCS;
 	Egg::Compute::ComputeShader extractSurfaceSyntheticCS; // synthetic-field surface extraction, see extractSurfaceSyntheticCS.hlsl
 
@@ -245,6 +217,8 @@ protected:
 	com_ptr<ID3D12PipelineState> wireframePso;
 	com_ptr<ID3D12RootSignature> footSliceRootSig;
 	com_ptr<ID3D12PipelineState> footSlicePso;
+	com_ptr<ID3D12RootSignature> raymarchLatticeRootSig;
+	com_ptr<ID3D12PipelineState> raymarchLatticePso;
 
 	Egg::ConstantBuffer<DistanceFrameCb> frameCb;
 	Egg::ConstantBuffer<DistanceCb>      distanceCb;
@@ -254,7 +228,7 @@ protected:
 
 	com_ptr<ID3D12DescriptorHeap> imguiSrvHeap;
 
-	int testShapeKind = TestShape_SingleTorus;
+	int testShapeKind = TestShape_Torus;
 	// Ported-scene parameters (TestShape_Tree/MarschnerLobb/MarschnerLobbMulti
 	// only). Defaults match the Vulkan renderer's own defaults -- its "Vol.
 	// Threshold" (VoxelDataComponent::mDoThreshold) and "LM multi-material
@@ -296,7 +270,9 @@ protected:
 	bool useSyntheticField = true;
 	float syntheticEpsilon = 0.1f; // head-start potential a B-node gets when it's freshly relabeled, see DistanceCb.hlsli's SyntheticEpsilon
 	bool useSyntheticLabelVote = true; // B-node relabel method, see smoothnessJacobiSyntheticCS.hlsl's UseLabelVote: true = SyntheticVote8 over the 8 own A-corners, false = dumb binary flip (1-oldLabel), test-only, two-label case
-	float volumeRatioWeight = 0.5f; // synthetic-field volume conservation weight, see DistanceCb.hlsli's VolumeRatioWeight
+	bool allowBFlips = true; // false = a B-node whose potential goes negative just reflects it and keeps its label, like an A-node -- no relabel, no SyntheticEpsilon head-start, see smoothnessJacobiSyntheticCS.hlsl's AllowBFlips
+	float junctionWeight = 0.0f; // synthetic-field junction-straightness weight, see DistanceCb.hlsli's JunctionWeight
+	float eikonalWeight = 0.0f; // synthetic-field Eikonal-floor weight, see DistanceCb.hlsli's EikonalWeight
 	float missingFallback = -3.0f; // TetFieldGrad's GetCornerPotential missing-candidate fallback, see DistanceCb.hlsli
 	float distanceWeight = 0.0f; // term 5 (distance/Eikonal shaping) weight, see DistanceCb.hlsli -- default 0, off until tuned
 	float divergencePullWeight = 0.0f; // term 6 weight: pulls a DIVERGENT A-node's own potential back toward NodeFootDist, see DistanceCb.hlsli -- default 0, off until tuned
@@ -315,16 +291,14 @@ protected:
 	uint pickedInterfaceLabelI = 0, pickedInterfaceLabelJ = 0;
 	uint pickedCornerLabels[4][MAX_CANDIDATES] = {};
 	float pickedCornerPots[4][MAX_CANDIDATES] = {};
-	float pickedCornerVolume[4] = {};          // NodeCurrentVolume (smoothnessJacobiCS's Term 4) or NodeSyntheticVolume (smoothnessJacobiSyntheticCS), whichever pipeline is active
+	float pickedCornerVolume[4] = {};          // NodeCurrentVolume (smoothnessJacobiCS's Term 4) -- general pipeline only, N/A in synthetic mode (no per-node volume computed there anymore)
 	uint pickedCornerIsConnecting[4] = {};     // NodeIsConnecting (A-nodes only; 0 for B corners), computeConnectingNodesCS
 	float pickedCornerFootDist[4] = {};        // NodeFootDist (A-nodes only; -1 for B corners), jfaFinalizeCS -- raw, unlike pot[]'s own/suppressed sign convention
 	uint pickedCornerFootSeed[4] = {};         // raw converged JFA seed node index (A-nodes only), the input jfaFinalizeCS turned into pickedCornerFootDist -- SENTINEL_LABEL or self-index here is the smoking gun for a JFA propagation bug
-	float pickedCornerSensitivity[4] = {};     // NodeSensitivity -- d(currentVolume)/d(myPot), synthetic-field pipeline only; buffer exists but is never written outside that pipeline, so N/A elsewhere
-	float pickedCornerAlignment[4] = {};       // NodeVolumeAlignment -- smoothing-vs-volume agreement (see smoothnessJacobiSyntheticCS.hlsl's myAlignment), synthetic-field pipeline only, same N/A caveat as above
 
 	bool showNodes = false;
-	bool showSurface = true;
-	bool showReference = true;
+	bool showSurface = false;
+	bool showReference = false;
 	bool hideUniformNodes = false; // hide nodes whose structural neighbors all share its current label
 
 	// Debug: cross-sectional plane colored by NodePotential's candidate slots
@@ -337,6 +311,13 @@ protected:
 	int sliceIndex = 10;           // grid index along sliceAxis, clamped to [0,GridRes-1] at draw time
 	float potentialColorScale = 1.0f; // potential/footdist value mapped to full channel brightness
 	int sliceDisplayMode = 0;      // 0 = potentials (label0/label1 heatmap), 1 = NodeFootDist (grayscale), 2 = synthetic-field volume (label-tinted), see footSlicePS.hlsl
+
+	// Debug: ray-marches the ray tet-by-tet through the BCC lattice's own tet
+	// decomposition (raymarchLatticeVS/PS.hlsl), using each tet's actual
+	// corner labels to find true 3/4-way junction crossings that
+	// extractSurfaceSyntheticCS.hlsl's static 2-label mesh extraction cannot
+	// represent -- synthetic-field pipeline only (see useSyntheticField).
+	bool showJunctionRaymarch = true;
 
 	// Test shape: same torus/ellipsoid scene as g-BCC/g-Aequor, centered in
 	// the middle of the (positive-only) BCC lattice index space rather than
@@ -461,7 +442,8 @@ protected:
 		distanceCb.data.UseFixedKernelSmoothing = useFixedKernelSmoothing ? 1.0f : 0.0f;
 		distanceCb.data.DivergencePullWeight = divergencePullWeight;
 		distanceCb.data.SyntheticEpsilon = syntheticEpsilon;
-		distanceCb.data.VolumeRatioWeight = volumeRatioWeight;
+		distanceCb.data.JunctionWeight = junctionWeight;
+		distanceCb.data.EikonalWeight = eikonalWeight;
 		distanceCb.Upload();
 	}
 
@@ -629,12 +611,6 @@ protected:
 			nodePotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialScratchBuffer");
 			nodeFrozenWinnerBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeFrozenWinnerBuffer");
 			nodeCurrentVolumeBuffer    = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeCurrentVolumeBuffer");
-			nodeSyntheticVolumeBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSyntheticVolumeBuffer");
-			nodeSyntheticVolumeScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSyntheticVolumeScratchBuffer");
-			nodeSensitivityBuffer            = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSensitivityBuffer");
-			nodeSensitivityScratchBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeSensitivityScratchBuffer");
-			nodeVolumeAlignmentBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeVolumeAlignmentBuffer");
-			nodeVolumeAlignmentScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeVolumeAlignmentScratchBuffer");
 		}
 		if (gridChanged || windowChanged) {
 			surfaceVertexBuffer = CreateRawUavBuffer(device.Get(), (UINT64)WindowTetCount * 6 * sizeof(float) * 8, L"surfaceVertexBuffer"); // pos(3)+normal(3)+labelI+labelJ, see DistanceSurface.hlsli
@@ -792,30 +768,6 @@ protected:
 			cmd->ResourceBarrier(_countof(b), b);
 		}
 
-		if (useSyntheticField) {
-			// Seed nodeSyntheticVolumeBuffer with a ground-truth-confidence
-			// guess (0.999 A / 0.001 B) and nodeSensitivityBuffer/
-			// nodeVolumeAlignmentBuffer with 0, see initSyntheticVolumeCS.hlsl
-			// -- can't be left uninitialized even with VolumeRatioWeight at
-			// its default of 0 (0*NaN is NaN, not 0).
-			cmd->SetComputeRootSignature(initSyntheticVolumeCS.rootSig.Get());
-			cmd->SetPipelineState(initSyntheticVolumeCS.pso.Get());
-			cmd->SetComputeRootUnorderedAccessView(0, nodeSyntheticVolumeBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(1, nodeSensitivityBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootUnorderedAccessView(2, nodeVolumeAlignmentBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
-			GpuCrashTracker::Mark(aftermathUploadContext, "initSyntheticVolumeCS");
-			cmd->Dispatch(SmoothnessGroups, 1, 1); // NodeCount-based, same bound as smoothnessJacobiCS
-			{
-				D3D12_RESOURCE_BARRIER b2[] = {
-					CD3DX12_RESOURCE_BARRIER::UAV(nodeSyntheticVolumeBuffer.Get()),
-					CD3DX12_RESOURCE_BARRIER::UAV(nodeSensitivityBuffer.Get()),
-					CD3DX12_RESOURCE_BARRIER::UAV(nodeVolumeAlignmentBuffer.Get()),
-				};
-				cmd->ResourceBarrier(_countof(b2), b2);
-			}
-		}
-
 	}
 
 	// One outer Lloyd-loop round: snapshot each node's current winning label
@@ -900,26 +852,12 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(3, nodePotentialScratchBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(4, nodeSyntheticVolumeBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(5, nodeSyntheticVolumeScratchBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(6, rasterLabelBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(7, nodeSensitivityBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(8, nodeSensitivityScratchBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(9, nodeVolumeAlignmentBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(10, nodeVolumeAlignmentScratchBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRoot32BitConstant(11, useSyntheticLabelVote ? 1u : 0u, 0);
-				cmd->SetComputeRootConstantBufferView(12, distanceGridCb.GetGPUVirtualAddress());
+				cmd->SetComputeRoot32BitConstant(4, useSyntheticLabelVote ? 1u : 0u, 0);
+				cmd->SetComputeRoot32BitConstant(4, allowBFlips ? 1u : 0u, 1);
+				cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
 				GpuCrashTracker::Mark(aftermathUploadContext, "smoothnessJacobiSyntheticCS");
 				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
-				{
-					D3D12_RESOURCE_BARRIER b[] = {
-						CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()),
-						CD3DX12_RESOURCE_BARRIER::UAV(nodeSyntheticVolumeScratchBuffer.Get()),
-						CD3DX12_RESOURCE_BARRIER::UAV(nodeSensitivityScratchBuffer.Get()),
-						CD3DX12_RESOURCE_BARRIER::UAV(nodeVolumeAlignmentScratchBuffer.Get()),
-					};
-					cmd->ResourceBarrier(_countof(b), b);
-				}
+				cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()));
 			} else {
 				cmd->SetComputeRootSignature(smoothnessJacobiCS.rootSig.Get());
 				cmd->SetPipelineState(smoothnessJacobiCS.pso.Get());
@@ -961,13 +899,7 @@ protected:
 				cmd->SetComputeRootUnorderedAccessView(0, nodePotentialScratchBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(3, nodeSyntheticVolumeScratchBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(4, nodeSyntheticVolumeBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(5, nodeSensitivityScratchBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(6, nodeSensitivityBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(7, nodeVolumeAlignmentScratchBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootUnorderedAccessView(8, nodeVolumeAlignmentBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRootConstantBufferView(9, distanceGridCb.GetGPUVirtualAddress());
+				cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
 				GpuCrashTracker::Mark(aftermathUploadContext, "commitSyntheticCS");
 				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
 			} else {
@@ -981,15 +913,11 @@ protected:
 			}
 			if (useSyntheticField) {
 				// commitSyntheticCS also commits the scratch label byte into
-				// NodeCandidateLabel, and the volume-conservation buffers --
-				// barrier all five before the next sweep's Load stage or
-				// RunExtractSurface reads them.
+				// NodeCandidateLabel -- barrier both before the next sweep's
+				// Load stage or RunExtractSurface reads them.
 				D3D12_RESOURCE_BARRIER b[] = {
 					CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(nodeCandidateLabelBuffer.Get()),
-					CD3DX12_RESOURCE_BARRIER::UAV(nodeSyntheticVolumeBuffer.Get()),
-					CD3DX12_RESOURCE_BARRIER::UAV(nodeSensitivityBuffer.Get()),
-					CD3DX12_RESOURCE_BARRIER::UAV(nodeVolumeAlignmentBuffer.Get()),
 				};
 				cmd->ResourceBarrier(_countof(b), b);
 			} else {
@@ -1398,29 +1326,21 @@ protected:
 		com_ptr<ID3D12Resource> rbConnecting = CreateReadbackBuffer(device.Get(), connectingBytes);
 		com_ptr<ID3D12Resource> rbFootDist = CreateReadbackBuffer(device.Get(), footDistBytes);
 		com_ptr<ID3D12Resource> rbFootSeed = CreateReadbackBuffer(device.Get(), footSeedBytes);
-		// Both buffers exist regardless of pipeline (allocated unconditionally
-		// in EnsureGridBuffersSized), but are only ever WRITTEN by the
-		// synthetic-field pipeline (initSyntheticVolumeCS/
-		// smoothnessJacobiSyntheticCS) -- reads outside that pipeline would be
-		// uninitialized GPU memory, so the display below gates on
-		// useSyntheticField, same as pickedCornerFootDist gates on A-vs-B.
-		com_ptr<ID3D12Resource> rbSensitivity = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
-		com_ptr<ID3D12Resource> rbAlignment = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
 
 		DX_API("reset upload allocator (pick diag)") uploadAllocator->Reset();
 		DX_API("reset upload command list (pick diag)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
 		auto& cmd = uploadCommandList;
 		cmd->CopyBufferRegion(rbCand.Get(), 0, nodeCandidateLabelBuffer.Get(), 0, candBytes);
 		cmd->CopyBufferRegion(rbPot.Get(), 0, nodePotentialBuffer.Get(), 0, potBytes);
-		// Whichever volume buffer the active pipeline actually writes --
-		// NodeCurrentVolume (Term 4) in the general construction, or
-		// NodeSyntheticVolume (the closed-form tet-fan volume) in synthetic mode.
-		cmd->CopyBufferRegion(rbVol.Get(), 0, (useSyntheticField ? nodeSyntheticVolumeBuffer : nodeCurrentVolumeBuffer).Get(), 0, nodeFloatBytes);
+		// NodeCurrentVolume (smoothnessJacobiCS's Term 4) -- only written by
+		// the general (non-synthetic) pipeline; the synthetic pipeline no
+		// longer computes a per-node volume at all, so the display below
+		// gates on useSyntheticField and shows N/A there, same convention
+		// pickedCornerFootDist uses for A-vs-B.
+		cmd->CopyBufferRegion(rbVol.Get(), 0, nodeCurrentVolumeBuffer.Get(), 0, nodeFloatBytes);
 		cmd->CopyBufferRegion(rbConnecting.Get(), 0, nodeIsConnectingBuffer.Get(), 0, connectingBytes);
 		cmd->CopyBufferRegion(rbFootDist.Get(), 0, nodeFootDistBuffer.Get(), 0, footDistBytes);
 		cmd->CopyBufferRegion(rbFootSeed.Get(), 0, (jfaFinalIsBufferA ? jfaSeedBufferA : jfaSeedBufferB).Get(), 0, footSeedBytes);
-		cmd->CopyBufferRegion(rbSensitivity.Get(), 0, nodeSensitivityBuffer.Get(), 0, nodeFloatBytes);
-		cmd->CopyBufferRegion(rbAlignment.Get(), 0, nodeVolumeAlignmentBuffer.Get(), 0, nodeFloatBytes);
 		DX_API("close upload command list (pick diag)") cmd->Close();
 		{
 			ID3D12CommandList* lists[] = { cmd.Get() };
@@ -1436,16 +1356,12 @@ protected:
 		UINT* connecting = nullptr;
 		float* footDist = nullptr;
 		UINT* footSeed = nullptr;
-		float* sensitivity = nullptr;
-		float* alignment = nullptr;
 		rbCand->Map(0, nullptr, (void**)&cand);
 		rbPot->Map(0, nullptr, (void**)&pot);
 		rbVol->Map(0, nullptr, (void**)&vol);
 		rbConnecting->Map(0, nullptr, (void**)&connecting);
 		rbFootDist->Map(0, nullptr, (void**)&footDist);
 		rbFootSeed->Map(0, nullptr, (void**)&footSeed);
-		rbSensitivity->Map(0, nullptr, (void**)&sensitivity);
-		rbAlignment->Map(0, nullptr, (void**)&alignment);
 
 		for (uint c = 0; c < 4; c++) {
 			uint node = pickedTetNodes[c];
@@ -1464,8 +1380,6 @@ protected:
 				pickedCornerIsConnecting[c] = 0;
 				pickedCornerFootDist[c] = -1.0f;
 				pickedCornerFootSeed[c] = SENTINEL_LABEL;
-				pickedCornerSensitivity[c] = 0.0f;
-				pickedCornerAlignment[c] = 0.0f;
 				continue;
 			}
 			for (uint s = 0; s < MAX_CANDIDATES; s++) {
@@ -1490,8 +1404,6 @@ protected:
 			pickedCornerIsConnecting[c] = (node < ACount) ? connecting[node] : 0;
 			pickedCornerFootDist[c] = (node < ACount) ? footDist[node] : -1.0f;
 			pickedCornerFootSeed[c] = (node < ACount) ? footSeed[node] : SENTINEL_LABEL;
-			pickedCornerSensitivity[c] = sensitivity[node];
-			pickedCornerAlignment[c] = alignment[node];
 		}
 
 		// Independent per-tet dominant pair -- same frequency-vote rule as
@@ -1536,8 +1448,6 @@ protected:
 		rbPot->Unmap(0, nullptr);
 		rbVol->Unmap(0, nullptr);
 		rbConnecting->Unmap(0, nullptr);
-		rbSensitivity->Unmap(0, nullptr);
-		rbAlignment->Unmap(0, nullptr);
 	}
 
 	void BuildImGui() {
@@ -1637,14 +1547,15 @@ protected:
 			static const char* axisItems[] = { "X", "Y", "Z" };
 			ImGui::Combo("Slice Axis", &sliceAxis, axisItems, 3);
 			ImGui::SliderInt("Slice Index", &sliceIndex, 0, (int)GridRes - 1);
-			static const char* sliceDisplayItems[] = { "Potentials", "FootDist", "Volume" };
-			ImGui::Combo("Slice Display", &sliceDisplayMode, sliceDisplayItems, 3);
-			if (sliceDisplayMode == 2) {
-				ImGui::SameLine();
-				ImGui::TextDisabled("(synthetic-field only -- see DistanceCb.hlsli's VolumeRatioWeight; meaningless outside 'Use Synthetic Field')");
-			}
+			static const char* sliceDisplayItems[] = { "Potentials", "FootDist" };
+			ImGui::Combo("Slice Display", &sliceDisplayMode, sliceDisplayItems, 2);
 			ImGui::SliderFloat("Potential Color Scale", &potentialColorScale, 0.05f, 5.0f);
 		}
+
+		ImGui::Checkbox("Show Junction Raymarch (tet-walk)", &showJunctionRaymarch);
+		ImGui::SameLine();
+		if (useSyntheticField) ImGui::TextDisabled("(debug: true 3/4-way junction crossings)");
+		else ImGui::TextDisabled("(synthetic field only -- enable 'Use Synthetic Field')");
 
 		if (dataValid) {
 			if (pickedTetValid) ImGui::Text("Picked tet (right-click): %u", pickedTetIndex);
@@ -1669,21 +1580,40 @@ protected:
 				}
 
 				ImGui::Text("Active pair: label %u vs label %u", pickedInterfaceLabelI, pickedInterfaceLabelJ);
+				if (useSyntheticField) {
+					ImGui::SameLine();
+					ImGui::TextDisabled("(dominant-pair vote -- see each corner's own label/potential below, not phi_i/phi_j)");
+				}
 				for (uint c = 0; c < 4; c++) {
 					uint node = pickedTetNodes[c];
-					ImGui::Text("  Corner %u (node %u, %s, label %u): phi_i=%s%.4f  phi_j=%s%.4f",
-						c, node, (node < ACount) ? "A" : "B", topLabel[c],
-						hasI[c] ? "" : "*", phiI[c],
-						hasJ[c] ? "" : "*", phiJ[c]);
-					ImGui::Text("      Volume=%.4f%s%s%s",
-						pickedCornerVolume[c],
-						(pickedCornerIsConnecting[c] & 1u) ? "  CONN" : "",
-						(pickedCornerIsConnecting[c] & 2u) ? "  LOCAL-MAX(footdist)" : "",
-						(pickedCornerIsConnecting[c] & 4u) ? "  DIVRG" : "");
 					if (useSyntheticField) {
-						ImGui::Text("      Sensitivity=%.6f  Alignment=%.4f", pickedCornerSensitivity[c], pickedCornerAlignment[c]);
+						// phi_i/phi_j only show a value when this corner's OWN
+						// label matches the tet-wide dominant PAIR above -- a
+						// synthetic node has exactly one label, so any corner
+						// whose label isn't in that pair (e.g. a genuine 3rd/
+						// 4th label at a junction) would show phi_i=*0.0000
+						// phi_j=*0.0000 forever, regardless of how much its
+						// REAL potential actually changes -- looking exactly
+						// like smoothing has no effect there. Show the
+						// corner's own (label, potential) directly instead --
+						// always present, no dominant-pair routing needed.
+						ImGui::Text("  Corner %u (node %u, %s): label=%u  potential=%.6f",
+							c, node, (node < ACount) ? "A" : "B",
+							pickedCornerLabels[c][0], pickedCornerPots[c][0]);
 					} else {
-						ImGui::TextDisabled("      Sensitivity=N/A  Alignment=N/A (synthetic-field pipeline only)");
+						ImGui::Text("  Corner %u (node %u, %s, label %u): phi_i=%s%.4f  phi_j=%s%.4f",
+							c, node, (node < ACount) ? "A" : "B", topLabel[c],
+							hasI[c] ? "" : "*", phiI[c],
+							hasJ[c] ? "" : "*", phiJ[c]);
+					}
+					if (useSyntheticField) {
+						ImGui::TextDisabled("      Volume=N/A (general pipeline only)");
+					} else {
+						ImGui::Text("      Volume=%.4f%s%s%s",
+							pickedCornerVolume[c],
+							(pickedCornerIsConnecting[c] & 1u) ? "  CONN" : "",
+							(pickedCornerIsConnecting[c] & 2u) ? "  LOCAL-MAX(footdist)" : "",
+							(pickedCornerIsConnecting[c] & 4u) ? "  DIVRG" : "");
 					}
 					if (pickedCornerFootDist[c] >= 0.0f) {
 						uint node = pickedTetNodes[c];
@@ -1723,20 +1653,32 @@ protected:
 						if (pickedCornerIsConnecting[c] & 1u) strcat_s(flags, sizeof(flags), " CONN");
 						if (pickedCornerIsConnecting[c] & 2u) strcat_s(flags, sizeof(flags), " LOCAL-MAX(footdist)");
 						if (pickedCornerIsConnecting[c] & 4u) strcat_s(flags, sizeof(flags), " DIVRG");
-						char sensitivityAlignmentStr[64];
+						char volumeStr[64];
 						if (useSyntheticField)
-							sprintf_s(sensitivityAlignmentStr, sizeof(sensitivityAlignmentStr), "%.6f / %.6f", pickedCornerSensitivity[c], pickedCornerAlignment[c]);
+							sprintf_s(volumeStr, sizeof(volumeStr), "N/A (general pipeline only)");
 						else
-							sprintf_s(sensitivityAlignmentStr, sizeof(sensitivityAlignmentStr), "N/A / N/A");
-						sprintf_s(line, sizeof(line), "Corner %u (node %u, %s, label %u): phi_i=%s%.6f  phi_j=%s%.6f\r\n"
-							"    Volume=%.6f%s  NodeFootDist(raw)=%s\r\n"
-							"    Sensitivity/Alignment=%s\r\n",
-							c, node, (node < ACount) ? "A" : "B", topLabel[c],
-							hasI[c] ? "" : "*", phiI[c],
-							hasJ[c] ? "" : "*", phiJ[c],
-							pickedCornerVolume[c], flags,
-							footDistStr,
-							sensitivityAlignmentStr);
+							sprintf_s(volumeStr, sizeof(volumeStr), "%.6f%s", pickedCornerVolume[c], flags);
+						// See the live-panel comment above: synthetic mode
+						// shows this corner's own (label, potential) directly
+						// rather than phi_i/phi_j, which only ever reflect
+						// the tet-wide dominant PAIR and would silently show
+						// nothing for a corner carrying a 3rd/4th label.
+						if (useSyntheticField) {
+							sprintf_s(line, sizeof(line), "Corner %u (node %u, %s): label=%u  potential=%.6f\r\n"
+								"    Volume=%s  NodeFootDist(raw)=%s\r\n",
+								c, node, (node < ACount) ? "A" : "B",
+								pickedCornerLabels[c][0], pickedCornerPots[c][0],
+								volumeStr,
+								footDistStr);
+						} else {
+							sprintf_s(line, sizeof(line), "Corner %u (node %u, %s, label %u): phi_i=%s%.6f  phi_j=%s%.6f\r\n"
+								"    Volume=%s  NodeFootDist(raw)=%s\r\n",
+								c, node, (node < ACount) ? "A" : "B", topLabel[c],
+								hasI[c] ? "" : "*", phiI[c],
+								hasJ[c] ? "" : "*", phiJ[c],
+								volumeStr,
+								footDistStr);
+						}
 						report += line;
 					}
 					ImGui::SetClipboardText(report.c_str());
@@ -1759,12 +1701,20 @@ protected:
 				ImGui::SliderFloat("Synthetic Epsilon", &syntheticEpsilon, 0.0001f, 1.0f, "%.4f", ImGuiSliderFlags_Logarithmic);
 				ImGui::SameLine();
 				ImGui::TextDisabled("(head-start potential for a freshly relabeled B-node, see DistanceCb.hlsli)");
-				ImGui::Checkbox("Synthetic: Use Label Vote", &useSyntheticLabelVote);
+				ImGui::Checkbox("Synthetic: Allow B-Flips", &allowBFlips);
 				ImGui::SameLine();
-				ImGui::TextDisabled("(off = dumb binary flip 1-oldLabel, test-only, two-label case; on = SyntheticVote8 over the 8 own A-corners)");
-				ImGui::SliderFloat("Synthetic: Volume Ratio Weight", &volumeRatioWeight, 0.0f, 20.0f);
+				ImGui::TextDisabled("(off = a B-node whose potential goes negative just reflects it and keeps its label, like an A-node -- isolates the smoothing/junction terms' effect on potentials from label churn)");
+				if (allowBFlips) {
+					ImGui::Checkbox("Synthetic: Use Label Vote", &useSyntheticLabelVote);
+					ImGui::SameLine();
+					ImGui::TextDisabled("(off = dumb binary flip 1-oldLabel, test-only, two-label case; on = SyntheticVote8 over the 8 own A-corners)");
+				}
+				ImGui::SliderFloat("Synthetic: Junction Straightness Weight", &junctionWeight, 0.0f, 20.0f);
 				ImGui::SameLine();
-				ImGui::TextDisabled("(0 = off; pulls each target's potential toward local per-label volume conservation vs. this halo's original A-node label counts, see DistanceCb.hlsli's VolumeRatioWeight)");
+				ImGui::TextDisabled("(0 = off; penalizes triple-junction tangent disagreement between the two tets sharing a 3-label interface triangle, see DistanceCb.hlsli's JunctionWeight)");
+				ImGui::SliderFloat("Synthetic: Eikonal Weight", &eikonalWeight, 0.0f, 20.0f);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(0 = off; floors |grad(confidence field)| toward 1 to keep potentials from collapsing flat -- otherwise trivially satisfies Junction Straightness, see DistanceCb.hlsli's EikonalWeight)");
 			}
 			ImGui::Checkbox("Term 1: Edge-Walk Traversal", &useEdgeWalkTraversal);
 			ImGui::SameLine();
@@ -1890,7 +1840,6 @@ public:
 		commitPotentialCS.createResources(device, "Shaders/commitPotentialCS.cso");
 		commitPotentialBlockCS.createResources(device, "Shaders/commitPotentialBlockCS.cso");
 		commitSyntheticCS.createResources(device, "Shaders/commitSyntheticCS.cso");
-		initSyntheticVolumeCS.createResources(device, "Shaders/initSyntheticVolumeCS.cso");
 		extractSurfaceCS.createResources(device, "Shaders/extractSurfaceCS.cso");
 		extractSurfaceSyntheticCS.createResources(device, "Shaders/extractSurfaceSyntheticCS.cso");
 
@@ -2054,6 +2003,38 @@ public:
 				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(footSlicePso.GetAddressOf()));
 		}
 
+		{
+			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/raymarchLatticeVS.cso");
+			com_ptr<ID3DBlob> ps = Egg::Shader::LoadCso("Shaders/raymarchLatticePS.cso");
+			raymarchLatticeRootSig = Egg::Shader::LoadRootSignature(device.Get(), vs.Get());
+
+			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = raymarchLatticeRootSig.Get();
+			psoDesc.VS = { vs->GetBufferPointer(), vs->GetBufferSize() };
+			psoDesc.PS = { ps->GetBufferPointer(), ps->GetBufferSize() };
+			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+			psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+			psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+			// Real tet-walk hit geometry (an actual, spatially-accurate
+			// depth from the found crossing), same LESS/write convention as
+			// surfacePso/footSlicePso -- not raymarchPso's ALWAYS, which is
+			// specific to that pass being a reference background.
+			psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+			psoDesc.DepthStencilState.DepthEnable = TRUE;
+			psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+			psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+			psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+			D3D12_INPUT_LAYOUT_DESC emptyLayout = { nullptr, 0 };
+			psoDesc.InputLayout = emptyLayout;
+			psoDesc.NumRenderTargets = 1;
+			psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.SampleMask = UINT_MAX;
+			psoDesc.SampleDesc.Count = 1;
+			DX_API("create raymarch-lattice PSO")
+				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(raymarchLatticePso.GetAddressOf()));
+		}
+
 		DX_API("create upload command allocator.")
 			device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
 				IID_PPV_ARGS(uploadAllocator.ReleaseAndGetAddressOf()));
@@ -2181,16 +2162,11 @@ public:
 			commandList->SetGraphicsRootSignature(footSliceRootSig.Get());
 			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
 			int clampedSliceIndex = sliceIndex < 0 ? 0 : (sliceIndex > (int)GridRes - 1 ? (int)GridRes - 1 : sliceIndex);
-			// footSlicePS.hlsl's DisplayMode: 2 = synthetic-field "Potentials",
-			// 3 = synthetic-field "Volume" -- the combo only offers
-			// Potentials(0)/FootDist(1)/Volume(2), so remap 0->2 when the
-			// synthetic pipeline is active (FootDist needs no remap, it means
-			// the same thing in both modes) and 2->3 always (its own distinct
-			// shader mode, not shared with combo index 0's remap).
-			uint32_t effectiveDisplayMode;
-			if (sliceDisplayMode == 0) effectiveDisplayMode = useSyntheticField ? 2u : 0u;
-			else if (sliceDisplayMode == 2) effectiveDisplayMode = 3u;
-			else effectiveDisplayMode = (uint32_t)sliceDisplayMode;
+			// footSlicePS.hlsl's DisplayMode: 2 = synthetic-field "Potentials"
+			// -- the combo only offers Potentials(0)/FootDist(1), so remap
+			// 0->2 when the synthetic pipeline is active (FootDist needs no
+			// remap, it means the same thing in both modes).
+			uint32_t effectiveDisplayMode = (sliceDisplayMode == 0) ? (useSyntheticField ? 2u : 0u) : (uint32_t)sliceDisplayMode;
 			struct { uint32_t axis; float coord; float colorScale; uint32_t displayMode; } sliceConsts = {
 				(uint32_t)sliceAxis, (float)clampedSliceIndex * CellSize, potentialColorScale, effectiveDisplayMode
 			};
@@ -2198,9 +2174,19 @@ public:
 			commandList->SetGraphicsRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(3, nodePotentialBuffer->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(4, nodeFootDistBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootUnorderedAccessView(5, nodeSyntheticVolumeBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootConstantBufferView(6, distanceGridCb.GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
 			commandList->SetPipelineState(footSlicePso.Get());
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			commandList->DrawInstanced(3, 1, 0, 0);
+		}
+
+		if (dataValid && useSyntheticField && showJunctionRaymarch) {
+			commandList->SetGraphicsRootSignature(raymarchLatticeRootSig.Get());
+			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
+			commandList->SetGraphicsRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+			commandList->SetPipelineState(raymarchLatticePso.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced(3, 1, 0, 0);
 		}
@@ -2235,7 +2221,11 @@ public:
 		frameCb.data.viewProjTransform = camera->GetViewMatrix() * camera->GetProjMatrix();
 		frameCb.data.rayDirTransform   = camera->GetRayDirMatrix();
 		frameCb.data.cameraPos         = float4(camera->GetEyePosition(), 1.0f);
-		frameCb.data.raymarchParams    = float4((float)MaxMarchSteps, MaxMarchDist, potentialSizeScale, 0.0f);
+		// w = raymarchLatticePS.hlsl's tet-walk step cap -- generous relative
+		// to GridRes (a ray can cross at most a handful of tets per grid
+		// cell it traverses), unrelated to MaxMarchSteps (a different pass's
+		// sphere-trace step count); raymarchParams.w was otherwise unused.
+		frameCb.data.raymarchParams    = float4((float)MaxMarchSteps, MaxMarchDist, potentialSizeScale, (float)(6u * GridRes + 16u));
 		frameCb.data.pointParams       = float4(viewPort.Width, viewPort.Height, pointRadiusPx, hideUniformNodes ? 1.0f : 0.0f);
 		frameCb.data.nodeFadeParams    = float4(nodeFadeExponent, nodeFadeStartDistance, 0.0f, 0.0f);
 		frameCb.Upload();
@@ -2287,12 +2277,6 @@ public:
 		nodeFrozenWinnerBuffer.Reset();
 		surfaceVertexBuffer.Reset();
 		nodeCurrentVolumeBuffer.Reset();
-		nodeSyntheticVolumeBuffer.Reset();
-		nodeSyntheticVolumeScratchBuffer.Reset();
-		nodeSensitivityBuffer.Reset();
-		nodeSensitivityScratchBuffer.Reset();
-		nodeVolumeAlignmentBuffer.Reset();
-		nodeVolumeAlignmentScratchBuffer.Reset();
 		imguiSrvHeap.Reset();
 		raymarchRootSig.Reset();
 		raymarchPso.Reset();
@@ -2302,6 +2286,8 @@ public:
 		surfacePso.Reset();
 		wireframeRootSig.Reset();
 		wireframePso.Reset();
+		raymarchLatticeRootSig.Reset();
+		raymarchLatticePso.Reset();
 		Egg::SimpleApp::ReleaseResources();
 	}
 };

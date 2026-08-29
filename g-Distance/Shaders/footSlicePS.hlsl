@@ -9,7 +9,7 @@ cbuffer SliceConsts : register(b1) {
     uint  SliceAxis;    // 0 = X, 1 = Y, 2 = Z -- which world axis the plane is normal to
     float SliceCoord;   // world-space coordinate of the plane along SliceAxis
     float ColorScale;   // potential/footdist value that maps to full channel brightness
-    uint  DisplayMode;  // 0 = potentials (label0/label1 heatmap, below), 1 = NodeFootDist (grayscale, A-nodes only), 2 = synthetic-field potential (label-tinted), 3 = synthetic-field volume (label-tinted)
+    uint  DisplayMode;  // 0 = potentials (label0/label1 heatmap, below), 1 = NodeFootDist (grayscale, A-nodes only), 2 = synthetic-field potential (label-tinted)
 };
 
 // Repurposed from the original NodeFootDist/JFA debug view: now a heatmap of
@@ -37,12 +37,6 @@ cbuffer SliceConsts : register(b1) {
 RWStructuredBuffer<uint>  NodeCandidateLabel : register(u0);
 RWStructuredBuffer<float> NodePotential : register(u1);
 RWStructuredBuffer<float> NodeFootDist : register(u2);
-// Synthetic-field only (see smoothnessJacobiSyntheticCS.hlsl) -- each node's
-// own closed-form tet-fan "current volume", used by DisplayMode==3 below.
-// Never written outside useSyntheticField, so this view is meaningless (last
-// Reinit's zero-fill from initSyntheticVolumeCS.hlsl) in the general
-// multi-candidate mode.
-RWStructuredBuffer<float> NodeSyntheticVolume : register(u3);
 
 struct VsOut {
     float4 pos    : SV_POSITION;
@@ -114,20 +108,6 @@ PsOut footSlicePS(VsOut input)
         uint synLabel = GetCandidateLabelAt(NodeCandidateLabel, node, 0u);
         float synPot = NodePotential[node * MAX_CANDIDATES + 0u];
         float3 col = LabelColorA(synLabel) * saturate(synPot / scale);
-        result.color = float4(col, 1.0);
-        return result;
-    }
-
-    // DisplayMode==3: synthetic-field "Volume" view -- same visual language
-    // as DisplayMode==2 (label-tinted color, scaled by ColorScale), but
-    // showing NodeSyntheticVolume (the closed-form tet-fan current volume,
-    // smoothnessJacobiSyntheticCS.hlsl) instead of the potential -- lets you
-    // directly compare where a label is confidently supported (Potentials)
-    // versus where it actually holds geometric volume (Volume).
-    if (DisplayMode == 3u) {
-        uint synLabel = GetCandidateLabelAt(NodeCandidateLabel, node, 0u);
-        float synVol = NodeSyntheticVolume[node];
-        float3 col = LabelColorA(synLabel) * saturate(synVol / scale);
         result.color = float4(col, 1.0);
         return result;
     }

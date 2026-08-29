@@ -13,7 +13,6 @@
     "UAV(u0)," \
     "UAV(u1)," \
     "UAV(u2)," \
-    "UAV(u3)," \
     "CBV(b2)"
 
 struct VsOut {

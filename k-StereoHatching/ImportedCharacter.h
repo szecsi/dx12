@@ -37,23 +37,20 @@ namespace Hatch {
 		// estimator), then a tangent-plane quadratic form kn(x,y) = a*x^2 +
 		// 2*b*x*y + c*y^2 is least-squares fit across all one-ring edges
 		// (x,y = edge direction projected into the (t1,t2) tangent basis).
-		inline void ComputeMeshCurvature(std::vector<HatchVertex>& verts, const std::vector<uint32_t>& indices) {
+		// The resulting raw per-vertex tensor is then smoothed (see
+		// CurvatureDirection.h's Detail::SmoothWorldTensors) before the
+		// final principal-direction selection, for the same reason the
+		// analytic-SDF path smooths -- an independent per-vertex tensor
+		// makes PrincipalDirectionFromTensor's max-|eigenvalue| choice flip
+		// unpredictably between two near-orthogonal directions wherever
+		// |k1| and |k2| are close, which reads as chaotic hatching once
+		// linearly interpolated across triangles.
+		inline void ComputeMeshCurvature(std::vector<HatchVertex>& verts, const std::vector<uint32_t>& indices, int smoothIterations = 2) {
 			using namespace Egg::Math;
 
 			size_t n = verts.size();
-			std::vector<std::vector<uint32_t>> neighbors(n);
-			for (size_t i = 0; i + 2 < indices.size(); i += 3) {
-				uint32_t tri[3] = { indices[i], indices[i + 1], indices[i + 2] };
-				for (int e = 0; e < 3; ++e) {
-					neighbors[tri[e]].push_back(tri[(e + 1) % 3]);
-					neighbors[tri[e]].push_back(tri[(e + 2) % 3]);
-				}
-			}
-			for (size_t vi = 0; vi < n; ++vi) {
-				std::vector<uint32_t>& nb = neighbors[vi];
-				std::sort(nb.begin(), nb.end());
-				nb.erase(std::unique(nb.begin(), nb.end()), nb.end());
-			}
+			std::vector<std::vector<uint32_t>> neighbors = BuildOneRingAdjacency(n, indices);
+			std::vector<Tensor3> tensors(n);
 
 			for (size_t vi = 0; vi < n; ++vi) {
 				HatchVertex& v = verts[vi];
@@ -111,6 +108,23 @@ namespace Hatch {
 						c = (float)(A[2][3] / A[2][2]);
 					}
 				}
+
+				tensors[vi] = TensorToWorld(t1, t2, a, b, c);
+			}
+
+			SmoothWorldTensors(tensors, neighbors, smoothIterations);
+
+			for (size_t vi = 0; vi < n; ++vi) {
+				HatchVertex& v = verts[vi];
+				float3 t1, t2;
+				BranchlessOnb(v.normal, t1, t2);
+
+				const Tensor3& T = tensors[vi];
+				float3 Tt1 = ApplyTensor(T, t1);
+				float3 Tt2 = ApplyTensor(T, t2);
+				float a = t1.Dot(Tt1);
+				float c = t2.Dot(Tt2);
+				float b = t1.Dot(Tt2);
 
 				PrincipalCurvature pc = PrincipalDirectionFromTensor(t1, t2, a, b, c);
 				v.hatchDirection = pc.dir;

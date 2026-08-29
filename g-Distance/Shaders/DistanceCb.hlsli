@@ -105,18 +105,24 @@ DistanceCb
     // may genuinely hold real territory. Was _pad3c.
     float SyntheticEpsilon;
 
-    // Row 4 -- synthetic-field volume conservation (experimental, see
-    // smoothnessJacobiSyntheticCS.hlsl). Per-halo, per-label ratio of
-    // "current volume" (sum of NodeSyntheticVolume -- each halo node's own
-    // last-committed potential -- over halo nodes currently carrying a
-    // given label) to that label's "original volume" (count of this halo's
-    // A-nodes whose RasterLabel ground truth carries that label). Applied
-    // as a bounded confidence nudge to a target's potential AFTER this
-    // sweep's relabel decision is already made -- ratio 1 = locally
-    // conserved; doesn't reopen the relabel decision itself. 0 disables
-    // the term entirely.
-    float VolumeRatioWeight;
-    float _pad4b;
+    // Row 4 -- synthetic-field junction straightness (smoothnessJacobiSyntheticCS
+    // .hlsl). Penalizes disagreement, across the two tets sharing a 3-label
+    // interface triangle, of the triple-junction tangent direction
+    // (ga x gb + gb x gc + gc x ga, the cross product of the two interface
+    // planes' normals) computed independently in each tet from the 3
+    // present labels' own confidence-field gradients. 0 disables the term
+    // entirely. Reuses this slot (was VolumeRatioWeight) -- volume
+    // conservation was removed entirely, not just disabled.
+    float JunctionWeight;
+    // Synthetic-field Eikonal floor (smoothnessJacobiSyntheticCS.hlsl): a
+    // one-sided Gauss-Newton penalty pushing |grad(confidence field)| up
+    // toward 1 wherever a target is the strict local maximum of its own
+    // label's confidence field among a tet's 4 corners -- keeps the
+    // potential field from collapsing toward the flat, degenerate state
+    // that would otherwise trivially (and uselessly) satisfy JunctionWeight's
+    // cross(Ta,Tb)==0 constraint. 0 disables the term entirely. Reuses this
+    // slot (was _pad4b).
+    float EikonalWeight;
     float _pad4c;
     float _pad4d;
 }

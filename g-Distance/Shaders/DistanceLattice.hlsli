@@ -351,6 +351,69 @@ bool GetFaceAdjacentPartner(uint tetX, uint relation, out uint P)
     return true;
 }
 
+// Which of a q-space unit cube's 6 tets (see CubeVertexOffsets) contains a
+// point given its LOCAL fractional coords within the cube -- the standard
+// Kuhn/Freudenthal triangulation of a cube by its main diagonal D0=(0,0,0)-
+// D1=(1,1,1): sorting frac's 3 components descending picks one of 6
+// orderings, each corresponding to exactly one slot. Matched by hand against
+// CubeVertexOffsets/RingBetween for all 6 orderings (e.g. fx>=fy>=fz gives
+// the Kuhn tet (0,0,0),(1,0,0),(1,1,0),(1,1,1) -- ring pair (1,0,0),(1,1,0)
+// = RingBetween[0],RingBetween[1] = slot 1) -- see the raymarch-lattice
+// design notes for the full 6-row derivation. Used to locate a ray's initial
+// tet from its q-space entry point; GetTetCornerQs/CubeVertexOffsets etc.
+// already assume a (cubeOrigin, slot) pair, this just supplies one from a
+// continuous position instead of a dispatched tetIndex.
+uint TetSlotFromFrac(float3 f)
+{
+    bool xy = f.x >= f.y;
+    bool yz = f.y >= f.z;
+    bool xz = f.x >= f.z;
+    if (xy && yz) return 1u;            // fx>=fy>=fz
+    if (xy && !yz) return xz ? 0u : 5u; // fx>=fz>=fy : fz>=fx>=fy
+    if (!xy && yz) return xz ? 2u : 3u; // fy>=fx>=fz : fy>=fz>=fx
+    return 4u;                          // fz>=fy>=fx
+}
+
+// Which of the 4 face-adjacency relations (0=fanNext,1=fanPrev,2=D0cap,
+// 3=D1cap -- see GetFaceAdjacentPartner above) is crossed when a ray exits
+// tet (C,slot) through the face OPPOSITE corner index 0..3 (q0=D0,q1=D1,
+// q2/q3=CubeVertexOffsets[slot]). Derived by direct corner-substitution, not
+// guessed: D1cap always sits opposite q0 and D0cap always opposite q1
+// (both slot-independent, since D0/D1 only ever touch the 2 out-of-cube cap
+// relations); which of q2/q3 is fanNext vs fanPrev alternates by slot parity,
+// since CubeVertexOffsets[slot][0]/[1] alternately holds RingBetween[slot]
+// vs RingBetween[(slot+5)%6] -- verified against CubeVertexOffsets/
+// RingBetween for all 6 slots (see the raymarch-lattice design notes).
+static const uint ExitCornerToRelation[6][4] = {
+    { 3, 2, 1, 0 }, // slot 0 (even)
+    { 3, 2, 0, 1 }, // slot 1 (odd)
+    { 3, 2, 1, 0 }, // slot 2 (even)
+    { 3, 2, 0, 1 }, // slot 3 (odd)
+    { 3, 2, 1, 0 }, // slot 4 (even)
+    { 3, 2, 0, 1 }, // slot 5 (odd)
+};
+
+// Advances a ray-walker's (C,slot) state across the face opposite corner
+// index `exitCorner` (0..3) -- the counterpart to GetFaceAdjacentPartner for
+// callers tracking a tet as (cube origin, slot) directly rather than a flat
+// tetIndex (a pure ray walk never needs a buffer index at all, only
+// CubeLinearIndex's domain-bounds check after advancing into a new cube).
+// Returns false if the neighboring cube falls outside the addressable
+// domain (same convention as CubeLinearIndex/GetFaceAdjacentPartner) --
+// C/slot are left unchanged in that case.
+bool AdvanceTetAcrossFace(inout int3 C, inout uint slot, uint exitCorner)
+{
+    uint relation = ExitCornerToRelation[slot][exitCorner];
+    if (relation == 0u) { slot = (slot + 1u) % 6u; return true; }
+    if (relation == 1u) { slot = (slot + 5u) % 6u; return true; }
+    int3 newC = (relation == 2u) ? (C + D0CapOffset[slot]) : (C + D1CapOffset[slot]);
+    uint newSlot = (relation == 2u) ? D0CapTargetSlot[slot] : D1CapTargetSlot[slot];
+    uint lin;
+    if (!CubeLinearIndex(newC, lin)) return false;
+    C = newC; slot = newSlot;
+    return true;
+}
+
 // 2-ring incident-tet gather: this node's own incident tets (ring 1, via
 // GatherIncidentTets above) plus every tet FACE-ADJACENT to a ring-1 tet
 // (ring 2, via GetFaceAdjacentPartner's 4 relations per tet), each tet

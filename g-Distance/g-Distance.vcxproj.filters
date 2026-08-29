@@ -68,9 +68,6 @@
     <FxCompile Include="Shaders\commitSyntheticCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\initSyntheticVolumeCS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
@@ -105,6 +102,12 @@
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\footSlicePS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\raymarchLatticeVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\raymarchLatticePS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
   </ItemGroup>

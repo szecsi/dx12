@@ -210,7 +210,7 @@ class StereoHatchingApp : public Egg::SimpleApp {
 			std::vector<uint32_t> indices;
 			Hatch::TessellateCharacter(ch.sdf, bbox, (uint32_t)tessellationGridRes, verts, indices);
 			if (verts.empty() || indices.empty()) continue;
-			Hatch::ComputeCurvatureDirections(ch.sdf, verts);
+			Hatch::ComputeCurvatureDirections(ch.sdf, verts, indices);
 
 			auto geom = Egg::Mesh::IndexedGeometry::Create(device.Get(),
 				verts.data(), (unsigned int)(verts.size() * sizeof(Hatch::HatchVertex)), (unsigned int)sizeof(Hatch::HatchVertex),

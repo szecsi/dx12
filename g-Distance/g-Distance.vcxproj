@@ -88,7 +88,6 @@
     <FxCompile Include="Shaders\commitPotentialCS.hlsl" />
     <FxCompile Include="Shaders\commitPotentialBlockCS.hlsl" />
     <FxCompile Include="Shaders\commitSyntheticCS.hlsl" />
-    <FxCompile Include="Shaders\initSyntheticVolumeCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceSyntheticCS.hlsl" />
     <FxCompile Include="Shaders\raymarchVS.hlsl">
@@ -119,6 +118,12 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
     <FxCompile Include="Shaders\footSlicePS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\raymarchLatticeVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\raymarchLatticePS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
     </FxCompile>
   </ItemGroup>
