@@ -268,7 +268,7 @@ protected:
 	// the SAME buffers as the multi-candidate scheme, so mutually exclusive
 	// with useBlockSmoothing (enforced where the GUI checkboxes are drawn).
 	bool useSyntheticField = true;
-	float syntheticEpsilon = 0.1f; // head-start potential a B-node gets when it's freshly relabeled, see DistanceCb.hlsli's SyntheticEpsilon
+	float syntheticEpsilon = 0.00001f; // head-start potential a B-node gets when it's freshly relabeled, see DistanceCb.hlsli's SyntheticEpsilon
 	bool useSyntheticLabelVote = true; // B-node relabel method, see smoothnessJacobiSyntheticCS.hlsl's UseLabelVote: true = SyntheticVote8 over the 8 own A-corners, false = dumb binary flip (1-oldLabel), test-only, two-label case
 	bool allowBFlips = true; // false = a B-node whose potential goes negative just reflects it and keeps its label, like an A-node -- no relabel, no SyntheticEpsilon head-start, see smoothnessJacobiSyntheticCS.hlsl's AllowBFlips
 	float junctionWeight = 0.0f; // synthetic-field junction-straightness weight, see DistanceCb.hlsli's JunctionWeight
@@ -1698,7 +1698,7 @@ protected:
 			ImGui::SameLine();
 			ImGui::TextDisabled("(single label+potential per node, 27-tap signed-kernel competition, see smoothnessJacobiSyntheticCS.hlsl -- applied on Reinitialize)");
 			if (useSyntheticField) {
-				ImGui::SliderFloat("Synthetic Epsilon", &syntheticEpsilon, 0.0001f, 1.0f, "%.4f", ImGuiSliderFlags_Logarithmic);
+				ImGui::SliderFloat("Synthetic Epsilon", &syntheticEpsilon, 0.00001f, 1.0f, "%.5f", ImGuiSliderFlags_Logarithmic);
 				ImGui::SameLine();
 				ImGui::TextDisabled("(head-start potential for a freshly relabeled B-node, see DistanceCb.hlsli)");
 				ImGui::Checkbox("Synthetic: Allow B-Flips", &allowBFlips);

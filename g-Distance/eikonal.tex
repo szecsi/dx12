@@ -1,0 +1,601 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\geometry{margin=1in}
+
+\newcommand{\grad}{\nabla}
+\newcommand{\R}{\mathbb{R}}
+
+\title{Multi-Label Potential Field Reconstruction on the BCC Lattice:\\
+Energy Terms and the Jacobi Solve}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Goals}
+
+The lattice carries, at every node, a discrete material \emph{label} and a
+real-valued \emph{potential}. For each label $\ell$ present in the domain we
+want the collection of node potentials, reinterpreted as a scalar field, to
+behave like a well-formed distance-like function: positive and large deep
+inside label $\ell$'s territory, crossing zero at the interface with any
+other label, and doing so smoothly enough that a multi-material surface
+(including non-manifold triple-junctions where three labels meet along a
+curve) can be extracted directly from it.
+
+Four properties are wanted of this field, in decreasing order of how
+fundamental they are to making the others meaningful:
+
+\begin{enumerate}
+  \item \textbf{Eikonal (unit-gradient) shaping.} Wherever a node is
+  genuinely responsible for representing the local edge of its label's
+  territory, the field's gradient magnitude should be close to $1$ --
+  neither collapsing to a flat, informationless field nor blowing up.
+  \item \textbf{Smoothing.} Nearby same-label potentials should vary
+  gradually; the field should not carry high-frequency noise unrelated to
+  actual geometric structure.
+  \item \textbf{Juncture straightness.} Where three labels meet, the local
+  triple-junction curve should be locally straight -- consecutive
+  tetrahedra spanning a junction should agree on its direction, not kink.
+  \item \textbf{Connectivity / volume preservation.} Each label's
+  reconstructed region should retain a sensible target volume (and,
+  eventually, topological connectivity) rather than drifting or shrinking
+  away purely as a side effect of satisfying the other three terms.
+\end{enumerate}
+
+Item 1 is listed first deliberately: it is a \emph{prerequisite} for items
+2--4 rather than a peer among equals. Every other term's residual is
+constructed from gradients of the same underlying per-label field, and
+every one of those residuals is trivially -- and uselessly -- satisfied by
+letting those gradients collapse to zero. The Eikonal term is the only term
+whose energy actively resists that collapse; without it (or with it too
+weak relative to the others), the solve is free to flatten the field
+entirely, at which point smoothing, junction, and connectivity residuals
+are all vacuously zero and carry no information about the actual geometry.
+Section~\ref{sec:eikonal} is therefore treated first among the four
+mathematical sections below, both because of this dependency and because
+its stencil and derivative machinery (per-tet affine gradient
+reconstruction) is reused verbatim by the juncture-straightness term.
+
+\section{Field Representation}
+
+\subsection{Lattice}
+
+Nodes live on a body-centered-cubic (BCC) lattice, split into two
+sublattices: $A$-nodes (the underlying simple-cubic grid's corners, one per
+integer triple $(i,j,k)$, $0 \le i,j,k < N$ for grid resolution $N$) and
+$B$-nodes (the cube centers, $(i,j,k)$ with $0 \le i,j,k < N-1$). Every node
+carries exactly one (label, potential) pair, $(\text{label}(x), \phi(x))$
+with $\phi(x) \ge 0$.
+
+Both sublattices are addressed through a shared change of basis into a
+virtual simple-cubic \emph{$q$-space}: $q = (i+j,\,i+k,\,j+k)$ for an
+$A$-node and $q=(i+j+1,\,i+k+1,\,j+k+1)$ for a $B$-node, with node type
+recovered as the parity of $q_x+q_y+q_z$ (even $=A$, odd $=B$). Every unit
+cube of $q$-space decomposes into $6$ tetrahedra sharing the cube's main
+diagonal; every consumer below enumerates tetrahedra, a node's incident
+tetrahedra, or a tetrahedron's face-adjacent partner purely from a fixed,
+small set of corner-offset tables and a tet or node index -- there is no
+explicit connectivity buffer.
+
+\subsection{Per-label confidence field}
+
+For a node $x$ and a label $\ell$, define the signed \emph{confidence
+field}
+\begin{equation}
+  G_\ell(x) \;=\; \phi(x)\cdot\sigma(x,\ell), \qquad
+  \sigma(x,\ell) = \begin{cases} +1 & \text{label}(x) = \ell \\ -1 &
+  \text{label}(x) \ne \ell \end{cases}.
+  \label{eq:confidence}
+\end{equation}
+
+Every node contributes its own real potential magnitude to \emph{every}
+label's field, sign-flipped by agreement -- this is not a same-label
+gate or exclusion. $G_\ell$ is positive where $\ell$ locally dominates and
+negative elsewhere, and its zero level set is exactly the boundary of
+label $\ell$'s territory. Equation~\eqref{eq:confidence} is the single
+construction reused by every term below.
+
+Within one tetrahedron $\tau$ with world-space corner positions
+$P_0,\dots,P_3$, any corner-affine scalar field with values $g_0,\dots,g_3$
+extends uniquely to an affine function of position, with constant gradient
+\begin{equation}
+  \grad g \;=\; \sum_{c=0}^{3} g_c\, w_c(\tau),
+  \label{eq:shapegrad}
+\end{equation}
+where $w_c(\tau) \in \R^3$ are the tetrahedron's shape-function gradients
+(the reciprocal/dual basis of its edge frame):
+\begin{equation}
+  e_1 = P_1{-}P_0,\quad e_2 = P_2{-}P_0,\quad e_3 = P_3{-}P_0,\qquad
+  V = e_1\cdot(e_2\times e_3),
+\end{equation}
+\begin{equation}
+  w_1 = \frac{e_2\times e_3}{V},\quad
+  w_2 = \frac{e_3\times e_1}{V},\quad
+  w_3 = \frac{e_1\times e_2}{V},\quad
+  w_0 = -(w_1+w_2+w_3).
+  \label{eq:dualbasis}
+\end{equation}
+
+Applying \eqref{eq:shapegrad} with $g_c = G_\ell(c)$ for $\tau$'s four
+corners gives the per-tet, per-label gradient $\grad G_\ell|_\tau$ used
+throughout Sections~\ref{sec:eikonal} and \ref{sec:junction}.
+
+\section{The Jacobi Scheme as a Solve Tool}
+\label{sec:jacobi}
+
+All four terms are folded into one shared local update, evaluated
+independently and simultaneously at every node each sweep (Jacobi, not
+Gauss--Seidel: every neighboring unknown is treated as frozen at its
+value from the start of the sweep).
+
+The total energy is a weighted sum over terms,
+\begin{equation}
+  E[\phi] \;=\; \sum_{k} w_k\, E_k[\phi],
+  \qquad k \in \{\text{Eikonal},\ \text{Smoothing},\ \text{Junction},\
+  \text{Volume}\},
+\end{equation}
+and each term's energy is (or, for Volume, will be) a sum of squared scalar
+residuals over some geometric stencil of tet or node tuples $s$,
+\begin{equation}
+  E_k[\phi] \;=\; \sum_{s} \rho_{k,s}\, r_{k,s}[\phi]^2,
+\end{equation}
+with $\rho_{k,s} \ge 0$ an optional, $\phi$-independent per-instance weight
+(e.g.\ a gate or a double-counting correction).
+
+For a single scalar unknown $\phi_x$ (one node's own potential) being
+updated this sweep, every term contributes a local gradient and a
+Gauss--Newton curvature (diagonal) estimate:
+\begin{equation}
+  \frac{\partial E_k}{\partial \phi_x} \;=\; \sum_s \rho_{k,s}\cdot 2\,
+  r_{k,s}\,\frac{\partial r_{k,s}}{\partial \phi_x},
+  \qquad
+  D_k(x) \;:=\; \sum_s \rho_{k,s}\cdot 2\left(\frac{\partial
+  r_{k,s}}{\partial \phi_x}\right)^{\!2}.
+  \label{eq:gaussnewton}
+\end{equation}
+$D_k(x)$ discards the residual's own second-derivative term, which is what
+keeps it a sum of squares and hence \emph{always non-negative} -- essential
+for a stable descent direction when every neighboring unknown is being
+updated simultaneously rather than sequentially. This is why every term
+below is deliberately written in Gauss--Newton form even where a term is
+nonlinear enough that a different, exact linearization would exist.
+
+The combined update is
+\begin{equation}
+  \text{grad}(x) = \sum_k w_k\,\frac{\partial E_k}{\partial\phi_x}, \qquad
+  \text{diag}(x) = \sum_k w_k\, D_k(x),
+\end{equation}
+\begin{equation}
+  \Delta\phi_x \;=\; \mathrm{clamp}\!\left(
+    \frac{-\,\text{grad}(x)}{\text{diag}(x) + \varepsilon},\
+    -\Delta_{\max},\ \Delta_{\max}
+  \right), \qquad \phi_x \leftarrow \phi_x + \Delta\phi_x,
+  \label{eq:update}
+\end{equation}
+with $\varepsilon$ a fixed diagonal floor (preventing division blow-up when
+every term's diagonal contribution happens to vanish at a node) and
+$\Delta_{\max}$ a hard per-sweep trust-region clamp. The clamp is required
+because a Jacobi step neglects all off-diagonal coupling by construction;
+without it, the coupled nonlinear system's naive per-node update
+overshoots and diverges over successive sweeps.
+
+If a node's label is not held fixed (an unlabeled/free node, as opposed to
+a ground-truth node), a relabeling decision is made \emph{after} the
+potential update, whenever $\phi_x + \Delta\phi_x$ would go negative: the
+node adopts whichever neighboring label locally dominates and its
+potential is reset to a small positive head start, so that it participates
+in the next sweep's terms on comparable footing with its already-settled
+neighbors rather than needing many sweeps of $\Delta_{\max}$-limited growth
+to catch up.
+
+\section{Eikonal Floor Term}
+\label{sec:eikonal}
+
+\subsection{Purpose}
+
+This term keeps $|\grad G_{\text{label}(x)}|$ near $1$ wherever node $x$ is
+genuinely the local peak of its own label's confidence field -- i.e.\
+wherever $x$ is responsible for representing the boundary there. It is a
+one-sided \emph{floor}: it only pushes the gradient magnitude \emph{up}
+when it is below $1$, and only where $x$ is that local peak; it does not
+penalize a large or already-unit gradient, and it does not act at all at a
+node that is not locally the maximum (that responsibility instead falls,
+symmetrically, to whichever corner actually is the local maximum, when
+\emph{that} node is processed as the target).
+
+\subsection{Stencil}
+
+For target node $x$ with label $\ell = \text{label}(x)$, let $\tau$ range
+over $x$'s $24$ ring-1 incident tetrahedra (every tetrahedron that has $x$
+as one of its four corners). For each such $\tau$ with corners $c=0,\dots,3$
+and $x$ at local index $m$:
+\begin{equation}
+  G_c \;=\; G_\ell(c) \quad\text{(Eq.~\eqref{eq:confidence}, evaluated in
+  label $\ell$ for every corner of $\tau$)}.
+\end{equation}
+
+\subsection{Gating: strict local maximum, softened}
+
+Define the margin by which $x$ exceeds the best of the other three corners,
+\begin{equation}
+  \mathrm{margin} \;=\; G_m - \max_{c \ne m} G_c,
+\end{equation}
+and a gate
+\begin{equation}
+  \mathrm{gate} \;=\; \mathrm{saturate}\!\left(\frac{\mathrm{margin}}
+  {\epsilon_{\text{floor}}}\right) \in [0,1], \qquad \epsilon_{\text{floor}}
+  = 10^{-4}.
+  \label{eq:gate}
+\end{equation}
+A hard $0/1$ strict-maximum test would flip sweep-to-sweep near a near-tie
+between two corners; \eqref{eq:gate} is a narrow anti-chatter ramp (scaled
+to the same small constant used as a diagonal floor elsewhere, not a wide
+physical smoothing radius) that only smooths the immediate tie-breaking
+boundary. Terms with $\mathrm{gate}=0$ are skipped entirely.
+
+\subsection{Residual and fold-in}
+
+Reconstruct the real per-tet gradient via \eqref{eq:shapegrad},
+\begin{equation}
+  \grad G \;=\; \sum_{c=0}^{3} G_c\, w_c(\tau), \qquad
+  |\grad G| \text{ its magnitude.}
+\end{equation}
+If $|\grad G| < 1$, the one-sided residual is
+\begin{equation}
+  r \;=\; 1 - |\grad G|,
+\end{equation}
+contributing energy $\mathrm{gate}\cdot r^2$ (zero, with zero derivative,
+once $|\grad G|\ge 1$ -- a $C^1$-continuous hinge). Since $x$'s own corner
+always agrees with its own label, $\partial G_m/\partial\phi_x = +1$
+identically, so $\partial(\grad G)/\partial\phi_x = w_m(\tau)$ with no sign
+branch, and
+\begin{equation}
+  \frac{\partial |\grad G|}{\partial \phi_x} = \frac{\grad G \cdot
+  w_m(\tau)}{\max(|\grad G|,\,\epsilon_{\text{floor}})}, \qquad
+  \frac{\partial r}{\partial \phi_x} = -\frac{\partial |\grad
+  G|}{\partial\phi_x}.
+\end{equation}
+Folded into \eqref{eq:gaussnewton} with $\rho = \mathrm{gate}$ (one
+instance per incident tet, summed over all $24$; no double-counting
+correction is needed since each tet is visited exactly once, from $x$'s own
+perspective, unlike the pairwise term in Section~\ref{sec:junction}):
+\begin{equation}
+  \frac{\partial E_{\text{eik}}}{\partial \phi_x} \mathrel{+}= \mathrm{gate}
+  \cdot 2\, r \cdot \frac{\partial r}{\partial\phi_x}, \qquad
+  D_{\text{eik}}(x) \mathrel{+}= \mathrm{gate}\cdot 2 \left(\frac{\partial
+  r}{\partial\phi_x}\right)^{\!2}.
+\end{equation}
+
+\subsection{A known limitation}
+
+$\partial r/\partial\phi_x$ is proportional to $\grad G\cdot w_m$, which
+itself shrinks as the confidence field collapses toward the degenerate flat
+state ($G_c \to 0$ for all $c$). The restoring force this term applies
+therefore weakens as the field approaches exact collapse rather than
+staying bounded away from zero: it is a \emph{repeller}, not a hard
+barrier. This is an accepted property of the one-sided Gauss--Newton
+formulation (a barrier-function alternative was deliberately not used, to
+keep the update in \eqref{eq:update} well-defined and finite everywhere,
+including exactly at collapse) and is why the Eikonal weight must be kept
+meaningfully large relative to the other terms rather than assumed to
+"just work" at any positive value.
+
+\subsection{Buffers}
+
+Per tile: the same shared potential/label cache used by every term
+(Section~\ref{sec:buffers}) plus one groupshared accumulator pair per
+target node for this term's gradient/diagonal contribution. No additional
+global buffer is required; the tetrahedron corner tables used to enumerate
+the $24$ incident tets are fixed constant tables, not buffers.
+
+\section{Smoothing Term}
+\label{sec:smoothing}
+
+\subsection{Purpose}
+
+A discrete-Laplacian-type penalty on local disagreement between a node's
+own confidence value and its immediate same-label neighborhood, applied
+directly to the confidence field \eqref{eq:confidence} rather than to raw
+potentials -- so that disagreement in \emph{label}, not just in potential
+magnitude, is treated as a real discontinuity to be smoothed.
+
+\subsection{Stencil}
+
+The stencil is the standard $3\times3\times3$ same-sublattice neighborhood
+of the target node, minus the center: $26$ neighbors, classified by how
+many of the three axes they offset along --
+\begin{itemize}
+  \item \textbf{face} neighbors ($6$): offset along exactly one axis,
+  \item \textbf{edge} neighbors ($12$): offset along exactly two axes,
+  \item \textbf{corner/cross} neighbors ($8$): offset along all three
+  axes,
+\end{itemize}
+plus the target node itself, for $27$ taps total. Each tap $t$ carries a
+fixed scalar weight $k_t$ depending only on its class:
+\begin{equation}
+  k_{\text{self}} = 192, \qquad k_{\text{face}} = 16 \ (\times 6), \qquad
+  k_{\text{edge}} = 8 \ (\times 12), \qquad k_{\text{cross}} = -48\ (\times
+  8).
+  \label{eq:smoothkernel}
+\end{equation}
+
+\subsection{Residual and fold-in}
+
+Because the underlying per-tet-pair confidence-disagreement energy this
+kernel reduces from is exactly quadratic in the unknowns, its
+Gauss--Newton linearization is exact (not an approximation): define, for
+target $x$ with label $\ell$,
+\begin{equation}
+  \mathrm{Total}(x) \;=\; \sum_{t=0}^{26} k_t\,\sigma(t,\ell)\,\phi_t,
+  \label{eq:total}
+\end{equation}
+the tap potentials $\phi_t$ signed by \eqref{eq:confidence}'s agreement
+rule against $x$'s own label $\ell$ (the self tap, $t{=}0$, trivially
+agrees with itself and contributes $+192\,\phi_x$). Then directly
+\begin{equation}
+  \frac{\partial E_{\text{smooth}}}{\partial\phi_x} = \mathrm{Total}(x),
+  \qquad D_{\text{smooth}}(x) = k_{\text{self}} = 192,
+\end{equation}
+with no residual/derivative bookkeeping beyond evaluating
+\eqref{eq:total}: the diagonal is the fixed constant $192$ at every node,
+independent of the field's current state.
+
+\emph{Consistency check.} For a spatially uniform, single-label field
+($\phi_t = \phi$, $\sigma(t,\ell)=+1$ for every tap),
+\begin{equation}
+  \mathrm{Total} = \phi\left(192 + 6\cdot16 + 12\cdot 8 + 8\cdot(-48)\right)
+  = \phi\left(192+96+96-384\right) = 0,
+\end{equation}
+confirming that a constant same-label field is an exact fixed point of
+this term -- it measures only local disagreement from uniformity, as a
+proper smoothing/Laplacian-type operator should.
+
+\subsection{Buffers}
+
+Same shared potential/label cache as every other term (Section
+\ref{sec:buffers}); one groupshared accumulator per target node holding
+$\mathrm{Total}(x)$.
+
+\section{Juncture Straightness Term}
+\label{sec:junction}
+
+\subsection{Purpose}
+
+Where three labels meet, the interface should locally look like three flat
+sheets meeting along one straight line (the triple junction), not a
+curve that kinks from one tetrahedron to the next. This term penalizes
+disagreement, between two tetrahedra sharing a genuinely triple-labeled
+interface triangle, in their independently-estimated triple-junction
+direction.
+
+\subsection{Identifying a junction interface}
+
+Consider two tetrahedra $\tau_A,\tau_B$ sharing a face (three common
+corners). Let $l_0 < l_1 < l_2$ be the labels carried by those three shared
+corners, canonically sorted ascending -- this instance is only evaluated
+if all three labels are pairwise distinct (a genuine triple junction). The
+ascending sort is required because the tangent construction below is
+sign-sensitive to odd permutations of the label triple, while the
+underlying \emph{set} of three labels an interface triangle carries is the
+only thing intrinsic to the interface; fixing a canonical order makes the
+sign well-defined and consistent regardless of which of the two tets is
+treated first.
+
+\subsection{Per-tet triple-junction tangent}
+
+Within one tet $\tau$ (either $\tau_A$ or $\tau_B$), build the three
+per-label confidence gradients restricted to $\tau$'s own four corners via
+\eqref{eq:shapegrad}:
+\begin{equation}
+  g_a = \sum_{c\in\tau} G_{l_0}(c)\,w_c(\tau), \quad
+  g_b = \sum_{c\in\tau} G_{l_1}(c)\,w_c(\tau), \quad
+  g_c = \sum_{c\in\tau} G_{l_2}(c)\,w_c(\tau).
+\end{equation}
+The two interface planes present in $\tau$ (label $l_0$ vs.\ $l_1$, and
+label $l_0$ vs.\ $l_2$) have normals $g_a - g_b$ and $g_a - g_c$; the
+triple junction line lies along their common direction,
+\begin{equation}
+  T_\tau \;=\; (g_a - g_b)\times(g_a - g_c)
+  \;=\; g_a\times g_b + g_b\times g_c + g_c\times g_a,
+  \label{eq:tangent}
+\end{equation}
+the second, cyclic-symmetric form following from bilinearity and
+antisymmetry of the cross product. $T_\tau$ is invariant under a cyclic
+rotation of $(l_0,l_1,l_2)$ and flips sign under a transposition of any
+two -- the reason the canonical sort above is required.
+
+\subsection{Residual}
+
+Let $T_A, T_B$ be \eqref{eq:tangent} evaluated in $\tau_A,\tau_B$
+respectively (using the same canonical $(l_0,l_1,l_2)$ for both, since they
+share the interface). The residual is
+\begin{equation}
+  C \;=\; T_A \times T_B,
+  \label{eq:junctionresidual}
+\end{equation}
+not $T_A - T_B$: $C$ vanishes exactly when $T_A,T_B$ are parallel
+\emph{or} antiparallel (a junction line has no intrinsic "forward"
+direction, so antiparallel tangent estimates are equally aligned), and it
+does not penalize a pure magnitude difference between the two tets' own
+tangent-magnitude estimates, which depends on tet size/shape/potential
+scale rather than on whether the junction is actually straight.
+
+\subsection{Derivative and fold-in}
+
+Let $m_A$ (resp.\ $m_B$) be the target's own local corner index within
+$\tau_A$ (resp.\ $\tau_B$, only defined if the target is also a corner of
+$\tau_B$), and let $s_a,s_b,s_c\in\{+1,-1\}$ be the sign of the target's
+own label's agreement with $l_0,l_1,l_2$. Differentiating
+\eqref{eq:tangent} with respect to the target's own potential $\phi_x$
+(using $\partial g_a/\partial\phi_x = s_a\,w_{m}$, etc., and bilinearity of
+the cross product) gives
+\begin{equation}
+  \frac{\partial T_\tau}{\partial\phi_x} \;=\; w_{m}(\tau) \times
+  \Big[(s_c{-}s_b)\,g_a + (s_a{-}s_c)\,g_b + (s_b{-}s_a)\,g_c\Big].
+  \label{eq:dtangent}
+\end{equation}
+Apply \eqref{eq:dtangent} in $\tau_A$ to get $\partial T_A/\partial\phi_x$;
+apply it in $\tau_B$ (using $\tau_B$'s own $g_a,g_b,g_c$ and $m_B$) to get
+$\partial T_B/\partial\phi_x$ if the target is also a corner of $\tau_B$,
+else $\partial T_B/\partial\phi_x = 0$. Then, by the product rule,
+\begin{equation}
+  \frac{\partial C}{\partial\phi_x} = \frac{\partial T_A}{\partial\phi_x}
+  \times T_B \;+\; T_A \times \frac{\partial T_B}{\partial\phi_x}.
+\end{equation}
+Folded into \eqref{eq:gaussnewton} (with $C\in\R^3$ treated
+componentwise, i.e.\ $C\cdot C$ as the scalar residual-squared and
+$C\cdot\partial C/\partial\phi_x$ its half-derivative):
+\begin{equation}
+  \frac{\partial E_{\text{junc}}}{\partial\phi_x} \mathrel{+}= \rho\cdot
+  2\left(C\cdot\frac{\partial C}{\partial\phi_x}\right), \qquad
+  D_{\text{junc}}(x) \mathrel{+}= \rho\cdot 2\left\lVert
+  \frac{\partial C}{\partial\phi_x}\right\rVert^2 .
+\end{equation}
+
+\subsection{Stencil and double-counting}
+
+For target $x$, walk its $24$ ring-1 incident tets; for each, test its $4$
+face-adjacent-partner relations. A partner tet may itself touch the
+target ("ring1--ring1", $36$ distinct such pairs per target) or not
+("ring1--ring2", $24$ distinct pairs). A ring1--ring1 pair is discovered
+twice in this walk -- once from each member tet's own perspective -- so
+its contribution is halved, $\rho = \tfrac12$, to avoid double-counting;
+a ring1--ring2 pair is discovered once, $\rho = 1$.
+
+\subsection{Dependency on the Eikonal term}
+
+$C = T_A \times T_B$ vanishes not only when the two tangents are aligned
+but also whenever either tangent vanishes outright -- which happens
+whenever the underlying per-label gradients $g_a,g_b,g_c$ degenerate (a
+collapsing confidence field). This is exactly the degeneracy
+Section~\ref{sec:eikonal}'s term exists to resist: keeping $|\grad
+G_\ell|$ away from zero at genuine local confidence peaks keeps the $g_a,
+g_b,g_c$ vectors that feed this term meaningfully non-zero, so that a
+small $C$ reflects real junction alignment rather than a vacuously
+satisfied flat field.
+
+\subsection{Buffers}
+
+Reuses the same shared potential/label cache (Section~\ref{sec:buffers});
+one groupshared accumulator pair per target node for this term's
+gradient/diagonal contribution. No connectivity buffer: tet corners,
+incident-tet enumeration, and face-adjacent-partner lookup are all
+computed on the fly from fixed constant tables plus the tet/node index.
+
+\section{Connectivity / Volume Term (planned)}
+\label{sec:volume}
+
+\subsection{Purpose}
+
+The three terms above constrain local shape (unit gradient, smoothness,
+straight junctions) but nothing yet constrains \emph{how much} territory a
+label ends up with. In an under-constrained region, all three can be
+satisfied while a label's reconstructed volume drifts arbitrarily far from
+its intended extent, or a thin connected region pinches off entirely. This
+planned fourth term is meant to give each label's region a target
+volume (and, eventually, a topological-connectivity constraint) so that
+the solve is pulled back toward a sensible territory size rather than
+merely a locally-smooth, locally-straight one.
+
+\subsection{Anticipated structure}
+
+Like the terms above, this term is expected to take the same Gauss--Newton
+shape: a residual $r_{\text{vol}}$ (or several, per label and per some
+local region) built from a per-tet or per-node volume/flux estimate
+derived from the same confidence field \eqref{eq:confidence} and the same
+per-tet gradient reconstruction \eqref{eq:shapegrad} used above, folded
+into the shared accumulators of \eqref{eq:gaussnewton} and combined into
+the same update \eqref{eq:update} alongside the three terms already
+described. The exact residual definition and stencil are not yet fixed.
+
+\subsection{Dependency on the Eikonal term}
+
+Whatever form the volume/flux estimate takes, it will be computed from
+ratios or products of nearby confidence values and/or their gradients. Such
+quantities are only numerically meaningful, and only actually reflect real
+territory, when the underlying field is non-degenerate -- a volume or flux
+estimate built from a field whose gradients have been allowed to collapse
+toward zero is ill-conditioned and does not correspond to anything
+physical. This term therefore inherits the same dependency on
+Section~\ref{sec:eikonal} that Section~\ref{sec:junction} has: the Eikonal
+floor must already be holding the field away from collapse before a
+connectivity/volume residual can be evaluated meaningfully.
+
+\subsection{Buffers}
+
+Not yet allocated. Expected to need at least one additional groupshared
+accumulator pair (gradient/diagonal, mirroring every term above) and,
+depending on the final residual's stencil radius, possibly a small
+additional per-label scratch quantity computed once per tile and shared
+across that tile's targets -- reusing the same tile/halo structure
+described in Section~\ref{sec:buffers} rather than introducing a new one.
+
+\section{Shared Buffers and Dispatch Geometry}
+\label{sec:buffers}
+
+All four terms operate within the same tile-based dispatch. Each
+compute-shader thread group owns a fixed-size \emph{halo}: a $4\times4
+\times4$ window of $A$-nodes and a $4\times4\times4$ window of $B$-nodes
+(128 nodes total), loaded once per tile from the global node buffers into
+groupshared memory before any term runs:
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Groupshared array & Contents \\
+\midrule
+\texttt{gLabel[128]} & current label of every halo node \\
+\texttt{gPot[128]} & current potential of every halo node \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Each tile is responsible for updating $16$ \emph{target} nodes (the
+tile's own $8$ $A$-nodes and $8$ $B$-nodes, strictly interior to the halo
+so that every stencil above -- up to the Eikonal/Junction terms' $24$-tet
+ring -- stays within the loaded halo without touching global memory
+again). Each term accumulates its own gradient/diagonal contribution per
+target into its own groupshared pair before the terms are combined per
+\eqref{eq:update}:
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Groupshared array pair & Term \\
+\midrule
+\texttt{gEikonalGrad[16]}, \texttt{gEikonalDiag[16]} & Eikonal floor (Section~\ref{sec:eikonal}) \\
+\texttt{gTotal[16]} & Smoothing (Section~\ref{sec:smoothing}; linear, no separate diag array needed) \\
+\texttt{gJunctionGrad[16]}, \texttt{gJunctionDiag[16]} & Juncture straightness (Section~\ref{sec:junction}) \\
+\emph{(reserved)} & Connectivity/Volume (Section~\ref{sec:volume}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Global buffers (per node, indexed uniformly across both sublattices):
+current label, current potential, and their scratch (next-sweep)
+counterparts, read once at the start of a tile's work and written once, at
+the very end of the sweep, for that tile's $16$ targets.
+
+Scalar parameters, one shared constant buffer read by every term:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Symbol & Role & Used by \\
+\midrule
+$w_{\text{smooth}}$ & Smoothing weight & Section~\ref{sec:smoothing} \\
+$w_{\text{junc}}$ & Juncture straightness weight & Section~\ref{sec:junction} \\
+$w_{\text{eik}}$ & Eikonal floor weight & Section~\ref{sec:eikonal} \\
+$w_{\text{vol}}$ \emph{(planned)} & Connectivity/volume weight & Section~\ref{sec:volume} \\
+$\epsilon_{\text{floor}}$ & Diagonal floor / gating scale & Sections~\ref{sec:jacobi}, \ref{sec:eikonal} \\
+$\Delta_{\max}$ & Per-sweep potential step clamp & Section~\ref{sec:jacobi} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}
