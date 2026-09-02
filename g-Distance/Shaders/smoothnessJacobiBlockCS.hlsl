@@ -34,7 +34,15 @@ cbuffer BlockConsts : register(b1) {
 };
 
 #define HALO_DIM 4u
-#define HALO_NODES 128u // 64 A + 64 B
+// HALO_BBASE/HALO_NODES retuned to break a shared-memory bank-conflict
+// alias in the wid<27 kernel below -- see smoothnessJacobiSyntheticCS.hlsl's
+// matching comment (this file shares that exact same table/offsets) and the
+// design notes (soft-stargazing-biscuit.md) for the full derivation. HALO_DIM
+// itself (the 16-wide z-stride) is UNCHANGED -- Stage 2's halo LOAD (below)
+// relies on two consecutive z-slices per warp differing by exactly half the
+// 32-bank period, which only holds if HALO_DIM*HALO_DIM stays 16.
+#define HALO_BBASE 71u
+#define HALO_NODES 135u // 64 A + 7 padding + 64 B
 #define WEDGE_COUNT 324u
 
 groupshared uint  lijSlots[HALO_NODES];   // packed candidate labels slots in their respective nodes
@@ -42,17 +50,20 @@ groupshared float lijPotDiff[HALO_NODES];     // candidate potentials, 2 per nod
 groupshared uint  li;
 groupshared uint  lj;
 
+// Edge (w8) and face (w16/self) magnitudes are UNCHANGED from the original
+// 64-base table -- only the 8 cross-sublattice (w-48) magnitudes differ,
+// recomputed as HALO_BBASE-{0,1,4,5,16,17,20,21} instead of 64-{...}.
 static const uint4 kernelbits = uint4(
     3 | (5 << 5) | (12 << 10) | (15 << 15) | (17 << 20) | (20 << 25), // w 8
     0x00100401u,  // w 192 | w 16
-    0x403F3C30u,  // w -48
-    0x3B2F2C2Bu);
+    0x47464337u,  // w -48
+    0x42363332u);
 
 uint posToIdxA(uint3 l) { return AIdx(l.x, l.y, l.z); }
 uint posToIdxB(uint3 l) { return BIdx(l.x, l.y, l.z); }
-        
+
 uint inHaloPosToInHaloIdxA(uint3 l) { return l.x + l.y * HALO_DIM + l.z * HALO_DIM * HALO_DIM; }
-uint inHaloPosToInHaloIdxB(uint3 l) { return 64u + l.x + l.y * HALO_DIM + l.z * HALO_DIM * HALO_DIM; }
+uint inHaloPosToInHaloIdxB(uint3 l) { return HALO_BBASE + l.x + l.y * HALO_DIM + l.z * HALO_DIM * HALO_DIM; }
 
 
 [RootSignature(SmoothnessBlockSig)]

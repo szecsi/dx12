@@ -663,6 +663,215 @@ void TetPositiveSideVolume(float3 P[4], float g[4], out bool posSide[4], out uin
     VPos = vol;
 }
 
+// Alien-potential discriminator packing (nodeDiscriminatorBuffer): bit 0 =
+// whether discrimination is even meaningful for this node (false for a node
+// touching 0 or 1 distinct foreign labels in its neighborhood --
+// gatherAlienDiscriminatorCS.hlsl), bits 1-7 = the routed label's own 7-bit
+// ID directly. (Earlier version of this encoding stored a single
+// distinguishing BIT position + target value instead of the label itself,
+// needed only because there was nowhere to directly store a 7-bit label --
+// there's ample room, so direct storage is simpler and -- see the phi/beta
+// joint-smoothing scheme -- lets a solve that needs the actual routed
+// label's VALUE (not just a same/different test against some already-known
+// candidate) get it directly, which a bit-test alone can never provide.)
+// Bits 8-31 reserved/unused. Shared by the gather pass, the Phase-2 solve
+// (smoothnessJacobiAlienCS.hlsl), and the renderer (raymarchLatticePS.hlsl)
+// so all three agree on one encoding.
+uint EncodeDiscriminator(bool enabled, uint routedLabel)
+{
+    return (enabled ? 1u : 0u) | ((routedLabel & 0x7Fu) << 1u);
+}
+void DecodeDiscriminator(uint packed, out bool enabled, out uint routedLabel)
+{
+    enabled = (packed & 1u) != 0u;
+    routedLabel = (packed >> 1u) & 0x7Fu;
+}
+
+// True iff queryLabel should route to this node's alien potential (beta)
+// rather than its derived default, given this node's own label != queryLabel
+// -- callers are responsible for checking the own-label match case first.
+bool IsAlienRoute(uint discrimPacked, uint queryLabel)
+{
+    bool enabled; uint routedLabel;
+    DecodeDiscriminator(discrimPacked, enabled, routedLabel);
+    return enabled && (queryLabel == routedLabel);
+}
+
+// The psi(own)/beta(routed)/gamma(else) corner rule, unconditionally (no
+// UseAlienPotential gate -- that's raymarchLatticePS.hlsl's CornerR's own
+// concern, a render TOGGLE layered on top of this). Shared by CornerR
+// (raymarchLatticePS.hlsl, the main render) and footSlicePS.hlsl's
+// "chosen-label field" debug slice -- factored out here rather than
+// duplicated a third time.
+//
+// own label -> pot; discriminator-routed label -> beta; otherwise -> gamma,
+// UNCONDITIONALLY (no `enabled` bypass -- see below), via the identity
+// exp(-pot) + exp(-beta) - exp(-gamma) = 0, i.e.
+// gamma = -ln(exp(-pot)+exp(-beta)) -- a soft-min of (pot,beta). This
+// REPLACES the earlier reciprocal identity (1/pot+1/beta+1/gamma=0): that
+// formula has a genuine pole at pot+beta==0 (previously worked around via an
+// `enabled` bypass, now removed -- no longer needed, see below) and, worse,
+// a whole open interval (-pot,-pot/2) where gamma actually EXCEEDS pot -- the
+// label-blind fallback
+// out-voting the true label owner, a real, provable failure mode. The
+// exponential identity has NO such failure mode: log-sum-exp obeys
+// `logsumexp(x,y) >= max(x,y)` UNCONDITIONALLY for all real x,y, so
+// substituting x=-pot,y=-beta gives `gamma <= min(pot,beta)` always -- no
+// case analysis, no pole, no interval to avoid. A disabled corner's inert
+// beta=-pot seed degrades GRACEFULLY here instead of catastrophically:
+// gamma = -ln(2*cosh(pot)) -> -pot for large pot (recovers the old
+// pre-alien-potential fallback), a bounded, sane value near pot=0 (never a
+// pole) -- so the `enabled` bypass this function used to need is no longer
+// necessary at all; the formula itself already does the right thing whether
+// or not this corner is actually routed to something.
+float CornerR3WayValue(uint label, float pot, float beta, uint discrim, uint queryLabel)
+{
+    if (label == queryLabel) return pot;
+    if (IsAlienRoute(discrim, queryLabel)) return beta;
+    // logsumexp(-pot,-beta), shifted by its max (== -min(pot,beta)) so both
+    // exp() arguments stay <=0 -- avoids overflow for large-magnitude
+    // negative pot/beta ("deep outside") values; exp(0)=1 guards against
+    // underflowing the whole sum to zero.
+    float m = min(pot, beta);
+    return m - log(exp(m - pot) + exp(m - beta));
+}
+
+// "Next" (scratch) discriminator, packed into bits 8-15 of the SAME uint
+// word as the current discriminator (bits 0-7 -- see EncodeDiscriminator).
+// Mirrors NodeCandidateLabel's existing byte0(current)/byte1(scratch) split:
+// needed now that the live-topology alien pass (smoothnessJacobiAlienCS.hlsl)
+// can change a node's routing mid-sweep and must defer that change past a
+// barrier (see commitAlienCS.hlsl) rather than overwriting the very bits
+// other threads in the same dispatch are concurrently reading as neighbor
+// data. Bits 0-7 are never touched by this -- only ever updated by the
+// commit pass, exactly like the label's byte0.
+uint PackDiscriminatorScratch(uint currentWord, bool enabled, uint routedLabel)
+{
+    uint scratch = ((enabled ? 1u : 0u) | ((routedLabel & 0x7Fu) << 1u)) << 8u;
+    return (currentWord & 0xFFFF00FFu) | scratch;
+}
+
+// Sentinel used by FaceBetaValidInterval for an unbounded end (either this
+// corner's beta doesn't affect the face, or the face is already broken
+// independent of this corner) -- comfortably larger than any beta this
+// scheme ever produces, so callers can just min()/max() it in
+// unconditionally, or compare against it to skip clamping that side.
+static const float kBetaBoundUnconstrained = 3.0e8;
+
+// Exact valid interval [lo,hi] for THIS corner's beta -- holding the other
+// two corners of a tet face with 3 distinct own-labels (l0,l1,l2) fixed at
+// their current AlienCornerR values -- within which the face's triple-point
+// (where the l0/l1/l2 confidence fields all tie) stays inside the physical
+// triangle rather than sliding off one of its edges. See the approved plan
+// for the full derivation; summary:
+//
+// Map each of the face's 3 corners X to a point in "discriminant space",
+// (D01_X, D12_X) = (G(l0,X)-G(l1,X), G(l1,X)-G(l2,X)). The triple-point
+// (G(l0)=G(l1)=G(l2)) is exactly the ORIGIN of this space, and its
+// barycentric coordinates w.r.t. the face are exactly the barycentric
+// coordinates of the origin in the triangle formed by the 3 corners'
+// mapped points -- so the endpoint stays on the face iff the origin lies
+// inside that triangle (u,v,w all the same sign).
+//
+// This corner's own (D01,D12) is affine in its beta (slope 1 on whichever
+// of l0/l1/l2 its discriminator routes to, else 0 -- own-label and default
+// both frozen). The other two corners are constants this sweep. That makes
+// two of the three barycentric numerators, v(beta)=Av+Sv*beta and
+// w(beta)=Aw+Sw*beta, simple MONOTONIC affine functions of beta (u is the
+// third, constant). The valid set is {v matches sign(u)} INTERSECT {w
+// matches sign(u)} -- an intersection of two half-lines, which in 1D is
+// ALWAYS a single interval (possibly unbounded either end, possibly empty)
+// -- never two disjoint pieces. That's what makes combining this across
+// every face a node touches a plain, associative interval intersection
+// (max of los, min of his), not something needing an ordered/sequential
+// combine.
+//
+// An earlier version of this function assumed the valid range was always
+// unbounded BELOW (only ever searching upward from beta=-inf for the first
+// break) -- a real tet (309540 in the verification log) proved that false:
+// three corners of the same face simultaneously routed can make the valid
+// range a genuinely BOUNDED interval, and a corner's beta can fail by being
+// too NEGATIVE, not just too positive. Hence: probe all up-to-3 candidate
+// sub-intervals explicitly, don't assume which end (if any) is open.
+//
+// myIntercept0/1/2, mySlope0/1/2: this corner's G(l0),G(l1),G(l2) as
+// intercept+slope*beta (slope is 1 for at most one of the three, 0 for the
+// rest). otherA0/1/2, otherB0/1/2: the OTHER two face corners' current
+// (already-evaluated, frozen this sweep) G(l0),G(l1),G(l2) values.
+float2 FaceBetaValidInterval(
+    float myIntercept0, float mySlope0,
+    float myIntercept1, float mySlope1,
+    float myIntercept2, float mySlope2,
+    float otherA0, float otherA1, float otherA2,
+    float otherB0, float otherB1, float otherB2)
+{
+    float D01_A = otherA0 - otherA1, D12_A = otherA1 - otherA2;
+    float D01_B = otherB0 - otherB1, D12_B = otherB1 - otherB2;
+
+    float A01 = myIntercept0 - myIntercept1, S01 = mySlope0 - mySlope1;
+    float A12 = myIntercept1 - myIntercept2, S12 = mySlope1 - mySlope2;
+
+    float u = D01_A * D12_B - D01_B * D12_A; // constant -- doesn't depend on this corner's beta
+    float Av = D01_B * A12 - A01 * D12_B, Sv = D01_B * S12 - S01 * D12_B;       // v(beta) = Av + Sv*beta
+    float Aw = A01 * D12_A - D01_A * A12, Sw = S01 * D12_A - D01_A * S12;       // w(beta) = Aw + Sw*beta
+
+    float signU = (u >= 0.0) ? 1.0 : -1.0;
+    // A face whose OTHER two corners both have near-zero phi (a real,
+    // legitimate configuration -- phi=0 is a valid node state) makes D01/D12
+    // at those corners near-zero too, which can make Sv/Sw tiny without
+    // being exactly zero -- an absolute "> 1e-8" threshold alone still lets
+    // -A/S explode to a numerically meaningless multi-million-magnitude
+    // "root" (measured directly: node 2234 computed lo=hi=~-75,497,472).
+    // Filter on the RESULTING root's magnitude too, not just the slope --
+    // this system's betas/phis never legitimately need a boundary anywhere
+    // near this cap, so a root beyond it is noise, not a real constraint.
+    const float kRootSaneCap = 1.0e5;
+    bool hasRv = abs(Sv) > 1.0e-8 && abs(Av / Sv) < kRootSaneCap;
+    bool hasRw = abs(Sw) > 1.0e-8 && abs(Aw / Sw) < kRootSaneCap;
+    float2 unconstrained = float2(-kBetaBoundUnconstrained, kBetaBoundUnconstrained);
+
+    if (!hasRv && !hasRw) return unconstrained; // beta doesn't move either numerator here
+
+    if (!hasRv || !hasRw)
+    {
+        // Exactly one root -- two half-lines, probe just below/above it.
+        float r = hasRv ? (-Av / Sv) : (-Aw / Sw);
+        float scale = max(1.0, abs(r));
+        float eps = 1.0e-3 * scale;
+        float vLo = Av + Sv * (r - eps), wLo = Aw + Sw * (r - eps);
+        float vHi = Av + Sv * (r + eps), wHi = Aw + Sw * (r + eps);
+        bool loValid = ((vLo >= 0.0) == (signU > 0.0)) && ((wLo >= 0.0) == (signU > 0.0));
+        bool hiValid = ((vHi >= 0.0) == (signU > 0.0)) && ((wHi >= 0.0) == (signU > 0.0));
+        if (loValid) return float2(-kBetaBoundUnconstrained, r);
+        if (hiValid) return float2(r, kBetaBoundUnconstrained);
+        return unconstrained; // face already broken independent of this corner
+    }
+
+    // Two roots -- up to 3 candidate sub-intervals; probe each directly
+    // rather than assuming which end (if any) is open.
+    float ra = -Av / Sv, rb = -Aw / Sw;
+    float r0 = min(ra, rb), r1 = max(ra, rb);
+    float scale0 = max(1.0, abs(r0)), scale1 = max(1.0, abs(r1));
+
+    float vL = Av + Sv * (r0 - 1.0e-3 * scale0), wL = Aw + Sw * (r0 - 1.0e-3 * scale0);
+    float vM = Av + Sv * (0.5 * (r0 + r1)), wM = Aw + Sw * (0.5 * (r0 + r1));
+    float vH = Av + Sv * (r1 + 1.0e-3 * scale1), wH = Aw + Sw * (r1 + 1.0e-3 * scale1);
+    bool validL = ((vL >= 0.0) == (signU > 0.0)) && ((wL >= 0.0) == (signU > 0.0));
+    bool validM = ((vM >= 0.0) == (signU > 0.0)) && ((wM >= 0.0) == (signU > 0.0));
+    bool validH = ((vH >= 0.0) == (signU > 0.0)) && ((wH >= 0.0) == (signU > 0.0));
+
+    if (validL && validM && validH) return unconstrained;
+    if (!validL && validM && !validH) return float2(r0, r1);
+    if (validL && validM && !validH) return float2(-kBetaBoundUnconstrained, r1);
+    if (!validL && validM && validH) return float2(r0, kBetaBoundUnconstrained);
+    if (validL && !validM && !validH) return float2(-kBetaBoundUnconstrained, r0);
+    if (!validL && !validM && validH) return float2(r1, kBetaBoundUnconstrained);
+    // validL && !validM && validH: the "two disjoint pieces" pattern the
+    // interval proof above rules out -- only reachable via numerical noise
+    // right at a root. Treat as unconstrained rather than guess a side.
+    return unconstrained;
+}
+
 // Cheap deterministic hash -> [-1,1], used to jitter initial non-winning
 // candidate potentials so B-nodes (which start with no a-priori winner)
 // don't begin in an exact tie.

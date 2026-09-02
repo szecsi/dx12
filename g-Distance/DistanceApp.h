@@ -19,10 +19,14 @@
 #include "Shaders/DistanceFrameCb.hlsli"
 #include "Shaders/PickedTetCb.hlsli"
 #include "Shaders/TorusListCb.hlsli"
+#include "Shaders/JunctionRefCb.hlsli"
+#include "Shaders/ClippedSpheresCb.hlsli"
 
 #include <vector>
 #include <string>
 #include <cstdio>
+#include <cmath>
+#include <algorithm>
 
 // Must match TorusListCb.ShapeKind's convention and rasterLabelCS.hlsl's
 // branch on it. 0/1 (Torus/Ellipsoid) are analytic-SDF shapes, resolved via
@@ -67,6 +71,36 @@ enum DistanceTestShape {
 	TestShape_Tree = 9,
 	TestShape_MarschnerLobb = 10,
 	TestShape_MarschnerLobbMulti = 11,
+	// Diagnostic scene for the alien-potential secondary pass (see the
+	// approved plan): a single world-space plane (JunctionRefCb's
+	// PlaneNormal/PlanePoint), evaluated only inside a cube of half-extent
+	// BoxHalfExtent -- label 1/2 by plane side inside the cube, background
+	// outside. One global plane, not a box-splitting construction with
+	// several boundary segments, so the exact same ground truth applies
+	// everywhere the 3-label junction could appear. Feeds
+	// smoothnessJacobiAlienRefCS.hlsl, a directly-supervised reference-fit
+	// solve used to isolate whether beta CAN represent a known-correct
+	// straight junction, independent of whether the shipped Junction+Floor
+	// self-consistency objective actually drives it there.
+	TestShape_TiltedBoxJunction = 12,
+	// Two overlapping spheres, each clipped by their radical plane into
+	// disjoint "caps" -- 3 regions (background, cap A, cap B) meeting along
+	// a real curved (circular) junction, all 3 ground-truth SDFs known in
+	// closed form everywhere. label/phi/beta/discriminator are all written
+	// DIRECTLY from those 3 SDFs by buildAnalyticClippedSpheresCS.hlsl --
+	// no Jacobi solve, no gatherAlienDiscriminatorCS heuristic -- so this
+	// tests whether (label,phi,beta,discrim) can exactly represent a real
+	// curved triple junction, independent of any solver. Meant to be used
+	// with Iterations=0 and without pressing Alien Step (either would
+	// invoke the general solve/gather machinery and overwrite this exact
+	// setup with its own heuristic result).
+	TestShape_ClippedSpheres = 13,
+	// Same geometry/label/phi/discriminator as TestShape_ClippedSpheres, but
+	// beta is forced to 0 everywhere instead of the true biased[second] --
+	// a control scene isolating whether the routing STRUCTURE alone (same
+	// discriminator, same "which label is second") does anything if the
+	// stored beta VALUE isn't actually correct, vs. needing the real value.
+	TestShape_ClippedSpheresZeroBeta = 14,
 };
 
 // g-Distance: replaces g-Aequor's particle relaxation with a direct scalar
@@ -190,6 +224,18 @@ protected:
 	// -- volume floor (connecting nodes only, see smoothnessJacobiCS.hlsl) --
 	com_ptr<ID3D12Resource> nodeCurrentVolumeBuffer;    // NodeCount float: node's own winning-label reconstructed volume, written by smoothnessJacobiCS every sweep
 
+	// -- secondary "alien potential" pass (RunAlienPhase/RunAlienStep,
+	// synthetic-field pipeline only) -- see the approved plan. Gives each
+	// node a 3rd possible corner value (beta, routed to by a per-node
+	// discriminator bit) beyond the plain 2-way own-label/-phi rule,
+	// closing a proven representational gap in the triple-junction
+	// alignment. Manually stepped ('J' key), independent of Phase 1's
+	// Continue/Reinitialize -- beta persists across repeated steps until
+	// the next Continue/Reinit invalidates it (alienGatherPending).
+	com_ptr<ID3D12Resource> nodeAlienPotentialBuffer;        // NodeCount float: beta, "current" (Jacobi read buffer)
+	com_ptr<ID3D12Resource> nodeAlienPotentialScratchBuffer; // NodeCount float: beta, Jacobi write buffer
+	com_ptr<ID3D12Resource> nodeDiscriminatorBuffer;         // NodeCount uint: bits0-7=current (bit0=enabled, bits1-7=routed label), bits8-15=scratch (same layout, committed by commitAlienCS.hlsl) -- see EncodeDiscriminator/DecodeDiscriminator/PackDiscriminatorScratch, DistanceLattice.hlsli
+
 	Egg::Compute::ComputeShader rasterLabelCS;
 	Egg::Compute::ComputeShader computeConnectingNodesCS;
 	Egg::Compute::ComputeShader jfaInitCS;
@@ -201,6 +247,12 @@ protected:
 	Egg::Compute::ComputeShader smoothnessJacobiCS;
 	Egg::Compute::ComputeShader smoothnessJacobiBlockCS; // Term-1-only tile/groupshared reimplementation, see smoothnessJacobiBlockCS.hlsl
 	Egg::Compute::ComputeShader smoothnessJacobiSyntheticCS; // single-label/potential competitive field, see smoothnessJacobiSyntheticCS.hlsl
+	Egg::Compute::ComputeShader smoothnessJacobiSyntheticSimpleCS; // profiling-only: same Term-1-only math, one thread per target, no tile/shared mem, see smoothnessJacobiSyntheticSimpleCS.hlsl
+	Egg::Compute::ComputeShader gatherAlienDiscriminatorCS; // alien-potential secondary pass, gather step, see gatherAlienDiscriminatorCS.hlsl
+	Egg::Compute::ComputeShader smoothnessJacobiAlienCS; // alien-potential secondary pass, Phase 2 Gauss-Newton solve, see smoothnessJacobiAlienCS.hlsl
+	Egg::Compute::ComputeShader smoothnessJacobiAlienRefCS; // diagnostic ground-truth reference fit, see smoothnessJacobiAlienRefCS.hlsl
+	Egg::Compute::ComputeShader buildAnalyticClippedSpheresCS; // TestShape_ClippedSpheres analytic init, see buildAnalyticClippedSpheresCS.hlsl
+	Egg::Compute::ComputeShader commitAlienCS; // scratch->main commit for the alien-potential pass, see commitAlienCS.hlsl
 	Egg::Compute::ComputeShader commitPotentialCS;
 	Egg::Compute::ComputeShader commitPotentialBlockCS; // scratch->main commit for the block-smoothing path ONLY, see commitPotentialBlockCS.hlsl
 	Egg::Compute::ComputeShader commitSyntheticCS; // scratch->main commit for the synthetic-field path ONLY, see commitSyntheticCS.hlsl
@@ -225,6 +277,8 @@ protected:
 	Egg::ConstantBuffer<DistanceGridCb>  distanceGridCb;
 	Egg::ConstantBuffer<TorusListCb>     torusCb;
 	Egg::ConstantBuffer<PickedTetCb>     pickedTetCb;
+	Egg::ConstantBuffer<JunctionRefCb>   junctionRefCb; // TestShape_TiltedBoxJunction ground truth + smoothnessJacobiAlienRefCS.hlsl's weights, see the approved plan
+	Egg::ConstantBuffer<ClippedSpheresCb> clippedSpheresCb; // TestShape_ClippedSpheres ground truth, see buildAnalyticClippedSpheresCS.hlsl
 
 	com_ptr<ID3D12DescriptorHeap> imguiSrvHeap;
 
@@ -236,8 +290,17 @@ protected:
 	// fields out of the box. Applied on Reinitialize like the shape itself.
 	float syntheticThreshold = 0.5f;
 	int syntheticMaterialCount = 4; // clamped to [1,16] by MlMultiLabel (16 Voronoi seeds exist)
+	float clippedSpheresClampDistance = 3.0f; // GUI: "Clamp Distance" (TestShape_ClippedSpheres[ZeroBeta] only, applied on Reinitialize -- see ClippedSpheresCb.hlsli)
 	bool needsReinit = false;
 	bool needsContinue = false;
+	bool needsAlienStep = false; // 'J' key / "Alien Step" button -- see RunAlienStep()
+	// True = the NEXT alien step must re-gather (fresh discriminator +
+	// beta reset to -phi) before solving -- set whenever Phase-1 smoothing
+	// (RunReinit/RunContinue) changes labels/phi, since a discriminator or
+	// beta computed against the OLD labels/phi is stale afterward. Once a
+	// gather has run, repeated alien steps skip it and keep refining the
+	// SAME persisted beta, until the next Continue/Reinit sets this again.
+	bool alienGatherPending = true;
 	bool profileIterateEveryFrame = false; // Nsight profiling aid: run RunContinue every frame, not just on 'C' -- off by default
 	bool dataValid = false; // true once a Reinit/Continue has actually produced node data
 
@@ -268,11 +331,47 @@ protected:
 	// the SAME buffers as the multi-candidate scheme, so mutually exclusive
 	// with useBlockSmoothing (enforced where the GUI checkboxes are drawn).
 	bool useSyntheticField = true;
+	// Profiling-only: while useSyntheticField is on, dispatch
+	// smoothnessJacobiSyntheticSimpleCS.hlsl (one thread per target, direct
+	// global-memory reads, no tile/groupshared/wave ops -- Term-1-only, no
+	// junction/Eikonal terms) INSTEAD of smoothnessJacobiSyntheticCS.hlsl, to
+	// isolate what the tile/shared-mem/wave-op machinery actually costs vs.
+	// buys. See smoothnessJacobiSyntheticCS.hlsl's own ENABLE_JUNCTION_TERM/
+	// ENABLE_EIKONAL_TERM compile-time switches for the matching comparison
+	// on that side.
+	bool useSyntheticSimpleSmoothing = false;
 	float syntheticEpsilon = 0.00001f; // head-start potential a B-node gets when it's freshly relabeled, see DistanceCb.hlsli's SyntheticEpsilon
 	bool useSyntheticLabelVote = true; // B-node relabel method, see smoothnessJacobiSyntheticCS.hlsl's UseLabelVote: true = SyntheticVote8 over the 8 own A-corners, false = dumb binary flip (1-oldLabel), test-only, two-label case
 	bool allowBFlips = true; // false = a B-node whose potential goes negative just reflects it and keeps its label, like an A-node -- no relabel, no SyntheticEpsilon head-start, see smoothnessJacobiSyntheticCS.hlsl's AllowBFlips
 	float junctionWeight = 0.0f; // synthetic-field junction-straightness weight, see DistanceCb.hlsli's JunctionWeight
 	float eikonalWeight = 0.0f; // synthetic-field Eikonal-floor weight, see DistanceCb.hlsli's EikonalWeight
+	// Secondary "alien potential" pass (RunAlienPhase/RunAlienStep) -- see
+	// the approved plan. Purely a RENDER toggle now (DistanceCb
+	// .UseAlienPotential): whether the raymarch uses the 3-way (phi/beta/
+	// -phi) corner rule. Does NOT gate whether an alien step actually runs
+	// -- that's the 'J' key / "Alien Step" button (needsAlienStep),
+	// independent of this checkbox, so beta/discriminator can be stepped
+	// and inspected (Picked Tet panel) even with this off.
+	bool useAlienPotential = true;
+	int alienSweepCount = 1; // sweeps performed by ONE alien step (RunAlienStep), independent of jacobiSweepsPerRound
+	float alienJunctionWeight = 0.0f; // see DistanceCb.hlsli's AlienJunctionWeight -- 0 until dialed up, same convention as junctionWeight/eikonalWeight
+	float junctionFloorWeight = 0.0f; // see DistanceCb.hlsli's JunctionFloorWeight -- the anti-degeneracy floor term
+	// Tried and removed: alienPriorWeight/alienMaxDeviation, an arbitrary
+	// magnitude bound around -phi. The actual fix (beta<phi, a relative
+	// margin tied to each node's own phi) needs no tunable at all -- see
+	// smoothnessJacobiAlienCS.hlsl's final combine and the approved plan.
+
+	// Diagnostic "reference fit" (RunAlienRefStep, 'K' key) -- see the
+	// approved plan. Solves the SAME beta directly against
+	// TestShape_TiltedBoxJunction's known ground-truth plane
+	// (smoothnessJacobiAlienRefCS.hlsl), instead of the shipped Junction
+	// +Floor self-consistency objective -- isolates whether beta CAN
+	// represent a known-correct straight junction at all. Nonzero by
+	// default (unlike the shipped weights): this is a one-off diagnostic
+	// meant to be tried immediately, not an opt-in shipped feature.
+	bool needsAlienRefStep = false;
+	float refDirectionWeight = 1.0f; // see JunctionRefCb.hlsli's RefDirectionWeight
+	float refPositionWeight = 1.0f;  // see JunctionRefCb.hlsli's RefPositionWeight
 	float missingFallback = -3.0f; // TetFieldGrad's GetCornerPotential missing-candidate fallback, see DistanceCb.hlsli
 	float distanceWeight = 0.0f; // term 5 (distance/Eikonal shaping) weight, see DistanceCb.hlsli -- default 0, off until tuned
 	float divergencePullWeight = 0.0f; // term 6 weight: pulls a DIVERGENT A-node's own potential back toward NodeFootDist, see DistanceCb.hlsli -- default 0, off until tuned
@@ -295,6 +394,8 @@ protected:
 	uint pickedCornerIsConnecting[4] = {};     // NodeIsConnecting (A-nodes only; 0 for B corners), computeConnectingNodesCS
 	float pickedCornerFootDist[4] = {};        // NodeFootDist (A-nodes only; -1 for B corners), jfaFinalizeCS -- raw, unlike pot[]'s own/suppressed sign convention
 	uint pickedCornerFootSeed[4] = {};         // raw converged JFA seed node index (A-nodes only), the input jfaFinalizeCS turned into pickedCornerFootDist -- SENTINEL_LABEL or self-index here is the smoking gun for a JFA propagation bug
+	float pickedCornerAlienPot[4] = {};        // NodeAlienPotential (beta) -- alien-potential secondary pass only, see the approved plan
+	uint pickedCornerDiscriminator[4] = {};    // NodeDiscriminator (current byte0=enabled+routedLabel, scratch byte1 same layout) -- see EncodeDiscriminator/DecodeDiscriminator/PackDiscriminatorScratch
 
 	bool showNodes = false;
 	bool showSurface = false;
@@ -310,7 +411,8 @@ protected:
 	int sliceAxis = 2;             // 0=X, 1=Y, 2=Z
 	int sliceIndex = 10;           // grid index along sliceAxis, clamped to [0,GridRes-1] at draw time
 	float potentialColorScale = 1.0f; // potential/footdist value mapped to full channel brightness
-	int sliceDisplayMode = 0;      // 0 = potentials (label0/label1 heatmap), 1 = NodeFootDist (grayscale), 2 = synthetic-field volume (label-tinted), see footSlicePS.hlsl
+	int sliceDisplayMode = 0;      // 0 = potentials (label0/label1 heatmap), 1 = NodeFootDist (grayscale), 2 = synthetic-field volume (label-tinted), 3 = psi/beta/gamma chosen-label field (label-tinted), see footSlicePS.hlsl
+	int sliceChosenLabel = 0;      // DisplayMode==3 (GUI combo index 2) only -- which label's field CornerR3WayValue evaluates
 
 	// Debug: ray-marches the ray tet-by-tet through the BCC lattice's own tet
 	// decomposition (raymarchLatticeVS/PS.hlsl), using each tet's actual
@@ -371,6 +473,45 @@ protected:
 			torusCb.data.torii[0].majorRadius = 0.0f;
 			torusCb.data.torii[0].minorRadius = 0.0f;
 			torusCb.data.torii[0].label       = 1;
+			return;
+		}
+
+		if (testShapeKind == TestShape_TiltedBoxJunction) {
+			// Diagnostic scene, see the approved plan -- a single world-space
+			// plane, tilted deliberately so its intersection with the box's
+			// boundary isn't axis-aligned or a "nice" 45 degrees. nTorii=0,
+			// same as every non-torus/ellipsoid shape; the actual scene
+			// parameters live in junctionRefCb, read directly by
+			// rasterLabelCS.hlsl's ShapeKind==12 branch and by
+			// smoothnessJacobiAlienRefCS.hlsl's reference-fit residual.
+			torusCb.data.nTorii = 0;
+			junctionRefCb.data.PlaneNormal = float3(3.0f, 7.0f, 0.0f).Normalize();
+			junctionRefCb.data.PlanePoint = center;
+			junctionRefCb.data.BoxHalfExtent = 0.4f * halfExtent; // ~8 grid units at the default GridRes=22 -- comfortably inside the domain
+			return;
+		}
+
+		if (testShapeKind == TestShape_ClippedSpheres || testShapeKind == TestShape_ClippedSpheresZeroBeta) {
+			// Two same-size overlapping spheres, comfortably past the "just
+			// touching" threshold (offset well under 2*radius) so the
+			// radical-plane clip produces a genuinely large shared circle,
+			// not a sliver. Offset along a deliberately tilted direction
+			// (not a single grid axis) -- same reasoning as
+			// TestShape_TiltedBoxJunction's own plane tilt -- so the
+			// junction circle isn't axis-aligned or a "nice" 45 degrees,
+			// which would hide bugs that only show up off-axis. Same
+			// geometry for both shapes -- ZeroBeta only changes what
+			// buildAnalyticClippedSpheresCS.hlsl writes for beta, see
+			// RunTopologyBuild. See also ClippedSpheresCb.hlsli.
+			torusCb.data.nTorii = 0;
+			const float radius = 0.45f * halfExtent;
+			const float offset = 0.30f * halfExtent; // center-to-center distance = 2*offset = 0.6*halfExtent < radius+radius
+			float3 tiltDir = float3(3.0f, 7.0f, 1.0f).Normalize();
+			clippedSpheresCb.data.CenterA = center - tiltDir * offset;
+			clippedSpheresCb.data.RadiusA = radius;
+			clippedSpheresCb.data.CenterB = center + tiltDir * offset;
+			clippedSpheresCb.data.RadiusB = radius;
+			clippedSpheresCb.data.ClampDistance = clippedSpheresClampDistance;
 			return;
 		}
 
@@ -444,6 +585,9 @@ protected:
 		distanceCb.data.SyntheticEpsilon = syntheticEpsilon;
 		distanceCb.data.JunctionWeight = junctionWeight;
 		distanceCb.data.EikonalWeight = eikonalWeight;
+		distanceCb.data.AlienJunctionWeight = alienJunctionWeight;
+		distanceCb.data.JunctionFloorWeight = junctionFloorWeight;
+		distanceCb.data.UseAlienPotential = useAlienPotential ? 1.0f : 0.0f;
 		distanceCb.Upload();
 	}
 
@@ -611,6 +755,9 @@ protected:
 			nodePotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * MAX_CANDIDATES * sizeof(float), L"nodePotentialScratchBuffer");
 			nodeFrozenWinnerBuffer     = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeFrozenWinnerBuffer");
 			nodeCurrentVolumeBuffer    = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeCurrentVolumeBuffer");
+			nodeAlienPotentialBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeAlienPotentialBuffer");
+			nodeAlienPotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeAlienPotentialScratchBuffer");
+			nodeDiscriminatorBuffer         = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeDiscriminatorBuffer");
 		}
 		if (gridChanged || windowChanged) {
 			surfaceVertexBuffer = CreateRawUavBuffer(device.Get(), (UINT64)WindowTetCount * 6 * sizeof(float) * 8, L"surfaceVertexBuffer"); // pos(3)+normal(3)+labelI+labelJ, see DistanceSurface.hlsli
@@ -641,11 +788,42 @@ protected:
 	// changes across outer-loop rounds, so it only ever runs once per
 	// Reinitialize (never on Continue).
 	void RunTopologyBuild(com_ptr<ID3D12GraphicsCommandList>& cmd) {
+		if (testShapeKind == TestShape_ClippedSpheres || testShapeKind == TestShape_ClippedSpheresZeroBeta) {
+			// Analytic closed-form init -- see buildAnalyticClippedSpheresCS.hlsl.
+			// Replaces rasterLabelCS/the JFA pass/buildCandidatesCS/
+			// buildSyntheticBCS entirely for this one test shape: label, phi,
+			// beta AND discriminator are all known exactly from the 3 SDFs,
+			// no seeding/relaxation pass has anything to contribute.
+			cmd->SetComputeRootSignature(buildAnalyticClippedSpheresCS.rootSig.Get());
+			cmd->SetPipelineState(buildAnalyticClippedSpheresCS.pso.Get());
+			uint32_t zeroBeta = (testShapeKind == TestShape_ClippedSpheresZeroBeta) ? 1u : 0u;
+			cmd->SetComputeRoot32BitConstant(0, zeroBeta, 0);
+			cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(3, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(4, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(6, clippedSpheresCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "buildAnalyticClippedSpheresCS");
+			cmd->Dispatch(SmoothnessGroups, 1, 1); // NodeCount-based flat dispatch, one thread per node
+			{
+				D3D12_RESOURCE_BARRIER b[] = {
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeCandidateLabelBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeAlienPotentialBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeDiscriminatorBuffer.Get()),
+				};
+				cmd->ResourceBarrier(_countof(b), b);
+			}
+			return;
+		}
+
 		cmd->SetComputeRootSignature(rasterLabelCS.rootSig.Get());
 		cmd->SetPipelineState(rasterLabelCS.pso.Get());
 		cmd->SetComputeRootConstantBufferView(0, torusCb.GetGPUVirtualAddress());
 		cmd->SetComputeRootUnorderedAccessView(1, rasterLabelBuffer->GetGPUVirtualAddress());
 		cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(3, junctionRefCb.GetGPUVirtualAddress());
 		GpuCrashTracker::Mark(aftermathUploadContext, "rasterLabelCS");
 		cmd->Dispatch(RasterGroups, RasterGroups, RasterGroups);
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(rasterLabelBuffer.Get()));
@@ -846,18 +1024,45 @@ protected:
 				// candidate/authority-lacks-2-candidates case), so every tile
 				// always writes every one of its 16 targets every sweep --
 				// no reseed-before-sweep pass needed.
-				cmd->SetComputeRootSignature(smoothnessJacobiSyntheticCS.rootSig.Get());
-				cmd->SetPipelineState(smoothnessJacobiSyntheticCS.pso.Get());
+				//
+				// useSyntheticSimpleSmoothing swaps in the profiling-only
+				// smoothnessJacobiSyntheticSimpleCS.hlsl (one thread per
+				// target, no tile/groupshared/wave ops, Term-1-only) instead
+				// -- same root-signature SHAPE (CBV/UAV/UAV/UAV/RootConstants
+				// /CBV) and same scratch-buffer layout, so only the PSO/root
+				// sig and dispatch geometry change here.
+				if (useSyntheticSimpleSmoothing) {
+					cmd->SetComputeRootSignature(smoothnessJacobiSyntheticSimpleCS.rootSig.Get());
+					cmd->SetPipelineState(smoothnessJacobiSyntheticSimpleCS.pso.Get());
+				} else {
+					cmd->SetComputeRootSignature(smoothnessJacobiSyntheticCS.rootSig.Get());
+					cmd->SetPipelineState(smoothnessJacobiSyntheticCS.pso.Get());
+				}
 				cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
 				cmd->SetComputeRootUnorderedAccessView(3, nodePotentialScratchBuffer->GetGPUVirtualAddress());
-				cmd->SetComputeRoot32BitConstant(4, useSyntheticLabelVote ? 1u : 0u, 0);
-				cmd->SetComputeRoot32BitConstant(4, allowBFlips ? 1u : 0u, 1);
-				cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
-				GpuCrashTracker::Mark(aftermathUploadContext, "smoothnessJacobiSyntheticCS");
-				cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
-				cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()));
+				// Direct write (beta tracks -phi unconditionally, every
+				// sweep) -- see the write-site comment in
+				// smoothnessJacobiSyntheticCS.hlsl's final write section.
+				cmd->SetComputeRootUnorderedAccessView(4, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
+				cmd->SetComputeRoot32BitConstant(5, useSyntheticLabelVote ? 1u : 0u, 0);
+				cmd->SetComputeRoot32BitConstant(5, allowBFlips ? 1u : 0u, 1);
+				cmd->SetComputeRootConstantBufferView(6, distanceGridCb.GetGPUVirtualAddress());
+				if (useSyntheticSimpleSmoothing) {
+					GpuCrashTracker::Mark(aftermathUploadContext, "smoothnessJacobiSyntheticSimpleCS");
+					cmd->Dispatch(SmoothnessGroups, 1, 1); // NodeCount-based flat dispatch, one thread per target
+				} else {
+					GpuCrashTracker::Mark(aftermathUploadContext, "smoothnessJacobiSyntheticCS");
+					cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
+				}
+				{
+					D3D12_RESOURCE_BARRIER b[] = {
+						CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()),
+						CD3DX12_RESOURCE_BARRIER::UAV(nodeAlienPotentialBuffer.Get()),
+					};
+					cmd->ResourceBarrier(_countof(b), b);
+				}
 			} else {
 				cmd->SetComputeRootSignature(smoothnessJacobiCS.rootSig.Get());
 				cmd->SetPipelineState(smoothnessJacobiCS.pso.Get());
@@ -931,6 +1136,206 @@ protected:
 		for (int i = 0; i < n; i++) RunOneRound(cmd);
 	}
 
+	// Secondary "alien potential" post-process -- see the approved plan. A
+	// no-op unless useSyntheticField is on (Phase 2 only makes sense for
+	// the single-label/potential synthetic pipeline this whole design was
+	// derived against). No longer runs automatically from RunReinit/
+	// RunContinue -- Phase 1 smoothing and the alien step are now separate,
+	// manually-triggered actions (see RunAlienStep, the 'J' key). Gathering
+	// (fresh discriminator + beta reset to -phi) only happens when
+	// alienGatherPending is set -- i.e. the first alien step since the last
+	// Continue/Reinit -- so repeated steps keep refining the SAME persisted
+	// beta instead of restarting from scratch every time.
+	void RunAlienPhase(com_ptr<ID3D12GraphicsCommandList>& cmd) {
+		if (!useSyntheticField) return;
+
+		if (alienGatherPending) {
+			cmd->SetComputeRootSignature(gatherAlienDiscriminatorCS.rootSig.Get());
+			cmd->SetPipelineState(gatherAlienDiscriminatorCS.pso.Get());
+			cmd->SetComputeRootUnorderedAccessView(0, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(3, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "gatherAlienDiscriminatorCS");
+			cmd->Dispatch(SmoothnessGroups, 1, 1);
+			{
+				D3D12_RESOURCE_BARRIER b[] = {
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeDiscriminatorBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeAlienPotentialBuffer.Get()),
+				};
+				cmd->ResourceBarrier(_countof(b), b);
+			}
+			alienGatherPending = false;
+		}
+
+		int sweeps = alienSweepCount > 0 ? alienSweepCount : 0;
+		for (int s = 0; s < sweeps; s++) {
+			// Joint phi+beta Term-1 smoothing (see smoothnessJacobiAlienCS.hlsl) --
+			// now writes BOTH NodePotentialScratch (phi) and
+			// NodeAlienPotentialScratch (beta), so both commits below run
+			// every sweep (commitSyntheticCS.hlsl's label-byte copy is a
+			// harmless no-op here -- this shader never writes a scratch
+			// label, so byte1 stays whatever Phase 1 last committed, i.e.
+			// already equal to byte0).
+			cmd->SetComputeRootSignature(smoothnessJacobiAlienCS.rootSig.Get());
+			cmd->SetPipelineState(smoothnessJacobiAlienCS.pso.Get());
+			cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(3, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(4, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(5, nodeAlienPotentialScratchBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(6, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(7, distanceGridCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "smoothnessJacobiAlienCS");
+			cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
+			{
+				// nodeDiscriminatorBuffer and nodeCandidateLabelBuffer are now ALSO
+				// written here (discriminator scratch bits every target; label
+				// scratch byte on a B-node swap) -- live-topology redesign, see
+				// smoothnessJacobiAlienCS.hlsl. Barrier them too before the commits
+				// below read those scratch bits/byte back.
+				D3D12_RESOURCE_BARRIER b[] = {
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeAlienPotentialScratchBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialScratchBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeDiscriminatorBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeCandidateLabelBuffer.Get()),
+				};
+				cmd->ResourceBarrier(_countof(b), b);
+			}
+
+			cmd->SetComputeRootSignature(commitAlienCS.rootSig.Get());
+			cmd->SetPipelineState(commitAlienCS.pso.Get());
+			cmd->SetComputeRootUnorderedAccessView(0, nodeAlienPotentialScratchBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "commitAlienCS");
+			cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
+
+			// Reuses Phase 1's own commit shader for phi -- same scratch/
+			// current/label-byte layout, see the comment above.
+			cmd->SetComputeRootSignature(commitSyntheticCS.rootSig.Get());
+			cmd->SetPipelineState(commitSyntheticCS.pso.Get());
+			cmd->SetComputeRootUnorderedAccessView(0, nodePotentialScratchBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "commitSyntheticCS (alien phase)");
+			cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
+
+			{
+				D3D12_RESOURCE_BARRIER b[] = {
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeAlienPotentialBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeCandidateLabelBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeDiscriminatorBuffer.Get()),
+				};
+				cmd->ResourceBarrier(_countof(b), b);
+			}
+		}
+	}
+
+	// Manually-triggered alien-potential step ('J' key / "Alien Step"
+	// button, see BuildImGui/the WM_KEYDOWN handler) -- its own upload-
+	// command-list submit/fence-wait cycle, same shape as RunReinit/
+	// RunContinue, since it's no longer bundled into either of those.
+	void RunAlienStep() {
+		if (!useSyntheticField) return;
+
+		DX_API("reset upload allocator (alien step)") uploadAllocator->Reset();
+		DX_API("reset upload command list (alien step)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
+		auto& cmd = uploadCommandList;
+
+		RunAlienPhase(cmd);
+
+		DX_API("close upload command list (alien step)") cmd->Close();
+		ID3D12CommandList* lists[] = { cmd.Get() };
+		commandQueue->ExecuteCommandLists(1, lists);
+		uploadFence.signal(commandQueue, ++uploadFenceValue);
+		uploadFence.cpuWait();
+		CheckDeviceRemoved();
+	}
+
+	// Diagnostic reference-fit post-process -- see the approved plan. Solves
+	// the SAME beta/discriminator as RunAlienPhase (shares alienGatherPending
+	// -- it's the same underlying data, just a different objective driving
+	// it), but against smoothnessJacobiAlienRefCS.hlsl's ground-truth
+	// residual instead of the shipped Junction+Floor self-consistency check.
+	void RunAlienRefPhase(com_ptr<ID3D12GraphicsCommandList>& cmd) {
+		if (!useSyntheticField) return;
+
+		if (alienGatherPending) {
+			cmd->SetComputeRootSignature(gatherAlienDiscriminatorCS.rootSig.Get());
+			cmd->SetPipelineState(gatherAlienDiscriminatorCS.pso.Get());
+			cmd->SetComputeRootUnorderedAccessView(0, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(3, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "gatherAlienDiscriminatorCS");
+			cmd->Dispatch(SmoothnessGroups, 1, 1);
+			{
+				D3D12_RESOURCE_BARRIER b[] = {
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeDiscriminatorBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeAlienPotentialBuffer.Get()),
+				};
+				cmd->ResourceBarrier(_countof(b), b);
+			}
+			alienGatherPending = false;
+		}
+
+		junctionRefCb.data.RefDirectionWeight = refDirectionWeight;
+		junctionRefCb.data.RefPositionWeight = refPositionWeight;
+		junctionRefCb.Upload();
+
+		int sweeps = alienSweepCount > 0 ? alienSweepCount : 0;
+		for (int s = 0; s < sweeps; s++) {
+			cmd->SetComputeRootSignature(smoothnessJacobiAlienRefCS.rootSig.Get());
+			cmd->SetPipelineState(smoothnessJacobiAlienRefCS.pso.Get());
+			cmd->SetComputeRootConstantBufferView(0, distanceCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(3, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(4, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(5, nodeAlienPotentialScratchBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(6, junctionRefCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(7, distanceGridCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "smoothnessJacobiAlienRefCS");
+			cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
+			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeAlienPotentialScratchBuffer.Get()));
+
+			cmd->SetComputeRootSignature(commitAlienCS.rootSig.Get());
+			cmd->SetPipelineState(commitAlienCS.pso.Get());
+			cmd->SetComputeRootUnorderedAccessView(0, nodeAlienPotentialScratchBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(1, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "commitAlienCS");
+			cmd->Dispatch(BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis, BlockSmoothingTilesPerAxis);
+			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeAlienPotentialBuffer.Get()));
+		}
+	}
+
+	// Manually-triggered reference-fit step ('K' key / "Reference Fit Step"
+	// button) -- same shape as RunAlienStep.
+	void RunAlienRefStep() {
+		if (!useSyntheticField) return;
+
+		DX_API("reset upload allocator (alien ref step)") uploadAllocator->Reset();
+		DX_API("reset upload command list (alien ref step)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
+		auto& cmd = uploadCommandList;
+
+		RunAlienRefPhase(cmd);
+
+		DX_API("close upload command list (alien ref step)") cmd->Close();
+		ID3D12CommandList* lists[] = { cmd.Get() };
+		commandQueue->ExecuteCommandLists(1, lists);
+		uploadFence.signal(commandQueue, ++uploadFenceValue);
+		uploadFence.cpuWait();
+		CheckDeviceRemoved();
+	}
+
 	// Render-only: marching-tetrahedra surface extraction over the current
 	// (converged) potentials -- run once after the solve settles, not per
 	// Jacobi sweep, and re-run whenever the solve state actually changes
@@ -978,6 +1383,8 @@ protected:
 		EnsureGridBuffersSized(); // must run before BuildShapeList (uses GridRes) and before any buffer is touched
 		BuildShapeList();
 		torusCb.Upload();
+		junctionRefCb.Upload();
+		clippedSpheresCb.Upload();
 		UploadDistanceCb();
 
 		DX_API("reset upload allocator") uploadAllocator->Reset();
@@ -986,6 +1393,12 @@ protected:
 
 		RunTopologyBuild(cmd);
 		RunRounds(cmd, iterations);
+		// TestShape_ClippedSpheres/ClippedSpheresZeroBeta already have an
+		// exact discriminator/beta from buildAnalyticClippedSpheresCS -- a
+		// stray Alien Step's gather would overwrite them with its own
+		// general heuristic, so leave gather pending false there; every
+		// other shape is unchanged.
+		alienGatherPending = !(testShapeKind == TestShape_ClippedSpheres || testShapeKind == TestShape_ClippedSpheresZeroBeta);
 		RunExtractSurface(cmd);
 
 		DX_API("close upload command list") cmd->Close();
@@ -1008,6 +1421,7 @@ protected:
 		auto& cmd = uploadCommandList;
 
 		RunRounds(cmd, continueIterations);
+		alienGatherPending = true; // fresh labels/phi -- any prior alien-step result is now stale, see RunAlienStep
 		RunExtractSurface(cmd);
 
 		DX_API("close upload command list") cmd->Close();
@@ -1326,6 +1740,13 @@ protected:
 		com_ptr<ID3D12Resource> rbConnecting = CreateReadbackBuffer(device.Get(), connectingBytes);
 		com_ptr<ID3D12Resource> rbFootDist = CreateReadbackBuffer(device.Get(), footDistBytes);
 		com_ptr<ID3D12Resource> rbFootSeed = CreateReadbackBuffer(device.Get(), footSeedBytes);
+		// Alien-potential secondary pass (see the approved plan) -- always
+		// read back (cheap, NodeCount-sized like nodeFloatBytes/connectingBytes
+		// already are), even if useAlienPotential is off, so the Picked Tet
+		// panel can show beta's "-phi default" state too, not just whatever
+		// Phase 2 tuned it to.
+		com_ptr<ID3D12Resource> rbAlienPot = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
+		com_ptr<ID3D12Resource> rbDiscrim = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
 
 		DX_API("reset upload allocator (pick diag)") uploadAllocator->Reset();
 		DX_API("reset upload command list (pick diag)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
@@ -1341,6 +1762,8 @@ protected:
 		cmd->CopyBufferRegion(rbConnecting.Get(), 0, nodeIsConnectingBuffer.Get(), 0, connectingBytes);
 		cmd->CopyBufferRegion(rbFootDist.Get(), 0, nodeFootDistBuffer.Get(), 0, footDistBytes);
 		cmd->CopyBufferRegion(rbFootSeed.Get(), 0, (jfaFinalIsBufferA ? jfaSeedBufferA : jfaSeedBufferB).Get(), 0, footSeedBytes);
+		cmd->CopyBufferRegion(rbAlienPot.Get(), 0, nodeAlienPotentialBuffer.Get(), 0, nodeFloatBytes);
+		cmd->CopyBufferRegion(rbDiscrim.Get(), 0, nodeDiscriminatorBuffer.Get(), 0, nodeFloatBytes);
 		DX_API("close upload command list (pick diag)") cmd->Close();
 		{
 			ID3D12CommandList* lists[] = { cmd.Get() };
@@ -1356,12 +1779,16 @@ protected:
 		UINT* connecting = nullptr;
 		float* footDist = nullptr;
 		UINT* footSeed = nullptr;
+		float* alienPot = nullptr;
+		UINT* discrim = nullptr;
 		rbCand->Map(0, nullptr, (void**)&cand);
 		rbPot->Map(0, nullptr, (void**)&pot);
 		rbVol->Map(0, nullptr, (void**)&vol);
 		rbConnecting->Map(0, nullptr, (void**)&connecting);
 		rbFootDist->Map(0, nullptr, (void**)&footDist);
 		rbFootSeed->Map(0, nullptr, (void**)&footSeed);
+		rbAlienPot->Map(0, nullptr, (void**)&alienPot);
+		rbDiscrim->Map(0, nullptr, (void**)&discrim);
 
 		for (uint c = 0; c < 4; c++) {
 			uint node = pickedTetNodes[c];
@@ -1380,6 +1807,8 @@ protected:
 				pickedCornerIsConnecting[c] = 0;
 				pickedCornerFootDist[c] = -1.0f;
 				pickedCornerFootSeed[c] = SENTINEL_LABEL;
+				pickedCornerAlienPot[c] = -1.0f; // matches CornerLabelPotAlien's virtual-corner convention (raymarchLatticePS.hlsl)
+				pickedCornerDiscriminator[c] = 0;
 				continue;
 			}
 			for (uint s = 0; s < MAX_CANDIDATES; s++) {
@@ -1404,6 +1833,8 @@ protected:
 			pickedCornerIsConnecting[c] = (node < ACount) ? connecting[node] : 0;
 			pickedCornerFootDist[c] = (node < ACount) ? footDist[node] : -1.0f;
 			pickedCornerFootSeed[c] = (node < ACount) ? footSeed[node] : SENTINEL_LABEL;
+			pickedCornerAlienPot[c] = alienPot[node];
+			pickedCornerDiscriminator[c] = discrim[node];
 		}
 
 		// Independent per-tet dominant pair -- same frequency-vote rule as
@@ -1448,6 +1879,8 @@ protected:
 		rbPot->Unmap(0, nullptr);
 		rbVol->Unmap(0, nullptr);
 		rbConnecting->Unmap(0, nullptr);
+		rbAlienPot->Unmap(0, nullptr);
+		rbDiscrim->Unmap(0, nullptr);
 	}
 
 	void BuildImGui() {
@@ -1459,7 +1892,8 @@ protected:
 		ImGui::Begin("g-Distance Controls");
 		static const char* testShapeItems[] = {
 			"3 Tori (multi-label)", "Ellipsoid", "Single Point", "Line", "Diagonal Line 2D", "Diagonal Line 3D", "Slab", "Single Torus (2-label)", "2x2x2 Box",
-			"Tree (ported)", "Marschner-Lobb (ported)", "Marschner-Lobb multi-label (ported)"
+			"Tree (ported)", "Marschner-Lobb (ported)", "Marschner-Lobb multi-label (ported)", "Tilted Box Junction (diagnostic)",
+			"Clipped Spheres (analytic, diagnostic)", "Clipped Spheres, beta=0 (control, diagnostic)"
 		};
 		ImGui::Combo("Test Shape", &testShapeKind, testShapeItems, IM_ARRAYSIZE(testShapeItems));
 		if (testShapeKind >= TestShape_Tree) {
@@ -1470,6 +1904,11 @@ protected:
 				ImGui::TextDisabled("(Voronoi cells filling the iso-shell -- matches the Vulkan renderer's \"LM multi-material count\")");
 			}
 			ImGui::TextDisabled("(ported scenes are defined on the normalized grid domain, so they need a fairly high Grid Resolution to resolve -- especially Marschner-Lobb's high-frequency shell and Tree's thinnest twigs)");
+		}
+		if (testShapeKind == TestShape_ClippedSpheres || testShapeKind == TestShape_ClippedSpheresZeroBeta) {
+			ImGui::SliderFloat("Clamp Distance", &clippedSpheresClampDistance, 0.1f, 20.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(each of the 3 SDFs is clamped to +-this before biasing -- \"out\" is otherwise unbounded far from both spheres. Reinit param.)");
 		}
 		ImGui::SliderInt("Grid Resolution", &gridResSetting, 4, 256, "%d", ImGuiSliderFlags_Logarithmic);
 		ImGui::SameLine();
@@ -1547,8 +1986,14 @@ protected:
 			static const char* axisItems[] = { "X", "Y", "Z" };
 			ImGui::Combo("Slice Axis", &sliceAxis, axisItems, 3);
 			ImGui::SliderInt("Slice Index", &sliceIndex, 0, (int)GridRes - 1);
-			static const char* sliceDisplayItems[] = { "Potentials", "FootDist" };
-			ImGui::Combo("Slice Display", &sliceDisplayMode, sliceDisplayItems, 2);
+			static const char* sliceDisplayItems[] = { "Potentials", "FootDist", "Psi/Beta/Gamma Field" };
+			ImGui::Combo("Slice Display", &sliceDisplayMode, sliceDisplayItems, 3);
+			if (sliceDisplayMode == 2) {
+				ImGui::SliderInt("Field Label", &sliceChosenLabel, 0, 15);
+				ImGui::SameLine();
+				if (useSyntheticField) ImGui::TextDisabled("(psi=own label, beta=routed label, gamma=else -- CornerR3WayValue for this label)");
+				else ImGui::TextDisabled("(synthetic field only -- enable 'Use Synthetic Field')");
+			}
 			ImGui::SliderFloat("Potential Color Scale", &potentialColorScale, 0.05f, 5.0f);
 		}
 
@@ -1597,9 +2042,10 @@ protected:
 						// like smoothing has no effect there. Show the
 						// corner's own (label, potential) directly instead --
 						// always present, no dominant-pair routing needed.
-						ImGui::Text("  Corner %u (node %u, %s): label=%u  potential=%.6f",
+						ImGui::Text("  Corner %u (node %u, %s): label=%u  potential=%.6f  beta=%.6f  discrim=0x%02X",
 							c, node, (node < ACount) ? "A" : "B",
-							pickedCornerLabels[c][0], pickedCornerPots[c][0]);
+							pickedCornerLabels[c][0], pickedCornerPots[c][0],
+							pickedCornerAlienPot[c], pickedCornerDiscriminator[c]);
 					} else {
 						ImGui::Text("  Corner %u (node %u, %s, label %u): phi_i=%s%.4f  phi_j=%s%.4f",
 							c, node, (node < ACount) ? "A" : "B", topLabel[c],
@@ -1664,10 +2110,11 @@ protected:
 						// the tet-wide dominant PAIR and would silently show
 						// nothing for a corner carrying a 3rd/4th label.
 						if (useSyntheticField) {
-							sprintf_s(line, sizeof(line), "Corner %u (node %u, %s): label=%u  potential=%.6f\r\n"
+							sprintf_s(line, sizeof(line), "Corner %u (node %u, %s): label=%u  potential=%.6f  beta=%.6f  discrim=0x%02X\r\n"
 								"    Volume=%s  NodeFootDist(raw)=%s\r\n",
 								c, node, (node < ACount) ? "A" : "B",
 								pickedCornerLabels[c][0], pickedCornerPots[c][0],
+								pickedCornerAlienPot[c], pickedCornerDiscriminator[c],
 								volumeStr,
 								footDistStr);
 						} else {
@@ -1698,6 +2145,9 @@ protected:
 			ImGui::SameLine();
 			ImGui::TextDisabled("(single label+potential per node, 27-tap signed-kernel competition, see smoothnessJacobiSyntheticCS.hlsl -- applied on Reinitialize)");
 			if (useSyntheticField) {
+				ImGui::Checkbox("Synthetic: Simple Smoothing (profiling)", &useSyntheticSimpleSmoothing);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(one thread per target, no tile/shared mem/wave ops, Term-1-only -- see smoothnessJacobiSyntheticSimpleCS.hlsl)");
 				ImGui::SliderFloat("Synthetic Epsilon", &syntheticEpsilon, 0.00001f, 1.0f, "%.5f", ImGuiSliderFlags_Logarithmic);
 				ImGui::SameLine();
 				ImGui::TextDisabled("(head-start potential for a freshly relabeled B-node, see DistanceCb.hlsli)");
@@ -1715,6 +2165,49 @@ protected:
 				ImGui::SliderFloat("Synthetic: Eikonal Weight", &eikonalWeight, 0.0f, 20.0f);
 				ImGui::SameLine();
 				ImGui::TextDisabled("(0 = off; floors |grad(confidence field)| toward 1 to keep potentials from collapsing flat -- otherwise trivially satisfies Junction Straightness, see DistanceCb.hlsli's EikonalWeight)");
+
+				ImGui::Separator();
+				ImGui::TextDisabled("Alien Potential (Phase 2, experimental, manually stepped -- see the approved plan)");
+				ImGui::SliderInt("Alien: Sweep Count", &alienSweepCount, 0, 32);
+				ImGui::TextDisabled("(sweeps performed by ONE Alien Step press)");
+				ImGui::SliderFloat("Alien: Junction Weight", &alienJunctionWeight, 0.0f, 20.0f);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(same cross(Ta,Tb) objective as Junction Straightness, solved for beta only)");
+				ImGui::SliderFloat("Alien: Floor Weight", &junctionFloorWeight, 0.0f, 20.0f);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(0 = off; without this, cross(Ta,Tb)=0 is trivially satisfied by |T|->0)");
+				ImGui::TextDisabled("(beta is hard-bounded below phi at every node -- no separate tunable, see smoothnessJacobiAlienCS.hlsl)");
+				if (ImGui::Button("Alien Step")) needsAlienStep = true;
+				ImGui::SameLine();
+				ImGui::TextDisabled("('J' key)");
+				ImGui::SameLine();
+				ImGui::TextDisabled(alienGatherPending ? "(next step re-gathers: fresh discriminator, beta reset to -phi)" : "(next step continues refining the persisted beta)");
+				if (ImGui::Checkbox("Synthetic: Show Alien Potential In Render", &useAlienPotential)) {
+					// Purely a render toggle -- but DistanceCb (and hence its
+					// UseAlienPotential field the raymarch actually reads)
+					// otherwise only gets re-uploaded by Continue/Reinit/
+					// Alien Step. Without this, the checkbox silently has NO
+					// effect until one of those runs -- confirmed directly:
+					// bit-identical render output on a tet with meaningfully
+					// different beta values, on a scene that (by design)
+					// never calls any of those three.
+					UploadDistanceCb();
+				}
+				ImGui::SameLine();
+				ImGui::TextDisabled("(3-way corner rule (phi/beta/-phi-beta) in the raymarch -- purely a render toggle now, does not gate stepping)");
+
+				ImGui::Separator();
+				ImGui::TextDisabled("Diagnostic: Reference Junction Fit (see the approved plan)");
+				ImGui::TextDisabled("(solves the SAME beta directly against Tilted Box Junction's known ground-truth plane, bypassing Junction/Floor entirely -- use to check whether beta CAN represent a straight junction at all)");
+				ImGui::SliderFloat("Ref: Direction Weight", &refDirectionWeight, 0.0f, 20.0f);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(wants the current interface gradient parallel to the true plane normal)");
+				ImGui::SliderFloat("Ref: Position Weight", &refPositionWeight, 0.0f, 20.0f);
+				ImGui::SameLine();
+				ImGui::TextDisabled("(wants the current interface to pass through the true plane's known point)");
+				if (ImGui::Button("Reference Fit Step")) needsAlienRefStep = true;
+				ImGui::SameLine();
+				ImGui::TextDisabled("('K' key -- shares Alien Step's persisted beta/gather state)");
 			}
 			ImGui::Checkbox("Term 1: Edge-Walk Traversal", &useEdgeWalkTraversal);
 			ImGui::SameLine();
@@ -1811,6 +2304,8 @@ public:
 		distanceGridCb.CreateResources(device.Get());
 		torusCb.CreateResources(device.Get());
 		pickedTetCb.CreateResources(device.Get());
+		junctionRefCb.CreateResources(device.Get());
+		clippedSpheresCb.CreateResources(device.Get());
 
 		D3D12_DESCRIPTOR_HEAP_DESC imguiHeapDesc = {};
 		imguiHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -1837,6 +2332,12 @@ public:
 		smoothnessJacobiCS.createResources(device, "Shaders/smoothnessJacobiCS.cso");
 		smoothnessJacobiBlockCS.createResources(device, "Shaders/smoothnessJacobiBlockCS.cso");
 		smoothnessJacobiSyntheticCS.createResources(device, "Shaders/smoothnessJacobiSyntheticCS.cso");
+		smoothnessJacobiSyntheticSimpleCS.createResources(device, "Shaders/smoothnessJacobiSyntheticSimpleCS.cso");
+		gatherAlienDiscriminatorCS.createResources(device, "Shaders/gatherAlienDiscriminatorCS.cso");
+		smoothnessJacobiAlienCS.createResources(device, "Shaders/smoothnessJacobiAlienCS.cso");
+		smoothnessJacobiAlienRefCS.createResources(device, "Shaders/smoothnessJacobiAlienRefCS.cso");
+		buildAnalyticClippedSpheresCS.createResources(device, "Shaders/buildAnalyticClippedSpheresCS.cso");
+		commitAlienCS.createResources(device, "Shaders/commitAlienCS.cso");
 		commitPotentialCS.createResources(device, "Shaders/commitPotentialCS.cso");
 		commitPotentialBlockCS.createResources(device, "Shaders/commitPotentialBlockCS.cso");
 		commitSyntheticCS.createResources(device, "Shaders/commitSyntheticCS.cso");
@@ -2067,6 +2568,8 @@ public:
 
 		BuildShapeList();
 		torusCb.Upload();
+		junctionRefCb.Upload();
+		clippedSpheresCb.Upload();
 
 		camera = Egg::Cam::FirstPerson::Create();
 		camera->SetProj(0.9f, aspectRatio, 0.1f, MaxMarchDist);
@@ -2077,6 +2580,7 @@ public:
 		camera->SetView(eye, (center - eye).Normalize());
 
 		RunReinit();
+
 	}
 
 	virtual void Render() override {
@@ -2087,6 +2591,14 @@ public:
 			RunContinue();
 			needsContinue = false;
 			if (pickedTetValid) ReadBackPickedTetDiagnostics(); // keep the Picked Tet panel current, not a stale snapshot from before this Continue
+		} else if (needsAlienStep) {
+			RunAlienStep();
+			needsAlienStep = false;
+			if (pickedTetValid) ReadBackPickedTetDiagnostics(); // keep the Picked Tet panel's beta/discriminator current
+		} else if (needsAlienRefStep) {
+			RunAlienRefStep();
+			needsAlienRefStep = false;
+			if (pickedTetValid) ReadBackPickedTetDiagnostics();
 		}
 
 		PopulateCommandList();
@@ -2162,19 +2674,23 @@ public:
 			commandList->SetGraphicsRootSignature(footSliceRootSig.Get());
 			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
 			int clampedSliceIndex = sliceIndex < 0 ? 0 : (sliceIndex > (int)GridRes - 1 ? (int)GridRes - 1 : sliceIndex);
-			// footSlicePS.hlsl's DisplayMode: 2 = synthetic-field "Potentials"
-			// -- the combo only offers Potentials(0)/FootDist(1), so remap
-			// 0->2 when the synthetic pipeline is active (FootDist needs no
-			// remap, it means the same thing in both modes).
-			uint32_t effectiveDisplayMode = (sliceDisplayMode == 0) ? (useSyntheticField ? 2u : 0u) : (uint32_t)sliceDisplayMode;
-			struct { uint32_t axis; float coord; float colorScale; uint32_t displayMode; } sliceConsts = {
-				(uint32_t)sliceAxis, (float)clampedSliceIndex * CellSize, potentialColorScale, effectiveDisplayMode
+			// footSlicePS.hlsl's DisplayMode: 2 = synthetic-field "Potentials",
+			// 3 = psi/beta/gamma chosen-label field -- the combo only offers
+			// Potentials(0)/FootDist(1)/PsiBetaGamma(2), so remap 0->2 when the
+			// synthetic pipeline is active (FootDist needs no remap, it means
+			// the same thing in both modes) and 2->3 always.
+			uint32_t effectiveDisplayMode = (sliceDisplayMode == 0) ? (useSyntheticField ? 2u : 0u)
+				: (sliceDisplayMode == 2) ? 3u : (uint32_t)sliceDisplayMode;
+			struct { uint32_t axis; float coord; float colorScale; uint32_t displayMode; uint32_t chosenLabel; } sliceConsts = {
+				(uint32_t)sliceAxis, (float)clampedSliceIndex * CellSize, potentialColorScale, effectiveDisplayMode, (uint32_t)sliceChosenLabel
 			};
-			commandList->SetGraphicsRoot32BitConstants(1, 4, &sliceConsts, 0);
+			commandList->SetGraphicsRoot32BitConstants(1, 5, &sliceConsts, 0);
 			commandList->SetGraphicsRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(3, nodePotentialBuffer->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(4, nodeFootDistBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+			commandList->SetGraphicsRootUnorderedAccessView(5, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootUnorderedAccessView(6, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(7, distanceGridCb.GetGPUVirtualAddress());
 			commandList->SetPipelineState(footSlicePso.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced(3, 1, 0, 0);
@@ -2185,7 +2701,10 @@ public:
 			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+			commandList->SetGraphicsRootUnorderedAccessView(3, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootUnorderedAccessView(4, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(6, distanceCb.GetGPUVirtualAddress());
 			commandList->SetPipelineState(raymarchLatticePso.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced(3, 1, 0, 0);
@@ -2251,6 +2770,10 @@ public:
 				needsReinit = true;
 			} else if (wParam == 'C' && dataValid) {
 				needsContinue = true;
+			} else if (wParam == 'J' && dataValid && useSyntheticField) {
+				needsAlienStep = true;
+			} else if (wParam == 'K' && dataValid && useSyntheticField) {
+				needsAlienRefStep = true;
 			} else if (wParam >= '1' && wParam <= '9') {
 				int digit = (int)(wParam - '0');
 				iterations = digit;
@@ -2269,6 +2792,8 @@ public:
 		distanceGridCb.ReleaseResources();
 		torusCb.ReleaseResources();
 		pickedTetCb.ReleaseResources();
+		junctionRefCb.ReleaseResources();
+		clippedSpheresCb.ReleaseResources();
 		rasterLabelBuffer.Reset();
 		nodeIsConnectingBuffer.Reset();
 		nodeCandidateLabelBuffer.Reset();

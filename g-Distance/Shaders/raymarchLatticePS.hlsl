@@ -1,6 +1,8 @@
 #include "DistanceFrameCb.hlsli"
 #define DISTANCE_GRID_CB_REGISTER b1
 #include "DistanceLattice.hlsli"
+#define DISTANCE_CB_REGISTER b2
+#include "DistanceCb.hlsli"
 #include "LabelPalette.hlsli"
 
 // Junction-aware lattice raymarch: walks the ray tet-by-tet through the BCC
@@ -33,6 +35,9 @@
 
 RWStructuredBuffer<uint>  NodeCandidateLabel : register(u0);
 RWStructuredBuffer<float> NodePotential : register(u1);
+// Alien-potential secondary pass (see the approved plan) -- read-only here.
+RWStructuredBuffer<float> NodeAlienPotential : register(u2);
+RWStructuredBuffer<uint>  NodeDiscriminator : register(u3);
 
 struct VsOut {
     float4 pos    : SV_POSITION;
@@ -45,15 +50,35 @@ struct PsOut {
 };
 
 // Synthetic-field corner lookup -- mirrors extractSurfaceSyntheticCS.hlsl's
-// SyntheticCornerLabel, generalized to also return the potential in one call
-// since every caller here needs both. Virtual/out-of-grid corners are a
-// fixed background node (label 0, potential 1.0), same convention as
-// GetCornerTopLabel.
-void CornerLabelPot(uint cornerRef, out uint label, out float pot)
+// SyntheticCornerLabel, generalized to also return the potential, beta, and
+// discriminator in one call since every caller here needs all four.
+// Virtual/out-of-grid corners are a fixed background node (label 0,
+// potential 1.0, beta -1.0/discriminator disabled -- irrelevant, since a
+// virtual corner's label 0 can never be queried as a genuinely competing
+// "other" label here), same convention as GetCornerTopLabel.
+void CornerLabelPotAlien(uint cornerRef, out uint label, out float pot, out float beta, out uint discrim)
 {
-    if (cornerRef == SENTINEL_LABEL) { label = 0u; pot = 1.0; return; }
+    if (cornerRef == SENTINEL_LABEL) { label = 0u; pot = 1.0; beta = -1.0; discrim = 0u; return; }
     label = GetCandidateLabelAt(NodeCandidateLabel, cornerRef, 0u);
     pot = NodePotential[cornerRef * MAX_CANDIDATES + 0u];
+    beta = NodeAlienPotential[cornerRef];
+    discrim = NodeDiscriminator[cornerRef];
+}
+
+// The corner-value rule for query label ell: own label -> pot; alien route
+// (only when UseAlienPotential is on -- see DistanceCb.hlsli) -> beta;
+// otherwise -> the reciprocal-derived value (or -pot if disabled). Degenerates
+// to byte-identical output to before the alien-potential pass existed
+// whenever UseAlienPotential<=0.5, regardless of what beta/discrim actually
+// hold. The actual 3-way rule (own/routed/disabled/reciprocal) is
+// DistanceLattice.hlsli's CornerR3WayValue -- shared with footSlicePS.hlsl's
+// "chosen-label field" debug slice, this just layers the render toggle on
+// top of it.
+float CornerR(uint label, float pot, float beta, uint discrim, uint queryLabel)
+{
+    if (UseAlienPotential > 0.5) return CornerR3WayValue(label, pot, beta, discrim, queryLabel);
+    if (label == queryLabel) return pot;
+    return -pot;
 }
 
 // q-space forward map (bccToRhombo's linear part -- see NodeQ), applied here
@@ -130,10 +155,10 @@ PsOut raymarchLatticePS(VsOut input)
         }
         if (bestExit < 0) break; // degenerate (ray exits exactly along an edge/vertex) -- bail out rather than loop forever
 
-        uint cornerLabel[4]; float cornerPot[4]; uint cornerRef[4];
+        uint cornerLabel[4]; float cornerPot[4]; float cornerBeta[4]; uint cornerDiscrim[4]; uint cornerRef[4];
         for (uint c2 = 0; c2 < 4; c2++) {
             cornerRef[c2] = ResolveCorner(qArr[c2]);
-            CornerLabelPot(cornerRef[c2], cornerLabel[c2], cornerPot[c2]);
+            CornerLabelPotAlien(cornerRef[c2], cornerLabel[c2], cornerPot[c2], cornerBeta[c2], cornerDiscrim[c2]);
         }
 
         bool homo = (cornerLabel[0] == cornerLabel[1]) && (cornerLabel[0] == cornerLabel[2]) && (cornerLabel[0] == cornerLabel[3]);
@@ -171,7 +196,7 @@ PsOut raymarchLatticePS(VsOut input)
             float lineBase[4], lineSlope[4];
             for (uint u2 = 0; u2 < nDistinct; u2++) {
                 float G[4];
-                for (uint c5 = 0; c5 < 4; c5++) G[c5] = cornerPot[c5] * ((cornerLabel[c5] == distinctLabels[u2]) ? 1.0 : -1.0);
+                for (uint c5 = 0; c5 < 4; c5++) G[c5] = CornerR(cornerLabel[c5], cornerPot[c5], cornerBeta[c5], cornerDiscrim[c5], distinctLabels[u2]);
                 float3 gradG = G[0] * wArr[0] + G[1] * wArr[1] + G[2] * wArr[2] + G[3] * wArr[3];
                 lineBase[u2] = G[0] + dot(ro - Pw[0], gradG);
                 lineSlope[u2] = dot(rd, gradG);
@@ -207,8 +232,8 @@ PsOut raymarchLatticePS(VsOut input)
                 // matters for shading).
                 float gDiff[4];
                 for (uint c6 = 0; c6 < 4; c6++) {
-                    float gW = cornerPot[c6] * ((cornerLabel[c6] == distinctLabels[winner]) ? 1.0 : -1.0);
-                    float gO = cornerPot[c6] * ((cornerLabel[c6] == distinctLabels[crossWinner]) ? 1.0 : -1.0);
+                    float gW = CornerR(cornerLabel[c6], cornerPot[c6], cornerBeta[c6], cornerDiscrim[c6], distinctLabels[winner]);
+                    float gO = CornerR(cornerLabel[c6], cornerPot[c6], cornerBeta[c6], cornerDiscrim[c6], distinctLabels[crossWinner]);
                     gDiff[c6] = gO - gW;
                 }
                 float3 gradN = gDiff[0] * wArr[0] + gDiff[1] * wArr[1] + gDiff[2] * wArr[2] + gDiff[3] * wArr[3];

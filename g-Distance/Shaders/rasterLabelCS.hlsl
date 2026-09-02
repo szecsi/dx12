@@ -1,6 +1,8 @@
 #include "TorusListCb.hlsli"
 #include "TorusSdf.hlsli"
 #include "SyntheticScenes.hlsli"
+#define JUNCTION_REF_CB_REGISTER b2
+#include "JunctionRefCb.hlsli"
 #define DISTANCE_GRID_CB_REGISTER b0
 #include "DistanceLattice.hlsli"
 
@@ -48,10 +50,20 @@
 //  11 MarschnerLobbMulti: same iso-shell, interior partitioned into
 //                      SceneMaterialCount Voronoi materials -- the multi-label
 //                      counterpart, with genuine interior junctions.
+//  12 TiltedBoxJunction: a single world-space plane (JunctionRefCb's
+//                      PlaneNormal/PlanePoint), evaluated only inside a cube
+//                      of half-extent BoxHalfExtent -- label 1/2 by plane
+//                      side inside the cube, background outside. A single
+//                      global plane (not a box-splitting construction with
+//                      several boundary segments) so the SAME ground truth
+//                      applies everywhere the 3-label junction could appear
+//                      -- see smoothnessJacobiAlienRefCS.hlsl, the diagnostic
+//                      reference-fit solve this scene exists to feed.
 #define RasterSig "RootFlags(0)," \
     "CBV(b1)," \
     "UAV(u0)," \
-    "CBV(b0)"
+    "CBV(b0)," \
+    "CBV(b2)"
 
 RWStructuredBuffer<uint> RasterLabel : register(u0);
 
@@ -70,6 +82,12 @@ void rasterLabelCS(uint3 tid : SV_DispatchThreadID)
         for (uint i = 0; i < nTorii; i++) {
             if (ShapeSd(pos, torii[i]) <= 0.0)
                 label = torii[i].label;
+        }
+    } else if (ShapeKind == 12) {
+        float3 pos = APos((int3)tid);
+        float3 rel = pos - PlanePoint;
+        if (all(abs(rel) <= BoxHalfExtent)) {
+            label = (dot(rel, PlaneNormal) >= 0.0) ? 1u : 2u;
         }
     } else if (ShapeKind >= 9) {
         // Ported Vulkan scenes: normalized domain + guaranteed background

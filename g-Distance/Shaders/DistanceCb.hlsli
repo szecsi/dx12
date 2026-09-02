@@ -9,22 +9,30 @@ using namespace Egg::Math;
 #endif
 
 // Per-run tunables for the combinatorics/Jacobi solve loop -- one shared
-// cbuffer, always bound at b0 for every compute pass that needs it (same
-// "single tunables cbuffer" convention g-BCC/g-Aequor used).
+// cbuffer, bound at b0 for every compute pass that needs it (same "single
+// tunables cbuffer" convention g-BCC/g-Aequor used), EXCEPT raymarchLatticePS
+// .hlsl, which already occupies b0/b1 for its own CBV/UAV bindings and needs
+// this one at a free slot instead -- register is therefore configurable per-
+// file, same DISTANCE_GRID_CB_REGISTER indirection pattern
+// DistanceGridCb.hlsli already uses: #define DISTANCE_CB_REGISTER bN BEFORE
+// including this file to override; falls back to b0 if unset.
 //
-// Laid out as 2 explicit 4-field (16-byte) rows -- no automatic HLSL cbuffer
+// Laid out as explicit 4-field (16-byte) rows -- no automatic HLSL cbuffer
 // packing relied on, since the C++ struct view has to match byte-for-byte.
 
 #ifndef __HLSL_VERSION
 _DIST_ALIGN2 struct
 #else
+#ifndef DISTANCE_CB_REGISTER
+#define DISTANCE_CB_REGISTER b0
+#endif
 cbuffer
 #endif
 
 DistanceCb
 
 #ifdef __HLSL_VERSION
-: register(b0)
+: register(DISTANCE_CB_REGISTER)
 #endif
 {
     // Row 0 -- smoothness (energy term 1) + margin hinge (term 2)
@@ -124,7 +132,43 @@ DistanceCb
     // slot (was _pad4b).
     float EikonalWeight;
     float _pad4c;
+    // Tried and removed: a hard clamp on |beta-(-phi)| (AlienMaxDeviation)
+    // and a soft Tikhonov pull toward -phi (AlienPriorWeight, Row 5) --
+    // both bounded the WRONG quantity (an arbitrary magnitude band) instead
+    // of the actual invariant that prevents rendering holes (beta must
+    // stay strictly below phi at every node -- see smoothnessJacobiAlienCS
+    // .hlsl's final combine, now a fixed relative-margin bound with no
+    // separate weight needed). Was _pad4d.
     float _pad4d;
+
+    // Row 5 -- secondary "alien potential" pass (gatherAlienDiscriminatorCS
+    // .hlsl / smoothnessJacobiAlienCS.hlsl). Runs ONCE, after Phase 1's
+    // rounds settle and labels/phi are frozen: extends each node's corner
+    // rule from 2 values (own phi / -phi) to 3 (own phi / a per-node "alien"
+    // potential beta, routed to via a per-node 1-bit discriminator / -phi
+    // default), giving the tet-level entry/exit junction-consistency test
+    // enough freedom to actually place a triple junction correctly -- proven
+    // impossible with only 2 values, whatever combination rule is used, see
+    // the approved plan. Solved for beta only; phi/label/discriminator are
+    // constants during this phase.
+    float AlienJunctionWeight; // same cross(Ta,Tb) junction-straightness objective as JunctionWeight, built from the 3-way (phi/beta/-phi) reconstruction and solved for beta only. 0 disables the term entirely.
+    // Anti-degeneracy floor: cross(Ta,Tb)==0 is trivially satisfied by the
+    // 3-way reconstruction's Ta/Tb collapsing toward zero (same failure mode
+    // Term 3/EikonalWeight exists to prevent for the single-label case --
+    // but Eikonal only anchors each label's OWN gradient magnitude, not the
+    // cross-label difference-gradients that actually drive T). Penalizes
+    // |T_current| (3-way) falling below |T_baseline| (the OLD 2-way rule,
+    // same frozen phi/label data, recomputed inline) via a one-sided hinge --
+    // zero cost once |T_current| is at or above baseline. 0 disables the
+    // term entirely.
+    float JunctionFloorWeight;
+    // GPU-side render toggle (0/1, mirrors the C++ useAlienPotential bool):
+    // raymarchLatticePS.hlsl uses the 3-way (phi/beta/-phi) corner rule when
+    // >0.5, else the original 2-way rule -- degenerates to byte-identical
+    // output when <=0.5, regardless of what NodeAlienPotential/
+    // NodeDiscriminator currently hold.
+    float UseAlienPotential;
+    float _pad5d;
 }
 #ifndef __HLSL_VERSION
 ;

@@ -9,7 +9,8 @@ cbuffer SliceConsts : register(b1) {
     uint  SliceAxis;    // 0 = X, 1 = Y, 2 = Z -- which world axis the plane is normal to
     float SliceCoord;   // world-space coordinate of the plane along SliceAxis
     float ColorScale;   // potential/footdist value that maps to full channel brightness
-    uint  DisplayMode;  // 0 = potentials (label0/label1 heatmap, below), 1 = NodeFootDist (grayscale, A-nodes only), 2 = synthetic-field potential (label-tinted)
+    uint  DisplayMode;  // 0 = potentials (label0/label1 heatmap, below), 1 = NodeFootDist (grayscale, A-nodes only), 2 = synthetic-field potential (label-tinted), 3 = psi/beta/gamma chosen-label field (label-tinted, see below)
+    uint  ChosenLabel;  // DisplayMode==3 only: which label's field CornerR3WayValue evaluates
 };
 
 // Repurposed from the original NodeFootDist/JFA debug view: now a heatmap of
@@ -37,6 +38,9 @@ cbuffer SliceConsts : register(b1) {
 RWStructuredBuffer<uint>  NodeCandidateLabel : register(u0);
 RWStructuredBuffer<float> NodePotential : register(u1);
 RWStructuredBuffer<float> NodeFootDist : register(u2);
+// DisplayMode==3 only -- see CornerR3WayValue (DistanceLattice.hlsli).
+RWStructuredBuffer<float> NodeAlienPotential : register(u3);
+RWStructuredBuffer<uint>  NodeDiscriminator : register(u4);
 
 struct VsOut {
     float4 pos    : SV_POSITION;
@@ -108,6 +112,29 @@ PsOut footSlicePS(VsOut input)
         uint synLabel = GetCandidateLabelAt(NodeCandidateLabel, node, 0u);
         float synPot = NodePotential[node * MAX_CANDIDATES + 0u];
         float3 col = LabelColorA(synLabel) * saturate(synPot / scale);
+        result.color = float4(col, 1.0);
+        return result;
+    }
+
+    // DisplayMode==3: the psi(own)/beta(routed)/gamma(else) corner rule
+    // (CornerR3WayValue, DistanceLattice.hlsli -- the SAME formula
+    // raymarchLatticePS.hlsl's CornerR uses when "Show Alien Potential In
+    // Render" is on, unconditionally here regardless of that toggle, since
+    // the whole point of this view is to inspect the scheme directly)
+    // evaluated for ChosenLabel at this node, same convention as
+    // DisplayMode==2: ChosenLabel's palette color scaled by the returned
+    // value (clamped at 0, so any node where ChosenLabel currently loses --
+    // own label differs, not routed here, or the reciprocal value is
+    // negative -- reads as black; brighter = more confidently ChosenLabel's
+    // territory here, whether by direct ownership, routing, or the derived
+    // reciprocal value).
+    if (DisplayMode == 3u) {
+        uint label = GetCandidateLabelAt(NodeCandidateLabel, node, 0u);
+        float pot = NodePotential[node * MAX_CANDIDATES + 0u];
+        float beta = NodeAlienPotential[node];
+        uint discrim = NodeDiscriminator[node];
+        float g = CornerR3WayValue(label, pot, beta, discrim, ChosenLabel);
+        float3 col = LabelColorA(ChosenLabel) * saturate(g / scale);
         result.color = float4(col, 1.0);
         return result;
     }

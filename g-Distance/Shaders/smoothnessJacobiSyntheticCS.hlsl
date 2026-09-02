@@ -81,11 +81,28 @@
 // for double-buffering one byte), and slot 0 of NodePotential/
 // NodePotentialScratch is the current/next potential. Bytes 2-3 and slots
 // 1-7 are simply never touched in this mode.
+// Profiling switches: define as 0 (via a /D compiler flag, or by editing the
+// default here) to strip a term ENTIRELY, not just weight it to 0 -- a
+// weight of 0 in the GUI still pays this term's full tet-walk/ALU cost every
+// sweep, since the shader itself is unchanged; these let the HLSL compiler
+// discard that work outright when isolating what the tile/groupshared/
+// wave-op machinery costs vs. what each energy term itself costs. See
+// smoothnessJacobiSyntheticSimpleCS.hlsl for the complementary comparison:
+// the same Term-1-only (smoothing) math with no tile/shared mem/wave ops at
+// all, one thread per target.
+//#ifndef ENABLE_JUNCTION_TERM
+//#define ENABLE_JUNCTION_TERM 1
+//#endif
+//#ifndef ENABLE_EIKONAL_TERM
+//#define ENABLE_EIKONAL_TERM 1
+//#endif
+
 #define SmoothnessSyntheticSig "RootFlags(0)," \
     "CBV(b0)," \
     "UAV(u0)," \
     "UAV(u1)," \
     "UAV(u2)," \
+    "UAV(u4)," \
     "RootConstants(num32BitConstants=2, b1)," \
     "CBV(b2)"
 
@@ -104,9 +121,35 @@
         RWStructuredBuffer<uint> NodeCandidateLabel : register(u0);
         RWStructuredBuffer<float> NodePotential : register(u1);
         RWStructuredBuffer<float> NodePotentialScratch : register(u2);
+        // Written DIRECTLY here (no scratch/commit indirection needed --
+        // this shader never READS beta, so there's no within-dispatch hazard
+        // to guard against) -- see the beta-tracking write below.
+        RWStructuredBuffer<float> NodeAlienPotential : register(u4);
 
 #define HALO_DIM 4u
-#define HALO_NODES 128u // 64 A + 64 B
+// HALO_NODES = 135 = HALO_BBASE(71) + 4*HALO_DIM*HALO_DIM(64) -- 7 words of
+// pure padding between the A block [0,63] and the B block [71,134]. This
+// (and the B-block base itself, see inHaloPosToInHaloIdxB below) is chosen
+// to break a shared-memory bank-conflict alias in the wid<27 kernel below:
+// with the original base of 64 (a clean multiple of the 32-wide bank
+// period), the 8 cross-sublattice ("cross", weight -48) taps -- encoded as
+// HALO_BBASE-k for small k -- landed on the exact same banks as several
+// same-sublattice taps' negated mirrors, driving a verified worst-case
+// 3-way bank conflict on every warp's gPot[]/gLabel[] read here (Nsight
+// Compute: ~48% "Short Scoreboard" stall on this block). Retuning ONLY the
+// base (not HALO_DIM*HALO_DIM's 16-wide z-stride, which the halo LOAD phase
+// below relies on staying exactly 16 -- two consecutive z-slices per warp
+// are only conflict-free because they differ by exactly half the 32-bank
+// period) cuts the worst case to 2-way (verified: 144 -> 96 conflicting-
+// bank instances across the 16 real per-tile targets) with the Load phase
+// itself mathematically unaffected. A handful of alternate designs (an
+// independent z-stride, fully free per-slice placement, isolating the one
+// remaining conflicting lane via a branch) were tried and rejected -- see
+// the design notes (soft-stargazing-biscuit.md) -- 2-way appears to be a
+// hard structural floor for this offset family, not just an artifact of
+// under-searching.
+#define HALO_BBASE 71u
+#define HALO_NODES 135u // 64 A + 7 padding + 64 B
 #define TARGET_NODES 16u // 8 A + 8 B
 
         groupshared uint gLabel[HALO_NODES];
@@ -121,11 +164,16 @@
         groupshared float gEikonalGrad[TARGET_NODES];
         groupshared float gEikonalDiag[TARGET_NODES];
 
+        // Edge (w8) and face (w16/self) magnitudes are UNCHANGED from the
+        // original 64-base table -- only the 8 cross-sublattice (w-48)
+        // magnitudes differ, recomputed as HALO_BBASE-{0,1,4,5,16,17,20,21}
+        // instead of 64-{...} (see the HALO_BBASE comment above). Verified
+        // by direct recomputation, not hand-derived -- see the design notes.
         static const uint4 kernelbits = uint4(
     3 | (5 << 5) | (12 << 10) | (15 << 15) | (17 << 20) | (20 << 25), // w 8
     0x00100401u, // w 192 | w 16
-    0x403F3C30u, // w -48
-    0x3B2F2C2Bu);
+    0x47464337u, // w -48
+    0x42363332u);
 
         uint posToIdxA(uint3 l)
         {
@@ -142,7 +190,7 @@
         }
         uint inHaloPosToInHaloIdxB(uint3 l)
         {
-            return 64u + l.x + l.y * HALO_DIM + l.z * HALO_DIM * HALO_DIM;
+            return HALO_BBASE + l.x + l.y * HALO_DIM + l.z * HALO_DIM * HALO_DIM;
         }
 
         // Halo-local index of a q-space point within THIS tile's halo, or -1
@@ -268,6 +316,7 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
             // its contribution is halved (pairWeight=0.5) to avoid double-
             // counting; a ring1-ring2 pair (partner tet doesn't touch the
             // target -- 24 distinct pairs) is discovered once (pairWeight=1).
+#if ENABLE_JUNCTION_TERM
             {
                 for (int iTarget = warpId; iTarget < 16; iTarget += 4)
                 {
@@ -450,6 +499,15 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
                     gJunctionDiag[iTarget] = WaveActiveSum(diagAccum);
                 }
             }
+#else
+            {
+                for (int iTarget = warpId; iTarget < 16; iTarget += 4)
+                {
+                    gJunctionGrad[iTarget] = 0.0;
+                    gJunctionDiag[iTarget] = 0.0;
+                }
+            }
+#endif
 
             // Eikonal floor: one of a target's 24 ring-1 incident tets per
             // lane (wid<24). For each, treat this target's own label as the
@@ -468,6 +526,7 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
             // removed volume term's history, or DistanceCb.hlsli's Term 5
             // comment on why a hard sign flip near an ambiguous zero-
             // crossing is avoided elsewhere too).
+#if ENABLE_EIKONAL_TERM
             {
                 for (int iTarget = warpId; iTarget < 16; iTarget += 4)
                 {
@@ -545,6 +604,15 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
                     gEikonalDiag[iTarget] = WaveActiveSum(eikDiagAccum);
                 }
             }
+#else
+            {
+                for (int iTarget = warpId; iTarget < 16; iTarget += 4)
+                {
+                    gEikonalGrad[iTarget] = 0.0;
+                    gEikonalDiag[iTarget] = 0.0;
+                }
+            }
+#endif
 
             GroupMemoryBarrierWithGroupSync();
 
@@ -658,4 +726,28 @@ void smoothnessJacobiSyntheticCS(uint3 gid : SV_GroupID, uint tid : SV_GroupInde
             NodePotentialScratch[targetGlobalIdx * MAX_CANDIDATES + 0u] = newPot;
             uint word0 = NodeCandidateLabel[targetGlobalIdx * 2u + 0u];
             NodeCandidateLabel[targetGlobalIdx * 2u + 0u] = (word0 & 0xFFFF00FFu) | ((newLabel & 0xFFu) << 8u);
+
+            // Keep EVERY node's beta tracking -phi every Phase-1 sweep --
+            // unconditionally, regardless of the discriminator's enabled
+            // state -- so a phi-only reconstruction (no alien/Stage-3 step
+            // run since the last reset) renders the same smooth surface the
+            // pre-alien-potential pipeline always gave, even with "Show
+            // Alien Potential In Render" left on. -phi isn't the EXACT value
+            // that makes CornerR3WayValue's gamma formula equal -phi (that's
+            // the unbounded beta=-ln(2*sinh(phi)), blowing up as phi->0) --
+            // it's the deliberately simpler, always-bounded choice, giving
+            // gamma=-ln(2*cosh(phi)), which is provably always <= -phi and
+            // converges to it for any non-tiny phi. A direct write (no
+            // scratch/commit) is safe here -- this shader never READS
+            // NodeAlienPotential, so there's no within-dispatch
+            // read-during-write hazard to guard against.
+            //
+            // Deliberate consequence, by design (not a bug): this OVERWRITES
+            // any real routed beta Stage 3 built up on a previously-enabled
+            // node too -- running Phase-1-only rounds (RunContinue()) after
+            // a joint/alien step (RunAlienStep()) resets every node's beta
+            // back to -phi, discarding Stage 3's work. Intentional -- the
+            // expected workflow is phi-only smoothing from a fresh reset,
+            // THEN alien steps, never interleaved the other way.
+            NodeAlienPotential[targetGlobalIdx] = -newPot;
         }

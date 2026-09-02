@@ -85,11 +85,17 @@
     <FxCompile Include="Shaders\smoothnessJacobiCS.hlsl" />
     <FxCompile Include="Shaders\smoothnessJacobiBlockCS.hlsl" />
     <FxCompile Include="Shaders\smoothnessJacobiSyntheticCS.hlsl" />
+    <FxCompile Include="Shaders\smoothnessJacobiSyntheticSimpleCS.hlsl" />
     <FxCompile Include="Shaders\commitPotentialCS.hlsl" />
     <FxCompile Include="Shaders\commitPotentialBlockCS.hlsl" />
     <FxCompile Include="Shaders\commitSyntheticCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceCS.hlsl" />
     <FxCompile Include="Shaders\extractSurfaceSyntheticCS.hlsl" />
+    <FxCompile Include="Shaders\gatherAlienDiscriminatorCS.hlsl" />
+    <FxCompile Include="Shaders\smoothnessJacobiAlienCS.hlsl" />
+    <FxCompile Include="Shaders\smoothnessJacobiAlienRefCS.hlsl" />
+    <FxCompile Include="Shaders\buildAnalyticClippedSpheresCS.hlsl" />
+    <FxCompile Include="Shaders\commitAlienCS.hlsl" />
     <FxCompile Include="Shaders\raymarchVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
@@ -138,6 +144,8 @@
     <None Include="Shaders\LabelPalette.hlsli" />
     <None Include="Shaders\PickedTetCb.hlsli" />
     <None Include="Shaders\TorusListCb.hlsli" />
+    <None Include="Shaders\JunctionRefCb.hlsli" />
+    <None Include="Shaders\ClippedSpheresCb.hlsli" />
     <None Include="Shaders\TorusSdf.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

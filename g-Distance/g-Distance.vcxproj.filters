@@ -59,6 +59,9 @@
     <FxCompile Include="Shaders\smoothnessJacobiSyntheticCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\smoothnessJacobiSyntheticSimpleCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\commitPotentialCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
@@ -72,6 +75,21 @@
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\extractSurfaceSyntheticCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\gatherAlienDiscriminatorCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\smoothnessJacobiAlienCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\smoothnessJacobiAlienRefCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\buildAnalyticClippedSpheresCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\commitAlienCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\raymarchVS.hlsl">
@@ -140,6 +158,12 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\TorusListCb.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\JunctionRefCb.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\ClippedSpheresCb.hlsli">
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\TorusSdf.hlsli">

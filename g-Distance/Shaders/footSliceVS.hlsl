@@ -6,13 +6,17 @@
 // cross-section through the solved potential field, for visually inspecting
 // it directly instead of guessing from readback numbers alone. Root
 // signature declared once here, shared by footSlicePS.hlsl (same convention
-// as raymarchVS/PS).
+// as raymarchVS/PS). u3/u4 (NodeAlienPotential/NodeDiscriminator) and the
+// 5th root constant (ChosenLabel) are for DisplayMode==3, the psi/beta/gamma
+// "chosen-label field" debug view -- see footSlicePS.hlsl.
 #define FootSliceSig "RootFlags(0)," \
     "CBV(b0)," \
-    "RootConstants(num32BitConstants=4, b1)," \
+    "RootConstants(num32BitConstants=5, b1)," \
     "UAV(u0)," \
     "UAV(u1)," \
     "UAV(u2)," \
+    "UAV(u3)," \
+    "UAV(u4)," \
     "CBV(b2)"
 
 struct VsOut {

@@ -306,14 +306,18 @@ magnitude, is treated as a real discontinuity to be smoothed.
 
 \subsection{Stencil}
 
-The stencil is the standard $3\times3\times3$ same-sublattice neighborhood
-of the target node, minus the center: $26$ neighbors, classified by how
-many of the three axes they offset along --
+The stencil combines two distinct neighborhoods, for $26$ neighbors total:
 \begin{itemize}
-  \item \textbf{face} neighbors ($6$): offset along exactly one axis,
-  \item \textbf{edge} neighbors ($12$): offset along exactly two axes,
-  \item \textbf{corner/cross} neighbors ($8$): offset along all three
-  axes,
+  \item \textbf{face} neighbors ($6$) and \textbf{edge} neighbors ($12$):
+  the standard same-sublattice $3\times3\times3$ neighborhood (offset along
+  exactly one or exactly two of the three grid axes, respectively) --
+  \emph{not} the full $26$-neighbor cube: its $8$ same-sublattice diagonal
+  positions (offset along all three axes) are excluded entirely,
+  \item \textbf{cross} neighbors ($8$): the node's $8$ nearest neighbors on
+  the \emph{opposite} sublattice (the true BCC nearest-neighbor distance) --
+  for an A-node these are the $8$ surrounding B cube-centers, for a B-node
+  its own $8$ A corners (the same corners \eqref{sec:buffers}'s relabel
+  vote already uses),
 \end{itemize}
 plus the target node itself, for $27$ taps total. Each tap $t$ carries a
 fixed scalar weight $k_t$ depending only on its class:
