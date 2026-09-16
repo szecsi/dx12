@@ -1,8 +1,6 @@
 #include "DistanceFrameCb.hlsli"
 #define DISTANCE_GRID_CB_REGISTER b1
 #include "DistanceLattice.hlsli"
-#define DISTANCE_CB_REGISTER b2
-#include "DistanceCb.hlsli"
 #include "LabelPalette.hlsli"
 
 // Junction-aware lattice raymarch: walks the ray tet-by-tet through the BCC
@@ -10,16 +8,19 @@
 // ACTUAL corner labels/potentials to find where the winning label changes --
 // unlike extractSurfaceSyntheticCS.hlsl's static mesh extraction (which can
 // only ever resolve 2 labels per tet, a frequency-vote li/lj that folds any
-// 3rd/4th corner label into a fixed fallback), this evaluates EVERY distinct
-// label present at a tet's corners as its own affine field along the ray and
-// finds the first one that overtakes the current winner -- so a genuine
-// 3/4-way junction renders as a real crossing instead of a flattened
-// artifact. See the design notes (soft-stargazing-biscuit.md) for the full
-// derivation: q-space is a fixed LINEAR map of world space for both
-// sublattices, so a world ray's parameter t carries over unchanged into
-// q-space (q(t)=q0+t*qd) -- letting the whole walk (point-location, face
-// intersections) happen in q-space while the final hit's world position/
-// depth is just ro+rd*t, exactly like raymarchPS.hlsl's own pattern.
+// 3rd/4th corner label into a fixed fallback), every non-homogeneous tet
+// reconstructs one affine field PER DISTINCT LABEL present (up to 4, fewer
+// whenever corners share a label -- identically-labeled corners POOL into
+// one shared field rather than competing as independent entries), plain
+// own-potential/minus-everyone-else's-potential per corner, no beta/gamma
+// involved at all -- so a real 3/4-way junction renders as an actual
+// crossing instead of a flattened artifact. See the design notes
+// (soft-stargazing-biscuit.md) for the full derivation: q-space is a fixed
+// LINEAR map of world space for both sublattices, so a world ray's parameter
+// t carries over unchanged into q-space (q(t)=q0+t*qd) -- letting the whole
+// walk (point-location, face intersections) happen in q-space while the
+// final hit's world position/depth is just ro+rd*t, exactly like
+// raymarchPS.hlsl's own pattern.
 //
 // v1 scope: synthetic-field pipeline only (single label+potential per node,
 // see smoothnessJacobiSyntheticCS.hlsl) -- gated by useSyntheticField on the
@@ -35,9 +36,6 @@
 
 RWStructuredBuffer<uint>  NodeCandidateLabel : register(u0);
 RWStructuredBuffer<float> NodePotential : register(u1);
-// Alien-potential secondary pass (see the approved plan) -- read-only here.
-RWStructuredBuffer<float> NodeAlienPotential : register(u2);
-RWStructuredBuffer<uint>  NodeDiscriminator : register(u3);
 
 struct VsOut {
     float4 pos    : SV_POSITION;
@@ -50,35 +48,22 @@ struct PsOut {
 };
 
 // Synthetic-field corner lookup -- mirrors extractSurfaceSyntheticCS.hlsl's
-// SyntheticCornerLabel, generalized to also return the potential, beta, and
-// discriminator in one call since every caller here needs all four.
-// Virtual/out-of-grid corners are a fixed background node (label 0,
-// potential 1.0, beta -1.0/discriminator disabled -- irrelevant, since a
-// virtual corner's label 0 can never be queried as a genuinely competing
-// "other" label here), same convention as GetCornerTopLabel.
-void CornerLabelPotAlien(uint cornerRef, out uint label, out float pot, out float beta, out uint discrim)
+// SyntheticCornerLabel. Virtual/out-of-grid corners are a fixed background
+// node (label 0, potential 1.0), same convention as GetCornerTopLabel.
+//
+// Plain own=+pot/foreign=-pot per CORNER (not per label, see the file header
+// comment) is the ONLY rule this file uses -- reverted back to this from the
+// psi/beta/gamma (CornerR3WayValue) 3-way rule and its NodeAlienPotential/
+// NodeDiscriminator buffers, which had become dead plumbing here anyway (the
+// 4-way-per-corner junction search below never called it -- see git history
+// for the removed CornerR/CornerLabelPotAlien if that's ever worth
+// resurrecting), in preparation for the per-edge-derivative scheme (see the
+// approved plan).
+void CornerLabelPot(uint cornerRef, out uint label, out float pot)
 {
-    if (cornerRef == SENTINEL_LABEL) { label = 0u; pot = 1.0; beta = -1.0; discrim = 0u; return; }
+    if (cornerRef == SENTINEL_LABEL) { label = 0u; pot = 1.0; return; }
     label = GetCandidateLabelAt(NodeCandidateLabel, cornerRef, 0u);
     pot = NodePotential[cornerRef * MAX_CANDIDATES + 0u];
-    beta = NodeAlienPotential[cornerRef];
-    discrim = NodeDiscriminator[cornerRef];
-}
-
-// The corner-value rule for query label ell: own label -> pot; alien route
-// (only when UseAlienPotential is on -- see DistanceCb.hlsli) -> beta;
-// otherwise -> the reciprocal-derived value (or -pot if disabled). Degenerates
-// to byte-identical output to before the alien-potential pass existed
-// whenever UseAlienPotential<=0.5, regardless of what beta/discrim actually
-// hold. The actual 3-way rule (own/routed/disabled/reciprocal) is
-// DistanceLattice.hlsli's CornerR3WayValue -- shared with footSlicePS.hlsl's
-// "chosen-label field" debug slice, this just layers the render toggle on
-// top of it.
-float CornerR(uint label, float pot, float beta, uint discrim, uint queryLabel)
-{
-    if (UseAlienPotential > 0.5) return CornerR3WayValue(label, pot, beta, discrim, queryLabel);
-    if (label == queryLabel) return pot;
-    return -pot;
 }
 
 // q-space forward map (bccToRhombo's linear part -- see NodeQ), applied here
@@ -155,85 +140,103 @@ PsOut raymarchLatticePS(VsOut input)
         }
         if (bestExit < 0) break; // degenerate (ray exits exactly along an edge/vertex) -- bail out rather than loop forever
 
-        uint cornerLabel[4]; float cornerPot[4]; float cornerBeta[4]; uint cornerDiscrim[4]; uint cornerRef[4];
+        uint cornerLabel[4]; float cornerPot[4]; uint cornerRef[4];
         for (uint c2 = 0; c2 < 4; c2++) {
             cornerRef[c2] = ResolveCorner(qArr[c2]);
-            CornerLabelPotAlien(cornerRef[c2], cornerLabel[c2], cornerPot[c2], cornerBeta[c2], cornerDiscrim[c2]);
+            CornerLabelPot(cornerRef[c2], cornerLabel[c2], cornerPot[c2]);
         }
 
-        bool homo = (cornerLabel[0] == cornerLabel[1]) && (cornerLabel[0] == cornerLabel[2]) && (cornerLabel[0] == cornerLabel[3]);
-        if (!homo) {
-            uint distinctLabels[4]; uint nDistinct = 0;
-            for (uint c3 = 0; c3 < 4; c3++) {
-                bool found = false;
-                for (uint u = 0; u < nDistinct; u++) if (distinctLabels[u] == cornerLabel[c3]) { found = true; break; }
-                if (!found) { distinctLabels[nDistinct] = cornerLabel[c3]; nDistinct++; }
-            }
+        // Distinct labels present among this tet's 4 corners (up to 4,
+        // fewer whenever any corners share a label).
+        uint present[4]; uint presentCount = 0;
+        for (uint cp = 0; cp < 4; cp++) {
+            bool already = false;
+            for (uint pp = 0; pp < presentCount; pp++) if (present[pp] == cornerLabel[cp]) { already = true; break; }
+            if (!already) present[presentCount++] = cornerLabel[cp];
+        }
 
+        if (presentCount > 1) {
             float3 Pw[4];
             for (uint c4 = 0; c4 < 4; c4++) Pw[c4] = QWorldPos(qArr[c4]);
             float3 w0, w1, w2, w3;
             TetShapeGradients(Pw[0], Pw[1], Pw[2], Pw[3], w0, w1, w2, w3);
             float3 wArr[4] = { w0, w1, w2, w3 };
 
-            // Each distinct label L's "own confidence" field: every corner
-            // contributes its OWN real potential, signed by whether that
-            // corner actually carries L (+) or not (-) -- NOT a constant
-            // fallback for non-matching corners (an earlier version of this
-            // used a fixed -10 there, which swamped the real, evolving
-            // potentials entirely -- exactly the "colors change, surface
-            // doesn't"/discrete-flips-only symptom extractSurfaceSyntheticCS
-            // .hlsl's own SyntheticCornerG comment already warns about for
-            // the identical mistake). This construction is affine over the
-            // tet (same TetShapeGradients machinery), so its value along the
-            // ray, G_label(t) = base + slope*t, is a single line -- computed
-            // once via the SAME wArr (tet geometry only, independent of
-            // which field), no per-step re-solving needed. Reduces exactly
-            // to a 2-label tet's G_i=phi_i-phi_j field when only 2 labels
-            // are present (every corner is then either +ownPot or -ownPot,
-            // the two labels' fields are then exact negations of each
-            // other), and generalizes cleanly to 3/4 via the same rule.
-            float lineBase[4], lineSlope[4];
-            for (uint u2 = 0; u2 < nDistinct; u2++) {
+            // One field PER DISTINCT LABEL (not per corner) -- corners
+            // sharing a label pool into the SAME shared field (each
+            // contributing its own real potential as a genuine sample,
+            // exactly like every other corner's own reading), rather than
+            // competing as independent entries. Reverted back to this from
+            // an intermediate "always exactly 4 fields, one per corner,
+            // same-label crossings skipped via an envelope-of-lines search"
+            // version -- that version never actually merged same-labeled
+            // corners into one field at all, just avoided rendering a seam
+            // between them by special-casing the search; this restores a
+            // genuine single gradient for a repeated label instead. Field l's
+            // value at corner c is +itsOwnPotential where c's label matches
+            // l, -itsOwnPotential everywhere else -- unconditionally, plain
+            // own/foreign, no beta/gamma. Affine over the tet (same
+            // TetShapeGradients machinery), so each field's value along the
+            // ray, G_l(t) = base + slope*t, is a single line -- computed
+            // once via the same wArr (tet geometry only), no per-step
+            // re-solving.
+            float lineBase[4], lineSlope[4]; // indexed by position in `present`, not corner index
+            for (uint pi = 0; pi < presentCount; pi++) {
+                uint l = present[pi];
                 float G[4];
-                for (uint c5 = 0; c5 < 4; c5++) G[c5] = CornerR(cornerLabel[c5], cornerPot[c5], cornerBeta[c5], cornerDiscrim[c5], distinctLabels[u2]);
+                for (uint c5 = 0; c5 < 4; c5++) G[c5] = (cornerLabel[c5] == l) ? cornerPot[c5] : -cornerPot[c5];
                 float3 gradG = G[0] * wArr[0] + G[1] * wArr[1] + G[2] * wArr[2] + G[3] * wArr[3];
-                lineBase[u2] = G[0] + dot(ro - Pw[0], gradG);
-                lineSlope[u2] = dot(rd, gradG);
+                lineBase[pi] = G[0] + dot(ro - Pw[0], gradG);
+                lineSlope[pi] = dot(rd, gradG);
             }
 
-            uint winner = 0;
-            for (uint u3 = 1; u3 < nDistinct; u3++)
-                if (lineBase[u3] + lineSlope[u3] * tCur > lineBase[winner] + lineSlope[winner] * tCur) winner = u3;
-
-            // First t (nearest the camera) where another present label's
-            // line overtakes the current winner's -- the closed-form
-            // crossing of two affine lines, generalized from
-            // extractSurfaceSyntheticCS.hlsl's CrossPoint (2 corner values)
-            // to 2 label-lines evaluated at arbitrary ray t.
-            float crossT = 1.0e30; uint crossWinner = winner;
-            for (uint u4 = 0; u4 < nDistinct; u4++) {
-                if (u4 == winner) continue;
-                float slopeDiff = lineSlope[u4] - lineSlope[winner];
-                if (slopeDiff <= epsSlope) continue; // never overtakes for t>tCur
-                float tc = (lineBase[winner] - lineBase[u4]) / slopeDiff;
-                if (tc > tCur + epsT && tc <= bestT + epsT && tc < crossT) { crossT = tc; crossWinner = u4; }
+            // First t (nearest the camera) after tCur where two present
+            // labels' lines tie AND are jointly the maximum among all
+            // present labels there -- the classic "first breakpoint of an
+            // upper envelope of lines" search, now genuinely simple since
+            // each present label is exactly one line (no per-label envelope-
+            // of-several-lines bookkeeping needed anymore).
+            float crossT = 1.0e30; uint crossA = 0, crossB = 0; bool foundCross = false;
+            for (uint pi = 0; pi < presentCount; pi++) {
+                for (uint pj = pi + 1; pj < presentCount; pj++) {
+                    float slopeDiff = lineSlope[pj] - lineSlope[pi];
+                    if (abs(slopeDiff) <= epsSlope) continue; // parallel (or coincident) -- never a fresh crossing
+                    float tc = (lineBase[pi] - lineBase[pj]) / slopeDiff;
+                    if (tc <= tCur + epsT || tc > bestT + epsT || tc >= crossT) continue;
+                    float tieVal = lineBase[pi] + lineSlope[pi] * tc;
+                    bool valid = true;
+                    for (uint pk = 0; pk < presentCount; pk++) {
+                        if (pk == pi || pk == pj) continue;
+                        float vk = lineBase[pk] + lineSlope[pk] * tc;
+                        if (vk > tieVal + 1.0e-6) { valid = false; break; } // a 3rd label is already ahead here -- not the true crossing
+                    }
+                    if (valid) { crossT = tc; crossA = pi; crossB = pj; foundCross = true; }
+                }
             }
 
-            if (crossWinner != winner) {
+            if (foundCross) {
+                // Whichever of the pair has the SMALLER slope was dominant
+                // just before the tie (the near/background side, receding);
+                // the other is what's actually beyond the surface from the
+                // camera's side (approaching, overtakes for t>tc).
+                uint winner = (lineSlope[crossA] < lineSlope[crossB]) ? crossA : crossB;
+                uint crossWinner = (winner == crossA) ? crossB : crossA;
+                uint winnerLabel = present[winner];
+                uint crossLabel = present[crossWinner];
+
                 float3 worldHit = ro + rd * crossT;
                 float4 clipHit = mul(float4(worldHit, 1), viewProjTransform);
                 result.depth = clipHit.z / clipHit.w;
 
-                // Interface normal: gradient of (G_crossWinner - G_winner),
+                // Interface normal: gradient of (G_crossLabel - G_winnerLabel),
                 // same convention as extractSurfaceSyntheticCS.hlsl's g[]/
-                // gradG (which corner is "positive" is arbitrary there too --
+                // gradG (which label is "positive" is arbitrary there too --
                 // only the SIGN used for orienting toward the camera below
                 // matters for shading).
                 float gDiff[4];
                 for (uint c6 = 0; c6 < 4; c6++) {
-                    float gW = CornerR(cornerLabel[c6], cornerPot[c6], cornerBeta[c6], cornerDiscrim[c6], distinctLabels[winner]);
-                    float gO = CornerR(cornerLabel[c6], cornerPot[c6], cornerBeta[c6], cornerDiscrim[c6], distinctLabels[crossWinner]);
+                    float gW = (cornerLabel[c6] == winnerLabel) ? cornerPot[c6] : -cornerPot[c6];
+                    float gO = (cornerLabel[c6] == crossLabel) ? cornerPot[c6] : -cornerPot[c6];
                     gDiff[c6] = gO - gW;
                 }
                 float3 gradN = gDiff[0] * wArr[0] + gDiff[1] * wArr[1] + gDiff[2] * wArr[2] + gDiff[3] * wArr[3];
@@ -243,11 +246,12 @@ PsOut raymarchLatticePS(VsOut input)
 
                 float3 lightDir = normalize(float3(0.4, 0.6, 0.7));
                 float diff = saturate(dot(nFacing, lightDir)) * 0.7 + 0.3;
-                // crossWinner is the label that overtakes as t increases --
+                // crossLabel is the label that overtakes as t increases --
                 // i.e. what's actually beyond the surface from the camera's
-                // side (winner is the near/background side that recedes),
-                // matching surfacePS.hlsl's "far side" color convention.
-                float3 baseColor = LabelColorA(distinctLabels[crossWinner]);
+                // side (winnerLabel is the near/background side that
+                // recedes), matching surfacePS.hlsl's "far side" color
+                // convention.
+                float3 baseColor = LabelColorA(crossLabel);
                 result.color = float4(baseColor * diff, 1.0);
                 return result;
             }

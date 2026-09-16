@@ -96,6 +96,8 @@
     <FxCompile Include="Shaders\smoothnessJacobiAlienRefCS.hlsl" />
     <FxCompile Include="Shaders\buildAnalyticClippedSpheresCS.hlsl" />
     <FxCompile Include="Shaders\commitAlienCS.hlsl" />
+    <FxCompile Include="Shaders\extractJunctionFootVectorsCS.hlsl" />
+    <FxCompile Include="Shaders\smoothJunctionFootVectorsCS.hlsl" />
     <FxCompile Include="Shaders\raymarchVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
@@ -124,6 +126,12 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
     <FxCompile Include="Shaders\footSlicePS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\footVectorLineVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\footVectorLinePS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="Shaders\raymarchLatticeVS.hlsl">

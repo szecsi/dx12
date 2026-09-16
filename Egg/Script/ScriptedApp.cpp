@@ -124,8 +124,9 @@ Egg::Mesh::Geometry::P Script::ScriptedApp::CreateIndexedGeometryWithTangentSpac
 	try
 	{
 		std::string fileName = attributeTable.getString("file");
+		float targetHeight = attributeTable.getFloat("targetHeight", 0.0f);
 		Egg::Mesh::IndexedGeometry::P indexedGeometry = std::dynamic_pointer_cast<Egg::Mesh::IndexedGeometry>(
-			Egg::Importer::ImportWithTangentSpace(device.Get(), fileName));
+			Egg::Importer::ImportWithTangentSpace(device.Get(), fileName, targetHeight));
 		indexedGeometry->instanceCount = attributeTable.getInt("instanceCount", 1);
 		return indexedGeometry;
 	}

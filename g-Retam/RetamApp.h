@@ -40,6 +40,7 @@ class RetamApp : public Egg::Script::ScriptedApp {
 	static constexpr int GUI_STEPS = 1000;
 	HWND guiHwnd = nullptr;
 	std::vector<FloatControl> floatControls;
+	HWND stereoCheckbox = nullptr;
 
 	static LRESULT CALLBACK GuiWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 		if (msg == WM_CREATE) {
@@ -59,6 +60,13 @@ class RetamApp : public Egg::Script::ScriptedApp {
 					SetWindowTextW(fc.valueLabel, buf);
 					break;
 				}
+			}
+			return 0;
+		}
+		if (msg == WM_COMMAND && self) {
+			HWND hCtrl = reinterpret_cast<HWND>(lp);
+			if (hCtrl == self->stereoCheckbox && HIWORD(wp) == BN_CLICKED) {
+				self->stereoEnabled = (SendMessage(hCtrl, BM_GETCHECK, 0, 0) == BST_CHECKED);
 			}
 			return 0;
 		}
@@ -109,6 +117,12 @@ class RetamApp : public Egg::Script::ScriptedApp {
 			y += RH + 4;
 		};
 
+		stereoCheckbox = CreateWindowW(L"BUTTON", L"Stereo (anaglyph)",
+			WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+			M, y, LW + SW, 20, guiHwnd, nullptr, nullptr, nullptr);
+		SendMessage(stereoCheckbox, BM_SETCHECK, stereoEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
+		y += RH + 4;
+
 		addFloatSlider(L"Eye Separation", &eyeSeparation, 0.0f, 0.5f);
 		addFloatSlider(L"Focus Distance", &convergenceDistance, 0.1f, 20.0f);
 
@@ -116,7 +130,7 @@ class RetamApp : public Egg::Script::ScriptedApp {
 			float minVal = 0.f, maxVal = 1.f;
 			if (member.name == "lineSize")   { minVal = 0.f; maxVal = 2.f; }
 			if (member.name == "fading")	 { minVal = 0.f; maxVal = 1.f; }
-			if (member.name == "texScale")   { minVal = 0.f; maxVal = 10.f; }
+			if (member.name == "texScale")   { minVal = 0.f; maxVal = 10.0f; }
 			if (member.name == "crossAngle") { minVal = 0.f; maxVal = 6.2832f; }
 			if (member.name == "stripWidth") { minVal = 0.f; maxVal = 0.05f; }
 			if (member.name == "overdraw")   { minVal = 0.f; maxVal = 3.f; }
@@ -160,7 +174,11 @@ protected:
 	// -- Stereo: each eye's fully-shaded retam render (the entire collect ->
 	// compute -> stroke-extrude pipeline run once per eye, see
 	// PopulateCommandList()), composited into a red/cyan anaglyph as the
-	// final pass (RecordAndSubmitComposite()).
+	// final pass (RecordAndSubmitComposite()). Uncheck "Stereo" in the GUI
+	// to fall back to a single centered pass with no anaglyph reduction --
+	// eyeColorBuffer[0] copied straight to the backbuffer (RecordAndSubmitMonoPresent()) --
+	// for rendering plain (non-stereo) output images.
+	bool stereoEnabled = true;
 	float eyeSeparation = 0.065f;
 	float convergenceDistance = 4.5f;
 	com_ptr<ID3D12Resource> eyeColorBuffer[2]; // 0 = left, 1 = right
@@ -684,6 +702,20 @@ public:
 		perFrameCb.Upload();
 	}
 
+	// Pre-stereo camera: the head camera's own (non-off-axis, non-shifted)
+	// view/projection, exactly matching ManagerApp::Update()'s mono
+	// perFrameCb setup -- used when the "Stereo" checkbox is off.
+	void UpdateMonoCamera() {
+		using namespace Egg::Math;
+		auto headCam = std::dynamic_pointer_cast<Egg::Cam::FirstPerson>(cameras[currentCameraIndex]);
+		if (!headCam) return;
+
+		perFrameCb->viewProjTransform = headCam->GetViewMatrix() * headCam->GetProjMatrix();
+		perFrameCb->cameraPos = float4(headCam->GetEyePosition(), 1.0f);
+		perFrameCb->ahead = float4(headCam->GetAhead(), 0.0f);
+		perFrameCb.Upload();
+	}
+
 	// Lays down depth and collects fragments (UV/curvature seeds for the
 	// strokes) into the 1024x1024 offscreen collect targets, for whichever
 	// eye's transform is currently in perFrameCb. Self-contained: submitted
@@ -905,19 +937,66 @@ public:
 			commandList->Close();
 	}
 
-	// The entire retam process (collect -> compute -> stroke extrude) run
-	// once per eye into its own offscreen color target, then combined into
-	// a red/cyan anaglyph. Each stage is hard-synced before the next
-	// begins (see HardSync()), since both eyes share the same single-
-	// buffered collect/UAV/cubic-stroke resources.
+	// Pre-stereo output: eyeColorBuffer[0] (this frame's single centered
+	// render, already full color -- no anaglyph reduction was ever applied
+	// to it) copied straight to the backbuffer. Left open (closed but not
+	// executed) for App::Render()'s own execute+present, same contract as
+	// RecordAndSubmitComposite().
+	void RecordAndSubmitMonoPresent() {
+		DX_API("Failed to reset command allocator (MonoPresent)")
+			commandAllocator->Reset();
+		DX_API("Failed to reset command list (MonoPresent)")
+			commandList->Reset(commandAllocator.Get(), nullptr);
+
+		D3D12_RESOURCE_BARRIER toCopy[] = {
+			CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(),
+				D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST),
+			CD3DX12_RESOURCE_BARRIER::Transition(eyeColorBuffer[0].Get(),
+				D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+				D3D12_RESOURCE_STATE_COPY_SOURCE),
+		};
+		commandList->ResourceBarrier(2, toCopy);
+
+		commandList->CopyResource(renderTargets[swapChainBackBufferIndex].Get(), eyeColorBuffer[0].Get());
+
+		D3D12_RESOURCE_BARRIER back[] = {
+			CD3DX12_RESOURCE_BARRIER::Transition(renderTargets[swapChainBackBufferIndex].Get(),
+				D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT),
+			CD3DX12_RESOURCE_BARRIER::Transition(eyeColorBuffer[0].Get(),
+				D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET),
+		};
+		commandList->ResourceBarrier(2, back);
+
+		DX_API("close graphics command list")
+			commandList->Close();
+	}
+
+	// Stereo: the entire retam process (collect -> compute -> stroke
+	// extrude) run once per eye into its own offscreen color target, then
+	// combined into a red/cyan anaglyph. Each stage is hard-synced before
+	// the next begins (see HardSync()), since both eyes share the same
+	// single-buffered collect/UAV/cubic-stroke resources.
+	// Non-stereo (the "Stereo" GUI checkbox unchecked): the same process
+	// run once with the plain head-camera transform, its single
+	// full-color result copied straight to the backbuffer -- for
+	// rendering output images without the anaglyph split.
 	virtual void PopulateCommandList() override {
-		for (int eye = 0; eye < 2; eye++) {
-			UpdateEyeCamera(eye);
+		if (stereoEnabled) {
+			for (int eye = 0; eye < 2; eye++) {
+				UpdateEyeCamera(eye);
+				RecordAndSubmitCollectPass();
+				RecordAndSubmitComputePass();
+				RecordAndSubmitFinalDrawPass(eye);
+			}
+			RecordAndSubmitComposite();
+		}
+		else {
+			UpdateMonoCamera();
 			RecordAndSubmitCollectPass();
 			RecordAndSubmitComputePass();
-			RecordAndSubmitFinalDrawPass(eye);
+			RecordAndSubmitFinalDrawPass(0);
+			RecordAndSubmitMonoPresent();
 		}
-		RecordAndSubmitComposite();
 	}
 
 	virtual void Resize(int width, int height) override {

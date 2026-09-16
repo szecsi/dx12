@@ -38,9 +38,14 @@ cbuffer SliceConsts : register(b1) {
 RWStructuredBuffer<uint>  NodeCandidateLabel : register(u0);
 RWStructuredBuffer<float> NodePotential : register(u1);
 RWStructuredBuffer<float> NodeFootDist : register(u2);
-// DisplayMode==3 only -- see CornerR3WayValue (DistanceLattice.hlsli).
+// DisplayMode==3 only -- see CornerR3WayValue (DistanceLattice.hlsli). Gamma
+// is only actually populated by TestShape_ClippedSpheres's analytic build
+// (buildAnalyticClippedSpheresCS.hlsl) right now -- on any other scene this
+// buffer is whatever was last written there (stale/uninitialized), so this
+// view is only meaningful on that scene until gamma is tracked everywhere.
 RWStructuredBuffer<float> NodeAlienPotential : register(u3);
 RWStructuredBuffer<uint>  NodeDiscriminator : register(u4);
+RWStructuredBuffer<float> NodeGamma : register(u5);
 
 struct VsOut {
     float4 pos    : SV_POSITION;
@@ -116,24 +121,26 @@ PsOut footSlicePS(VsOut input)
         return result;
     }
 
-    // DisplayMode==3: the psi(own)/beta(routed)/gamma(else) corner rule
-    // (CornerR3WayValue, DistanceLattice.hlsli -- the SAME formula
-    // raymarchLatticePS.hlsl's CornerR uses when "Show Alien Potential In
-    // Render" is on, unconditionally here regardless of that toggle, since
-    // the whole point of this view is to inspect the scheme directly)
-    // evaluated for ChosenLabel at this node, same convention as
-    // DisplayMode==2: ChosenLabel's palette color scaled by the returned
-    // value (clamped at 0, so any node where ChosenLabel currently loses --
-    // own label differs, not routed here, or the reciprocal value is
+    // DisplayMode==3: the psi(own)/beta(routed)/gamma(else) corner rule,
+    // now the EXPLICIT-gamma overload of CornerR3WayValue (DistanceLattice.
+    // hlsli) -- gamma is a genuinely stored third value here, not derived by
+    // any formula. Only TestShape_ClippedSpheres's analytic build populates
+    // a real per-node gamma right now (see NodeGamma's declaration above),
+    // so this view is currently only meaningful on that scene -- everywhere
+    // else it'll show whatever stale/uninitialized gamma happens to be
+    // sitting in the buffer, until gamma is tracked everywhere. Same
+    // convention as DisplayMode==2: ChosenLabel's palette color scaled by
+    // the returned value (clamped at 0, so any node where ChosenLabel
+    // currently loses -- own label differs, not routed here, and gamma is
     // negative -- reads as black; brighter = more confidently ChosenLabel's
-    // territory here, whether by direct ownership, routing, or the derived
-    // reciprocal value).
+    // territory here).
     if (DisplayMode == 3u) {
         uint label = GetCandidateLabelAt(NodeCandidateLabel, node, 0u);
         float pot = NodePotential[node * MAX_CANDIDATES + 0u];
         float beta = NodeAlienPotential[node];
+        float gamma = NodeGamma[node];
         uint discrim = NodeDiscriminator[node];
-        float g = CornerR3WayValue(label, pot, beta, discrim, ChosenLabel);
+        float g = CornerR3WayValue(label, pot, beta, gamma, discrim, ChosenLabel);
         float3 col = LabelColorA(ChosenLabel) * saturate(g / scale);
         result.color = float4(col, 1.0);
         return result;

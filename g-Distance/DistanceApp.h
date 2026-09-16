@@ -235,6 +235,20 @@ protected:
 	com_ptr<ID3D12Resource> nodeAlienPotentialBuffer;        // NodeCount float: beta, "current" (Jacobi read buffer)
 	com_ptr<ID3D12Resource> nodeAlienPotentialScratchBuffer; // NodeCount float: beta, Jacobi write buffer
 	com_ptr<ID3D12Resource> nodeDiscriminatorBuffer;         // NodeCount uint: bits0-7=current (bit0=enabled, bits1-7=routed label), bits8-15=scratch (same layout, committed by commitAlienCS.hlsl) -- see EncodeDiscriminator/DecodeDiscriminator/PackDiscriminatorScratch, DistanceLattice.hlsli
+	com_ptr<ID3D12Resource> nodeGammaBuffer;                 // NodeCount float: gamma, the explicitly-tracked "else" third value -- see CornerR3WayValue's explicit-gamma overload, DistanceLattice.hlsli. So far only populated by buildAnalyticClippedSpheresCS (TestShape_ClippedSpheres); stale/uninitialized on every other scene until the redesign is extended.
+
+	// -- junction footvectors (RunExtractFootVectors/RunSmoothFootVectors, see
+	// the approved plan) -- per-node vector to the nearest point on the
+	// nearest local triple-junction line, from the plain label+phi
+	// representation only, restricted to a narrow band (invalid where no
+	// tet-tet interface near this node has 3 pairwise-distinct labels).
+	// NOT the same thing as nodeFootVectorBuffer above (that one is a JFA
+	// distance to the nearest DIFFERENTLY-LABELED NODE -- a 2-label-interface
+	// concept, ACount-only) -- deliberately distinct names to avoid confusing
+	// the two.
+	com_ptr<ID3D12Resource> nodeJunctionFootVectorBuffer;       // NodeCount float4: xyz=raw footvector, w=validity (1/0), extractJunctionFootVectorsCS.hlsl
+	com_ptr<ID3D12Resource> nodeJunctionTangentBuffer;          // NodeCount float3: normalized local junction-line direction at the kept interface, extractJunctionFootVectorsCS.hlsl
+	com_ptr<ID3D12Resource> nodeJunctionFootVectorSmoothBuffer; // NodeCount float4: same layout, cubic-fit-reprojected, smoothJunctionFootVectorsCS.hlsl
 
 	Egg::Compute::ComputeShader rasterLabelCS;
 	Egg::Compute::ComputeShader computeConnectingNodesCS;
@@ -253,6 +267,8 @@ protected:
 	Egg::Compute::ComputeShader smoothnessJacobiAlienRefCS; // diagnostic ground-truth reference fit, see smoothnessJacobiAlienRefCS.hlsl
 	Egg::Compute::ComputeShader buildAnalyticClippedSpheresCS; // TestShape_ClippedSpheres analytic init, see buildAnalyticClippedSpheresCS.hlsl
 	Egg::Compute::ComputeShader commitAlienCS; // scratch->main commit for the alien-potential pass, see commitAlienCS.hlsl
+	Egg::Compute::ComputeShader extractJunctionFootVectorsCS; // step 1 of the junction-footvector feature, see the approved plan
+	Egg::Compute::ComputeShader smoothJunctionFootVectorsCS;  // step 2 (cubic-fit reprojection), see the approved plan
 	Egg::Compute::ComputeShader commitPotentialCS;
 	Egg::Compute::ComputeShader commitPotentialBlockCS; // scratch->main commit for the block-smoothing path ONLY, see commitPotentialBlockCS.hlsl
 	Egg::Compute::ComputeShader commitSyntheticCS; // scratch->main commit for the synthetic-field path ONLY, see commitSyntheticCS.hlsl
@@ -269,6 +285,8 @@ protected:
 	com_ptr<ID3D12PipelineState> wireframePso;
 	com_ptr<ID3D12RootSignature> footSliceRootSig;
 	com_ptr<ID3D12PipelineState> footSlicePso;
+	com_ptr<ID3D12RootSignature> footVectorLineRootSig;
+	com_ptr<ID3D12PipelineState> footVectorLinePso;
 	com_ptr<ID3D12RootSignature> raymarchLatticeRootSig;
 	com_ptr<ID3D12PipelineState> raymarchLatticePso;
 
@@ -294,6 +312,8 @@ protected:
 	bool needsReinit = false;
 	bool needsContinue = false;
 	bool needsAlienStep = false; // 'J' key / "Alien Step" button -- see RunAlienStep()
+	bool needsExtractFootVectors = false; // 'F' key / "Extract Junction Footvectors" button -- see RunExtractFootVectors(), the approved plan
+	bool needsSmoothFootVectors = false;  // 'G' key / "Smooth Junction Footvectors" button -- see RunSmoothFootVectors(), the approved plan ('S' is already the camera's own move-back key)
 	// True = the NEXT alien step must re-gather (fresh discriminator +
 	// beta reset to -phi) before solving -- set whenever Phase-1 smoothing
 	// (RunReinit/RunContinue) changes labels/phi, since a discriminator or
@@ -352,7 +372,7 @@ protected:
 	// -- that's the 'J' key / "Alien Step" button (needsAlienStep),
 	// independent of this checkbox, so beta/discriminator can be stepped
 	// and inspected (Picked Tet panel) even with this off.
-	bool useAlienPotential = true;
+	bool useAlienPotential = false; // default off -- restore plain single-label/single-potential behavior; beta/gamma are never solved for unless the user explicitly runs an Alien Step, so defaulting this on would show a meaningless debug overlay on a fresh launch
 	int alienSweepCount = 1; // sweeps performed by ONE alien step (RunAlienStep), independent of jacobiSweepsPerRound
 	float alienJunctionWeight = 0.0f; // see DistanceCb.hlsli's AlienJunctionWeight -- 0 until dialed up, same convention as junctionWeight/eikonalWeight
 	float junctionFloorWeight = 0.0f; // see DistanceCb.hlsli's JunctionFloorWeight -- the anti-degeneracy floor term
@@ -396,6 +416,8 @@ protected:
 	uint pickedCornerFootSeed[4] = {};         // raw converged JFA seed node index (A-nodes only), the input jfaFinalizeCS turned into pickedCornerFootDist -- SENTINEL_LABEL or self-index here is the smoking gun for a JFA propagation bug
 	float pickedCornerAlienPot[4] = {};        // NodeAlienPotential (beta) -- alien-potential secondary pass only, see the approved plan
 	uint pickedCornerDiscriminator[4] = {};    // NodeDiscriminator (current byte0=enabled+routedLabel, scratch byte1 same layout) -- see EncodeDiscriminator/DecodeDiscriminator/PackDiscriminatorScratch
+	Egg::Math::float4 pickedCornerJunctionFootVector[4] = {};       // NodeJunctionFootVector (raw), xyz=vector w=validity -- see the approved plan
+	Egg::Math::float4 pickedCornerJunctionFootVectorSmooth[4] = {}; // NodeJunctionFootVectorSmooth, same layout
 
 	bool showNodes = false;
 	bool showSurface = false;
@@ -419,7 +441,14 @@ protected:
 	// corner labels to find true 3/4-way junction crossings that
 	// extractSurfaceSyntheticCS.hlsl's static 2-label mesh extraction cannot
 	// represent -- synthetic-field pipeline only (see useSyntheticField).
-	bool showJunctionRaymarch = true;
+	bool showJunctionRaymarch = true; // default on -- useful for inspecting true 3/4-way junction crossings that the main single-label/single-potential mesh extraction (extractSurfaceSyntheticCS.hlsl) can't represent, independent of whether joint smoothing has been run
+
+	// Debug: one line segment per node with a valid junction footvector (see
+	// RunExtractFootVectors/RunSmoothFootVectors, the approved plan) --
+	// off by default, same reasoning as useAlienPotential: meaningless
+	// (all-invalid) until 'F' has actually been pressed.
+	bool showJunctionFootVectors = false;
+	bool showSmoothedFootVectors = false; // false = draw the raw (step 1) buffer, true = the cubic-fit-smoothed (step 2) one
 
 	// Test shape: same torus/ellipsoid scene as g-BCC/g-Aequor, centered in
 	// the middle of the (positive-only) BCC lattice index space rather than
@@ -758,6 +787,10 @@ protected:
 			nodeAlienPotentialBuffer        = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeAlienPotentialBuffer");
 			nodeAlienPotentialScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeAlienPotentialScratchBuffer");
 			nodeDiscriminatorBuffer         = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(UINT), L"nodeDiscriminatorBuffer");
+			nodeGammaBuffer                 = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeGammaBuffer");
+			nodeJunctionFootVectorBuffer       = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float) * 4, L"nodeJunctionFootVectorBuffer");
+			nodeJunctionTangentBuffer          = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float) * 3, L"nodeJunctionTangentBuffer");
+			nodeJunctionFootVectorSmoothBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float) * 4, L"nodeJunctionFootVectorSmoothBuffer");
 		}
 		if (gridChanged || windowChanged) {
 			surfaceVertexBuffer = CreateRawUavBuffer(device.Get(), (UINT64)WindowTetCount * 6 * sizeof(float) * 8, L"surfaceVertexBuffer"); // pos(3)+normal(3)+labelI+labelJ, see DistanceSurface.hlsli
@@ -802,8 +835,9 @@ protected:
 			cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootUnorderedAccessView(3, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
 			cmd->SetComputeRootUnorderedAccessView(4, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
-			cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
-			cmd->SetComputeRootConstantBufferView(6, clippedSpheresCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(5, nodeGammaBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(6, distanceGridCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(7, clippedSpheresCb.GetGPUVirtualAddress());
 			GpuCrashTracker::Mark(aftermathUploadContext, "buildAnalyticClippedSpheresCS");
 			cmd->Dispatch(SmoothnessGroups, 1, 1); // NodeCount-based flat dispatch, one thread per node
 			{
@@ -812,6 +846,7 @@ protected:
 					CD3DX12_RESOURCE_BARRIER::UAV(nodePotentialBuffer.Get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(nodeAlienPotentialBuffer.Get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(nodeDiscriminatorBuffer.Get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(nodeGammaBuffer.Get()),
 				};
 				cmd->ResourceBarrier(_countof(b), b);
 			}
@@ -1336,6 +1371,72 @@ protected:
 		CheckDeviceRemoved();
 	}
 
+	// Manually-triggered junction-footvector extraction ('F' key / "Extract
+	// Junction Footvectors" button, see the approved plan) -- step 1 of the
+	// junction-footvector feature. Meant to be pressed after some ordinary
+	// phi smoothing (several 'C' presses) has already settled the label+phi
+	// field; reads only that representation (no beta/gamma/discriminator).
+	// Same one-shot upload-command-list shape as RunAlienStep -- a single
+	// dispatch, not a sweep loop.
+	void RunExtractFootVectors() {
+		DX_API("reset upload allocator (extract footvectors)") uploadAllocator->Reset();
+		DX_API("reset upload command list (extract footvectors)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
+		auto& cmd = uploadCommandList;
+
+		cmd->SetComputeRootSignature(extractJunctionFootVectorsCS.rootSig.Get());
+		cmd->SetPipelineState(extractJunctionFootVectorsCS.pso.Get());
+		cmd->SetComputeRootUnorderedAccessView(0, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(1, nodePotentialBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(2, nodeJunctionFootVectorBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(3, nodeJunctionTangentBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(4, distanceGridCb.GetGPUVirtualAddress());
+		GpuCrashTracker::Mark(aftermathUploadContext, "extractJunctionFootVectorsCS");
+		cmd->Dispatch(SmoothnessGroups, 1, 1);
+		{
+			D3D12_RESOURCE_BARRIER b[] = {
+				CD3DX12_RESOURCE_BARRIER::UAV(nodeJunctionFootVectorBuffer.Get()),
+				CD3DX12_RESOURCE_BARRIER::UAV(nodeJunctionTangentBuffer.Get()),
+			};
+			cmd->ResourceBarrier(_countof(b), b);
+		}
+
+		DX_API("close upload command list (extract footvectors)") cmd->Close();
+		ID3D12CommandList* lists[] = { cmd.Get() };
+		commandQueue->ExecuteCommandLists(1, lists);
+		uploadFence.signal(commandQueue, ++uploadFenceValue);
+		uploadFence.cpuWait();
+		CheckDeviceRemoved();
+	}
+
+	// Manually-triggered junction-footvector smoothing ('G' key -- 'S' is
+	// already the camera's own move-back key -- / "Smooth Junction
+	// Footvectors" button, see the approved plan) -- step 2:
+	// reprojects each node's raw footvector onto a local cubic fit through
+	// nearby valid footpoints. Independently triggerable from step 1 (reads
+	// whatever's currently in the raw buffer) -- same one-shot shape.
+	void RunSmoothFootVectors() {
+		DX_API("reset upload allocator (smooth footvectors)") uploadAllocator->Reset();
+		DX_API("reset upload command list (smooth footvectors)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
+		auto& cmd = uploadCommandList;
+
+		cmd->SetComputeRootSignature(smoothJunctionFootVectorsCS.rootSig.Get());
+		cmd->SetPipelineState(smoothJunctionFootVectorsCS.pso.Get());
+		cmd->SetComputeRootUnorderedAccessView(0, nodeJunctionFootVectorBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(1, nodeJunctionTangentBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(2, nodeJunctionFootVectorSmoothBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+		GpuCrashTracker::Mark(aftermathUploadContext, "smoothJunctionFootVectorsCS");
+		cmd->Dispatch(SmoothnessGroups, 1, 1);
+		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeJunctionFootVectorSmoothBuffer.Get()));
+
+		DX_API("close upload command list (smooth footvectors)") cmd->Close();
+		ID3D12CommandList* lists[] = { cmd.Get() };
+		commandQueue->ExecuteCommandLists(1, lists);
+		uploadFence.signal(commandQueue, ++uploadFenceValue);
+		uploadFence.cpuWait();
+		CheckDeviceRemoved();
+	}
+
 	// Render-only: marching-tetrahedra surface extraction over the current
 	// (converged) potentials -- run once after the solve settles, not per
 	// Jacobi sweep, and re-run whenever the solve state actually changes
@@ -1747,6 +1848,13 @@ protected:
 		// Phase 2 tuned it to.
 		com_ptr<ID3D12Resource> rbAlienPot = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
 		com_ptr<ID3D12Resource> rbDiscrim = CreateReadbackBuffer(device.Get(), nodeFloatBytes);
+		// Junction footvectors (see the approved plan) -- always read back,
+		// same "cheap, NodeCount-sized" reasoning as rbAlienPot/rbDiscrim above,
+		// even before 'F'/'S' have ever been pressed (the buffers just read as
+		// all-invalid then).
+		UINT64 junctionBytes = (UINT64)NodeCount * sizeof(float) * 4;
+		com_ptr<ID3D12Resource> rbJunctionFoot = CreateReadbackBuffer(device.Get(), junctionBytes);
+		com_ptr<ID3D12Resource> rbJunctionFootSmooth = CreateReadbackBuffer(device.Get(), junctionBytes);
 
 		DX_API("reset upload allocator (pick diag)") uploadAllocator->Reset();
 		DX_API("reset upload command list (pick diag)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
@@ -1764,6 +1872,8 @@ protected:
 		cmd->CopyBufferRegion(rbFootSeed.Get(), 0, (jfaFinalIsBufferA ? jfaSeedBufferA : jfaSeedBufferB).Get(), 0, footSeedBytes);
 		cmd->CopyBufferRegion(rbAlienPot.Get(), 0, nodeAlienPotentialBuffer.Get(), 0, nodeFloatBytes);
 		cmd->CopyBufferRegion(rbDiscrim.Get(), 0, nodeDiscriminatorBuffer.Get(), 0, nodeFloatBytes);
+		cmd->CopyBufferRegion(rbJunctionFoot.Get(), 0, nodeJunctionFootVectorBuffer.Get(), 0, junctionBytes);
+		cmd->CopyBufferRegion(rbJunctionFootSmooth.Get(), 0, nodeJunctionFootVectorSmoothBuffer.Get(), 0, junctionBytes);
 		DX_API("close upload command list (pick diag)") cmd->Close();
 		{
 			ID3D12CommandList* lists[] = { cmd.Get() };
@@ -1781,6 +1891,8 @@ protected:
 		UINT* footSeed = nullptr;
 		float* alienPot = nullptr;
 		UINT* discrim = nullptr;
+		float* junctionFoot = nullptr;
+		float* junctionFootSmooth = nullptr;
 		rbCand->Map(0, nullptr, (void**)&cand);
 		rbPot->Map(0, nullptr, (void**)&pot);
 		rbVol->Map(0, nullptr, (void**)&vol);
@@ -1789,6 +1901,8 @@ protected:
 		rbFootSeed->Map(0, nullptr, (void**)&footSeed);
 		rbAlienPot->Map(0, nullptr, (void**)&alienPot);
 		rbDiscrim->Map(0, nullptr, (void**)&discrim);
+		rbJunctionFoot->Map(0, nullptr, (void**)&junctionFoot);
+		rbJunctionFootSmooth->Map(0, nullptr, (void**)&junctionFootSmooth);
 
 		for (uint c = 0; c < 4; c++) {
 			uint node = pickedTetNodes[c];
@@ -1809,6 +1923,8 @@ protected:
 				pickedCornerFootSeed[c] = SENTINEL_LABEL;
 				pickedCornerAlienPot[c] = -1.0f; // matches CornerLabelPotAlien's virtual-corner convention (raymarchLatticePS.hlsl)
 				pickedCornerDiscriminator[c] = 0;
+				pickedCornerJunctionFootVector[c] = Egg::Math::float4(0, 0, 0, 0);
+				pickedCornerJunctionFootVectorSmooth[c] = Egg::Math::float4(0, 0, 0, 0);
 				continue;
 			}
 			for (uint s = 0; s < MAX_CANDIDATES; s++) {
@@ -1835,6 +1951,10 @@ protected:
 			pickedCornerFootSeed[c] = (node < ACount) ? footSeed[node] : SENTINEL_LABEL;
 			pickedCornerAlienPot[c] = alienPot[node];
 			pickedCornerDiscriminator[c] = discrim[node];
+			pickedCornerJunctionFootVector[c] = Egg::Math::float4(
+				junctionFoot[node * 4 + 0], junctionFoot[node * 4 + 1], junctionFoot[node * 4 + 2], junctionFoot[node * 4 + 3]);
+			pickedCornerJunctionFootVectorSmooth[c] = Egg::Math::float4(
+				junctionFootSmooth[node * 4 + 0], junctionFootSmooth[node * 4 + 1], junctionFootSmooth[node * 4 + 2], junctionFootSmooth[node * 4 + 3]);
 		}
 
 		// Independent per-tet dominant pair -- same frequency-vote rule as
@@ -2002,6 +2122,21 @@ protected:
 		if (useSyntheticField) ImGui::TextDisabled("(debug: true 3/4-way junction crossings)");
 		else ImGui::TextDisabled("(synthetic field only -- enable 'Use Synthetic Field')");
 
+		ImGui::Checkbox("Show Junction Footvectors", &showJunctionFootVectors);
+		ImGui::SameLine();
+		ImGui::TextDisabled("(debug: one line per node toward the nearest junction -- see 'F'/'S' keys below)");
+		if (showJunctionFootVectors) {
+			ImGui::Checkbox("Show Smoothed (vs raw)", &showSmoothedFootVectors);
+		}
+		if (dataValid) {
+			if (ImGui::Button("Extract Junction Footvectors")) needsExtractFootVectors = true;
+			ImGui::SameLine();
+			ImGui::TextDisabled("('F' key -- step 1: from label+phi only, run after some Continue smoothing)");
+			if (ImGui::Button("Smooth Junction Footvectors")) needsSmoothFootVectors = true;
+			ImGui::SameLine();
+			ImGui::TextDisabled("('G' key -- step 2: cubic-fit reprojection of step 1's raw output)");
+		}
+
 		if (dataValid) {
 			if (pickedTetValid) ImGui::Text("Picked tet (right-click): %u", pickedTetIndex);
 			else ImGui::TextDisabled("Picked tet (right-click): none (or last click missed)");
@@ -2072,6 +2207,20 @@ protected:
 							ImGui::Text("      NodeFootDist(raw)=%.6f  seed=node %u", pickedCornerFootDist[c], seed);
 					} else {
 						ImGui::TextDisabled("      NodeFootDist(raw)=N/A (B-node)");
+					}
+					if (pickedCornerJunctionFootVector[c].w > 0.5f) {
+						Egg::Math::float4& jf = pickedCornerJunctionFootVector[c];
+						ImGui::Text("      JunctionFoot(raw)=(%.4f, %.4f, %.4f) |v|=%.6f",
+							jf.x, jf.y, jf.z, sqrtf(jf.x * jf.x + jf.y * jf.y + jf.z * jf.z));
+					} else {
+						ImGui::TextDisabled("      JunctionFoot(raw)=invalid (no qualifying 3-label interface nearby)");
+					}
+					if (pickedCornerJunctionFootVectorSmooth[c].w > 0.5f) {
+						Egg::Math::float4& jfs = pickedCornerJunctionFootVectorSmooth[c];
+						ImGui::Text("      JunctionFoot(smoothed)=(%.4f, %.4f, %.4f) |v|=%.6f",
+							jfs.x, jfs.y, jfs.z, sqrtf(jfs.x * jfs.x + jfs.y * jfs.y + jfs.z * jfs.z));
+					} else {
+						ImGui::TextDisabled("      JunctionFoot(smoothed)=invalid");
 					}
 				}
 
@@ -2338,6 +2487,8 @@ public:
 		smoothnessJacobiAlienRefCS.createResources(device, "Shaders/smoothnessJacobiAlienRefCS.cso");
 		buildAnalyticClippedSpheresCS.createResources(device, "Shaders/buildAnalyticClippedSpheresCS.cso");
 		commitAlienCS.createResources(device, "Shaders/commitAlienCS.cso");
+		extractJunctionFootVectorsCS.createResources(device, "Shaders/extractJunctionFootVectorsCS.cso");
+		smoothJunctionFootVectorsCS.createResources(device, "Shaders/smoothJunctionFootVectorsCS.cso");
 		commitPotentialCS.createResources(device, "Shaders/commitPotentialCS.cso");
 		commitPotentialBlockCS.createResources(device, "Shaders/commitPotentialBlockCS.cso");
 		commitSyntheticCS.createResources(device, "Shaders/commitSyntheticCS.cso");
@@ -2505,6 +2656,45 @@ public:
 		}
 
 		{
+			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/footVectorLineVS.cso");
+			com_ptr<ID3DBlob> ps = Egg::Shader::LoadCso("Shaders/footVectorLinePS.cso");
+			footVectorLineRootSig = Egg::Shader::LoadRootSignature(device.Get(), vs.Get());
+
+			D3D12_BLEND_DESC alphaBlend = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+			alphaBlend.RenderTarget[0].BlendEnable    = TRUE;
+			alphaBlend.RenderTarget[0].SrcBlend       = D3D12_BLEND_SRC_ALPHA;
+			alphaBlend.RenderTarget[0].DestBlend      = D3D12_BLEND_INV_SRC_ALPHA;
+			alphaBlend.RenderTarget[0].BlendOp        = D3D12_BLEND_OP_ADD;
+			alphaBlend.RenderTarget[0].SrcBlendAlpha  = D3D12_BLEND_ONE;
+			alphaBlend.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+			alphaBlend.RenderTarget[0].BlendOpAlpha   = D3D12_BLEND_OP_ADD;
+
+			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = footVectorLineRootSig.Get();
+			psoDesc.VS = { vs->GetBufferPointer(), vs->GetBufferSize() };
+			psoDesc.PS = { ps->GetBufferPointer(), ps->GetBufferSize() };
+			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+			psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+			psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+			// ALWAYS + no write, same as wireframePso -- a debug marker should
+			// always be visible on top, not fight the surface's own depth.
+			psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+			psoDesc.DepthStencilState.DepthEnable = TRUE;
+			psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+			psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+			psoDesc.BlendState = alphaBlend;
+			D3D12_INPUT_LAYOUT_DESC emptyLayout = { nullptr, 0 };
+			psoDesc.InputLayout = emptyLayout;
+			psoDesc.NumRenderTargets = 1;
+			psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.SampleMask = UINT_MAX;
+			psoDesc.SampleDesc.Count = 1;
+			DX_API("create foot-vector line PSO")
+				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(footVectorLinePso.GetAddressOf()));
+		}
+
+		{
 			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/raymarchLatticeVS.cso");
 			com_ptr<ID3DBlob> ps = Egg::Shader::LoadCso("Shaders/raymarchLatticePS.cso");
 			raymarchLatticeRootSig = Egg::Shader::LoadRootSignature(device.Get(), vs.Get());
@@ -2599,6 +2789,14 @@ public:
 			RunAlienRefStep();
 			needsAlienRefStep = false;
 			if (pickedTetValid) ReadBackPickedTetDiagnostics();
+		} else if (needsExtractFootVectors) {
+			RunExtractFootVectors();
+			needsExtractFootVectors = false;
+			if (pickedTetValid) ReadBackPickedTetDiagnostics();
+		} else if (needsSmoothFootVectors) {
+			RunSmoothFootVectors();
+			needsSmoothFootVectors = false;
+			if (pickedTetValid) ReadBackPickedTetDiagnostics();
 		}
 
 		PopulateCommandList();
@@ -2690,7 +2888,8 @@ public:
 			commandList->SetGraphicsRootUnorderedAccessView(4, nodeFootDistBuffer->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(5, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(6, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootConstantBufferView(7, distanceGridCb.GetGPUVirtualAddress());
+			commandList->SetGraphicsRootUnorderedAccessView(7, nodeGammaBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(8, distanceGridCb.GetGPUVirtualAddress());
 			commandList->SetPipelineState(footSlicePso.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced(3, 1, 0, 0);
@@ -2701,13 +2900,21 @@ public:
 			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootUnorderedAccessView(3, nodeAlienPotentialBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootUnorderedAccessView(4, nodeDiscriminatorBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
-			commandList->SetGraphicsRootConstantBufferView(6, distanceCb.GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
 			commandList->SetPipelineState(raymarchLatticePso.Get());
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced(3, 1, 0, 0);
+		}
+
+		if (dataValid && showJunctionFootVectors) {
+			commandList->SetGraphicsRootSignature(footVectorLineRootSig.Get());
+			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
+			auto& srcBuffer = showSmoothedFootVectors ? nodeJunctionFootVectorSmoothBuffer : nodeJunctionFootVectorBuffer;
+			commandList->SetGraphicsRootUnorderedAccessView(1, srcBuffer->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(2, distanceGridCb.GetGPUVirtualAddress());
+			commandList->SetPipelineState(footVectorLinePso.Get());
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+			commandList->DrawInstanced(2, NodeCount, 0, 0);
 		}
 
 		if (pickedTetValid) {
@@ -2774,6 +2981,10 @@ public:
 				needsAlienStep = true;
 			} else if (wParam == 'K' && dataValid && useSyntheticField) {
 				needsAlienRefStep = true;
+			} else if (wParam == 'F' && dataValid) {
+				needsExtractFootVectors = true;
+			} else if (wParam == 'G' && dataValid) {
+				needsSmoothFootVectors = true;
 			} else if (wParam >= '1' && wParam <= '9') {
 				int digit = (int)(wParam - '0');
 				iterations = digit;

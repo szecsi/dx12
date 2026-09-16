@@ -13,7 +13,7 @@ shaders.layDownDepthPs = O:Shader(_, {file="Shaders/Retam/layDownDepthPS.cso"})
 
 --geometries.torus = O:IndexedGeometryWithTangentSpace(_, {file="torusNiceUV.obj"})
 geometries.torus = O:IndexedGeometryWithTangentSpace(_, {file="kachu.fbx"})
-geometries.knight = O:IndexedGeometryWithTangentSpace(_, {file="nosey-knight.fbx"})
+geometries.knight = O:IndexedGeometryWithTangentSpace(_, {file="chess/knight.obj", targetHeight=207.741058})
 
 --multiMeshes.pod = O:MultiMeshFromFile(_, {file='torusNiceUV.obj'})
 --geometries.chassis = multiMeshes.pod:getGeometry(0, 0)
@@ -49,7 +49,7 @@ multiMeshes.podRetam256 = O:MultiMesh(_, {}, function(_)
   end )
 end )
 
-entities.podRetam256 = O:StaticEntity(_, {multiMesh=multiMeshes.podRetam256, position = { x=20, y=-10, z=0} } )
+--entities.podRetam256 = O:StaticEntity(_, {multiMesh=multiMeshes.podRetam256, position = { x=20, y=-10, z=0} } )
 
 multiMeshes.knightRetam256 = O:MultiMesh(_, {}, function(_)
   O:FlipMesh(_, {}, function(_)

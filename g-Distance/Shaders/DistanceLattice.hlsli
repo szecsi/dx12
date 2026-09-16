@@ -736,6 +736,23 @@ float CornerR3WayValue(uint label, float pot, float beta, uint discrim, uint que
     return m - log(exp(m - pot) + exp(m - beta));
 }
 
+// Explicit-gamma overload: gamma is a genuinely tracked THIRD per-node value
+// here, not derived from pot/beta at all -- own label -> pot; discriminator-
+// routed label -> beta; otherwise -> gamma, verbatim, no formula, no
+// normalization. This is the target end state for the whole (label,pot,beta,
+// gamma) representation everywhere -- so far only `TestShape_ClippedSpheres`'s
+// analytic build (buildAnalyticClippedSpheresCS.hlsl) and this debug slice
+// (footSlicePS.hlsl's DisplayMode==3) actually populate/consume a real
+// per-node gamma; the derived (5-arg, no gamma) overload above remains in use
+// everywhere else (main render's CornerR, synthetic-field reconstruction)
+// until that's extended to track gamma as a genuine third scalar too.
+float CornerR3WayValue(uint label, float pot, float beta, float gamma, uint discrim, uint queryLabel)
+{
+    if (label == queryLabel) return pot;
+    if (IsAlienRoute(discrim, queryLabel)) return beta;
+    return gamma;
+}
+
 // "Next" (scratch) discriminator, packed into bits 8-15 of the SAME uint
 // word as the current discriminator (bits 0-7 -- see EncodeDiscriminator).
 // Mirrors NodeCandidateLabel's existing byte0(current)/byte1(scratch) split:

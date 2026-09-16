@@ -30,16 +30,21 @@
 // +-ClippedSpheresCb's ClampDistance (a "Reinit param" GUI slider) before
 // biasing -- "out" especially is otherwise unbounded far from both spheres.
 //
-// The 3 raw values [out,capA,capB] (index == label) are re-centered to sum
-// to exactly zero (same invariant as CornerR's own phi+beta+(-phi-beta)=0)
-// before picking the winner (own label -> phi), runner-up (routed label ->
-// beta), leaving the third to reconstruct exactly as -phi-beta downstream
-// (raymarchLatticePS.hlsl's CornerR).
-// ZeroBeta (TestShape_ClippedSpheresZeroBeta): same label/phi/discriminator
-// as the normal scene -- ONLY the stored beta is forced to 0 instead of the
-// true biased[second] -- isolating whether the ROUTING structure alone
-// (same discriminator, same "which label is second") helps at all if the
-// stored VALUE isn't the correct one, vs. the normal scene's exact
+// The 3 raw values [out,capA,capB] (index == label) rank winner (own label
+// -> phi) and runner-up (routed label -> beta) directly by true magnitude;
+// the remaining third is stored EXPLICITLY as gamma -- no normalization, no
+// reciprocal or exponential correction of any kind needed anymore, since
+// there's now a real per-node slot for it (CornerR3WayValue's explicit-gamma
+// overload, DistanceLattice.hlsli). This REPLACES the old "derive gamma from
+// phi/beta via a formula" scheme (first reciprocal, later exponential
+// soft-min) for this shader -- both were only ever needed because gamma
+// wasn't tracked as its own value; storing it directly makes the whole
+// normalization question moot.
+// ZeroBeta (TestShape_ClippedSpheresZeroBeta): same label/phi/gamma/
+// discriminator as the normal scene -- ONLY the stored beta is forced to 0
+// instead of the true raw[second] -- isolating whether the ROUTING structure
+// alone (same discriminator, same "which label is second") helps at all if
+// the stored VALUE isn't the correct one, vs. the normal scene's exact
 // reconstruction. See the chat derivation for why plain -phi (what a zeroed
 // beta degenerates the "else" role to) is measurably wrong here even on
 // ordinary-looking 2-label boundaries, not just at the triple line.
@@ -49,17 +54,19 @@
     "UAV(u1)," \
     "UAV(u2)," \
     "UAV(u3)," \
+    "UAV(u4)," \
     "CBV(b1)," \
     "CBV(b2)"
 
 cbuffer ModeConsts : register(b0) {
-    uint ZeroBeta; // 0 = normal (beta = true biased[second]), 1 = force beta = 0 everywhere
+    uint ZeroBeta; // 0 = normal (beta = true raw[second]), 1 = force beta = 0 everywhere
 };
 
 RWStructuredBuffer<uint>  NodeCandidateLabel : register(u0);
 RWStructuredBuffer<float> NodePotential      : register(u1);
 RWStructuredBuffer<float> NodeAlienPotential : register(u2);
 RWStructuredBuffer<uint>  NodeDiscriminator  : register(u3);
+RWStructuredBuffer<float> NodeGamma          : register(u4);
 
 [RootSignature(BuildAnalyticClippedSpheresSig)]
 [numthreads(THREAD_GROUP_SIZE, 1, 1)]
@@ -84,7 +91,22 @@ void buildAnalyticClippedSpheresCS(uint3 dtid : SV_DispatchThreadID)
 
     float capA = min(sdA, -planeD);
     float capB = min(sdB, planeD);
-    float outside = -max(capA, capB);
+    // NOT -max(capA,capB): capA/capB are already clipped flush to the plane
+    // (each is exactly 0 wherever planeD==0, regardless of how deep inside
+    // the sphere the point is -- correct for THEM, since that flat cut IS
+    // their own cap boundary). But "outside" means distance from the WHOLE
+    // union of the two spheres, whose actual boundary is only the two outer
+    // spherical surfaces -- the plane is an INTERNAL seam between the caps,
+    // not part of the union's boundary at all. Using capA/capB here made
+    // "outside" spuriously tie with both caps at 0 along the entire plane
+    // inside the lens (deep inside both spheres, nowhere near the real
+    // exterior), which the tie-break resolved to label 0 -- exactly the
+    // "label 0 in the middle of the intersection" bug. The standard
+    // uncapped-union-complement SDF fixes it: strongly negative (not
+    // outside) deep in the lens, while still correctly handed to whichever
+    // sphere's own "far sliver" (past the plane, outside the other sphere)
+    // it belongs to, same as before.
+    float outside = -max(sdA, sdB);
 
     // Clamp each of the 3 raw SDFs (both directions) before biasing -- the
     // "outside" field especially is otherwise unbounded far from either
@@ -95,16 +117,19 @@ void buildAnalyticClippedSpheresCS(uint3 dtid : SV_DispatchThreadID)
     capB = clamp(capB, -ClampDistance, ClampDistance);
 
     float raw[3] = { outside, capA, capB }; // index == label (0=background,1=A,2=B)
-    float mean = (1.0/raw[0] + 1.0/raw[1] + 1.0/raw[2]) / 3.0;
-    float biased[3] = { 1.0/(1.0/raw[0] - mean), 1.0/(1.0/raw[1] - mean), 1.0/(1.0/raw[2] - mean) };
 
+    // Rank by true magnitude directly -- no shared correction needed at all
+    // anymore, since the remaining (third) value gets its own stored slot.
     uint winner = 0;
-    if (biased[1] > biased[winner]) winner = 1;
-    if (biased[2] > biased[winner]) winner = 2;
+    if (raw[1] > raw[winner]) winner = 1;
+    if (raw[2] > raw[winner]) winner = 2;
     uint second = (winner == 0) ? 1u : 0u;
-    for (uint k = 1; k < 3u; k++) if (k != winner && biased[k] > biased[second]) second = k;
+    for (uint k = 1; k < 3u; k++) if (k != winner && raw[k] > raw[second]) second = k;
+    uint third = 3u - winner - second; // the one remaining label index (0+1+2=3)
+
     NodeCandidateLabel[node * 2u + 0u] = winner & 0xFFu;
-    NodePotential[node * MAX_CANDIDATES + 0u] = biased[winner];
-    NodeAlienPotential[node] = (ZeroBeta != 0u) ? 0.0 : biased[second];
+    NodePotential[node * MAX_CANDIDATES + 0u] = raw[winner];
+    NodeAlienPotential[node] = (ZeroBeta != 0u) ? 0.0 : raw[second];
+    NodeGamma[node] = raw[third];
     NodeDiscriminator[node] = EncodeDiscriminator(true, second); // discriminator now stores the routed label directly, no bit-search needed
 }

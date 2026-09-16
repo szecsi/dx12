@@ -9,11 +9,26 @@
 
 #include <algorithm>
 #include <system_error>
+#include <cmath>
 
 #include <DirectXTex/DirectXTex.h>
 
 namespace Egg {
 	namespace Importer {
+
+		// Arbitrary tangent perpendicular to n (n is already unit length --
+		// normals are guaranteed present by aiProcess_GenNormals). Only used
+		// as a fallback for meshes with no UV channel at all (e.g.
+		// Media/chess/*.obj): aiProcess_CalcTangentSpace needs UVs and
+		// leaves mTangents/mBitangents null without them, so this is never a
+		// meaningful tangent-space basis -- just enough to avoid a null
+		// dereference and a degenerate (zero) tangent.
+		static Egg::Math::float3 FallbackTangent(const Egg::Math::float3& n) {
+			using namespace Egg::Math;
+			float3 up = (std::fabs(n.y) < 0.99f) ? float3(0, 1, 0) : float3(1, 0, 0);
+			return up.Cross(n).Normalize();
+		}
+
 		Texture2D ImportTexture2D(ID3D12Device * device, const std::string & filePath) {
 			std::wstring wstr = Egg::Utility::WFormat(L"../Media/%S", filePath.c_str());
 
@@ -154,6 +169,7 @@ namespace Egg {
 			vertices.reserve(mesh->mNumVertices);
 
 			PNT_Vertex v;
+			bool hasUv = mesh->HasTextureCoords(0); // e.g. Media/chess/*.obj ship with no UV channel at all
 
 			for(unsigned int i = 0; i < mesh->mNumVertices; ++i) {
 				v.position.x = mesh->mVertices[i].x;
@@ -164,8 +180,8 @@ namespace Egg {
 				v.normal.y = mesh->mNormals[i].y;
 				v.normal.z = mesh->mNormals[i].z;
 
-				v.tex.x = mesh->mTextureCoords[0][i].x;
-				v.tex.y = mesh->mTextureCoords[0][i].y;
+				v.tex.x = hasUv ? mesh->mTextureCoords[0][i].x : 0.0f;
+				v.tex.y = hasUv ? mesh->mTextureCoords[0][i].y : 0.0f;
 
 				vertices.emplace_back(v);
 			}
@@ -218,12 +234,15 @@ namespace Egg {
 			indices.reserve(mesh->mNumFaces * 3);
 			vertices.reserve(mesh->mNumVertices);
 
+			bool hasUv = mesh->HasTextureCoords(0);
+			bool hasTangents = mesh->HasTangentsAndBitangents();
+
 			for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
 				PNTTB_RI_Vertex v;
 				v.position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
 				v.normal   = { mesh->mNormals[i].x,  mesh->mNormals[i].y,  mesh->mNormals[i].z };
-				v.tangent  = { mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z };
-				v.tex      = { mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y };
+				v.tangent  = hasTangents ? Egg::Math::float3(mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z) : FallbackTangent(v.normal);
+				v.tex      = hasUv ? Egg::Math::float2(mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y) : Egg::Math::float2(0.0f, 0.0f);
 
 				auto& infl = perVertex[i];
 				v.blendIndices = { 0u, 0u, 0u, 0u };
@@ -266,7 +285,7 @@ namespace Egg {
 			return geometry;
 		}
 
-		Egg::Mesh::Geometry::P ImportWithTangentSpace(ID3D12Device * device, const std::string & filePath) {
+		Egg::Mesh::Geometry::P ImportWithTangentSpace(ID3D12Device * device, const std::string & filePath, float targetHeight) {
 			std::string path = "../Media/" + filePath;
 
 			Assimp::Importer importer;
@@ -286,6 +305,8 @@ namespace Egg {
 			vertices.reserve(mesh->mNumVertices);
 
 			PNTTB_Vertex v;
+			bool hasUv = mesh->HasTextureCoords(0); // e.g. Media/chess/*.obj ship with no UV channel at all
+			bool hasTangents = mesh->HasTangentsAndBitangents(); // aiProcess_CalcTangentSpace needs UVs to compute these
 
 			for(unsigned int i = 0; i < mesh->mNumVertices; ++i) {
 				v.position.x = mesh->mVertices[i].x;
@@ -296,18 +317,34 @@ namespace Egg {
 				v.normal.y = mesh->mNormals[i].y;
 				v.normal.z = mesh->mNormals[i].z;
 
-				v.tex.x = mesh->mTextureCoords[0][i].x;
-				v.tex.y = mesh->mTextureCoords[0][i].y;
+				v.tex.x = hasUv ? mesh->mTextureCoords[0][i].x : 0.0f;
+				v.tex.y = hasUv ? mesh->mTextureCoords[0][i].y : 0.0f;
 
-				v.tangent.x = mesh->mTangents[i].x;
-				v.tangent.y = mesh->mTangents[i].y;
-				v.tangent.z = mesh->mTangents[i].z;
+				if (hasTangents) {
+					v.tangent.x = mesh->mTangents[i].x;
+					v.tangent.y = mesh->mTangents[i].y;
+					v.tangent.z = mesh->mTangents[i].z;
 
-				v.bitangent.x = mesh->mBitangents[i].x;
-				v.bitangent.y = mesh->mBitangents[i].y;
-				v.bitangent.z = mesh->mBitangents[i].z;
+					v.bitangent.x = mesh->mBitangents[i].x;
+					v.bitangent.y = mesh->mBitangents[i].y;
+					v.bitangent.z = mesh->mBitangents[i].z;
+				}
+				else {
+					v.tangent = FallbackTangent(v.normal);
+					v.bitangent = v.normal.Cross(v.tangent);
+				}
 
 				vertices.emplace_back(v);
+			}
+
+			if (targetHeight > 0.0f) {
+				float mnY = 1e9f, mxY = -1e9f;
+				for (auto& vv : vertices) { mnY = (std::min)(mnY, vv.position.y); mxY = (std::max)(mxY, vv.position.y); }
+				float height = mxY - mnY;
+				if (height > 1e-6f) {
+					float scale = targetHeight / height;
+					for (auto& vv : vertices) vv.position *= scale;
+				}
 			}
 
 			for(unsigned int i = 0; i < mesh->mNumFaces; ++i) {
