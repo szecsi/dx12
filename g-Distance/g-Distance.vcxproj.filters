@@ -98,6 +98,12 @@
     <FxCompile Include="Shaders\smoothJunctionFootVectorsCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\buildEdgeDataCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\smoothEdgeDerivMultCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\raymarchVS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
@@ -140,6 +146,12 @@
     <FxCompile Include="Shaders\raymarchLatticePS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\raymarchEdgeVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\raymarchEdgePS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\DistanceConfig.hlsli">
@@ -179,6 +191,9 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\TorusSdf.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\JunctionCrossing.hlsli">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>

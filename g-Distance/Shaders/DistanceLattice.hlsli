@@ -469,6 +469,39 @@ static const int3 NodeNeighborOffsets[14] = {
     int3(1, 1, 0), int3(-1, -1, 0), int3(1, 0, 1), int3(-1, 0, -1), int3(0, 1, 1), int3(0, -1, -1)
 };
 
+// Per-edge rendering revamp (see the approved plan): the 7 "forward" halves
+// of NodeNeighborOffsets' 7 (+,-) pairs above (its even indices) -- every
+// undirected lattice edge is stored EXACTLY ONCE, at whichever of its two
+// endpoints reaches the other via one of these 7 directions (its "owner"),
+// giving a per-node edge buffer of 7 slots instead of 14 redundant halves.
+// ForwardSlotOf resolves an arbitrary edge offset (as seen from EITHER
+// endpoint) to its owning slot -- callers check `d` and, if that fails,
+// `-d` (meaning the OTHER endpoint is the owner) -- see buildEdgeDataCS.hlsl
+// (write side) and raymarchEdgePS.hlsl (read side) for the two consumers.
+static const int3 ForwardEdgeOffsets[7] = {
+    int3(1, 0, 0), int3(0, 1, 0), int3(0, 0, 1), int3(1, 1, 1), int3(1, 1, 0), int3(1, 0, 1), int3(0, 1, 1)
+};
+
+bool ForwardSlotOf(int3 d, out uint slot)
+{
+    [unroll]
+    for (uint s = 0; s < 7; s++) {
+        if (all(d == ForwardEdgeOffsets[s])) { slot = s; return true; }
+    }
+    slot = 0;
+    return false;
+}
+
+// Which 3 corners (of a tet's 4, indices 0..3) bound the face OPPOSITE
+// corner index i -- matches ExitCornerToRelation's own "opposite corner"
+// convention, so its result can be fed straight into AdvanceTetAcrossFace.
+// Shared by every per-tet raymarch/reconstruction shader that needs a tet's
+// 4 faces (raymarchLatticePS.hlsl, raymarchEdgePS.hlsl,
+// buildAnalyticEdgeDerivMultCS.hlsl) instead of each declaring its own copy.
+static const uint FaceCorners[4][3] = {
+    { 1, 2, 3 }, { 0, 2, 3 }, { 0, 1, 3 }, { 0, 1, 2 }
+};
+
 // The 8 corner roles of one cube, in the same order GetTetCornerQs/
 // RingBetween use: D0, D1, ring[0..5]. Duplicated here (rather than built
 // from D0/D1/RingBetween at HLSL scope) only because HLSL static-const

@@ -61,16 +61,10 @@ void OpenXRApp::InitXrInstance() {
 }
 
 void OpenXRApp::InitXrSession() {
-    // Must call xrGetD3D12GraphicsRequirementsKHR before creating the session
-    PFN_xrGetD3D12GraphicsRequirementsKHR pfnGetReqs = nullptr;
-    XrCheck(xrGetInstanceProcAddr(xrInstance, "xrGetD3D12GraphicsRequirementsKHR",
-        (PFN_xrVoidFunction*)&pfnGetReqs),
-        "Failed to load xrGetD3D12GraphicsRequirementsKHR");
-
-    XrGraphicsRequirementsD3D12KHR reqs = { XR_TYPE_GRAPHICS_REQUIREMENTS_D3D12_KHR };
-    XrCheck(pfnGetReqs(xrInstance, xrSystemId, &reqs),
-        "Failed to get D3D12 graphics requirements");
-
+    // xrGetD3D12GraphicsRequirementsKHR was already called in
+    // CreateDeviceAndXrInstance() -- the spec requires calling it exactly
+    // once before session creation, and it's what chose the adapter the
+    // device/queue below were created on.
     XrGraphicsBindingD3D12KHR binding = { XR_TYPE_GRAPHICS_BINDING_D3D12_KHR };
     binding.device = device.Get();
     binding.queue = commandQueue.Get();
@@ -229,11 +223,51 @@ void OpenXRApp::BuildEyeMatrices() {
     }
 }
 
+// ---- Device/adapter creation (must run before CreateResources()) ---------
+
+void OpenXRApp::CreateDeviceAndXrInstance(com_ptr<IDXGIFactory4> factory) {
+    InitXrInstance(); // creates xrInstance + xrSystemId
+
+    // The spec requires calling this exactly once, before creating the
+    // session -- and its adapterLuid is what tells us which GPU OpenXR
+    // actually needs (may not be the same one a "prefer NVIDIA"-style
+    // desktop heuristic would have picked on a multi-GPU machine).
+    PFN_xrGetD3D12GraphicsRequirementsKHR pfnGetReqs = nullptr;
+    XrCheck(xrGetInstanceProcAddr(xrInstance, "xrGetD3D12GraphicsRequirementsKHR",
+        (PFN_xrVoidFunction*)&pfnGetReqs),
+        "Failed to load xrGetD3D12GraphicsRequirementsKHR");
+
+    XrGraphicsRequirementsD3D12KHR reqs = { XR_TYPE_GRAPHICS_REQUIREMENTS_D3D12_KHR };
+    XrCheck(pfnGetReqs(xrInstance, xrSystemId, &reqs),
+        "Failed to get D3D12 graphics requirements");
+
+    com_ptr<IDXGIAdapter1> adapter;
+    DX_API("Failed to find the GPU adapter OpenXR requires (EnumAdapterByLuid)")
+        factory->EnumAdapterByLuid(reqs.adapterLuid, IID_PPV_ARGS(adapter.GetAddressOf()));
+
+    com_ptr<ID3D12Device> dev;
+    DX_API("Failed to create D3D12 device on the OpenXR-required adapter")
+        D3D12CreateDevice(adapter.Get(), reqs.minFeatureLevel, IID_PPV_ARGS(dev.GetAddressOf()));
+    SetDevice(dev);
+
+    D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+    queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    queueDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+    queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+    queueDesc.NodeMask = 0;
+
+    com_ptr<ID3D12CommandQueue> queue;
+    DX_API("Failed to create command queue")
+        dev->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(queue.GetAddressOf()));
+    SetCommandQueue(queue);
+}
+
 // ---- Lifecycle -----------------------------------------------------------
 
 void OpenXRApp::CreateResources() {
     // Replicate SimpleApp::CreateResources() but skip WaitForPreviousFrame(),
     // which queries swapChain->GetCurrentBackBufferIndex() — we have no DXGI swapchain.
+    // Requires device/commandQueue already set via CreateDeviceAndXrInstance().
     App::CreateResources();
 
     psoManager = PsoManager::Create(device);
@@ -249,7 +283,6 @@ void OpenXRApp::CreateResources() {
 
     WaitForGpu();
 
-    InitXrInstance();
     InitXrSession();
     CreateXrSwapchains();
 }

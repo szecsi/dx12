@@ -2,6 +2,7 @@
 #define DISTANCE_GRID_CB_REGISTER b1
 #include "DistanceLattice.hlsli"
 #include "LabelPalette.hlsli"
+#include "JunctionCrossing.hlsli"
 
 // Junction-aware lattice raymarch: walks the ray tet-by-tet through the BCC
 // lattice's own tet decomposition (DistanceLattice.hlsli), using each tet's
@@ -87,13 +88,6 @@ bool IntersectWorldBox(float3 ro, float3 rd, out float tEnter, out float tExit)
     return tEnter <= tExit;
 }
 
-// Which 3 corners bound the face OPPOSITE corner index i (0..3) -- matches
-// ExitCornerToRelation's (DistanceLattice.hlsli) own "opposite corner"
-// convention, so its result can be fed straight into AdvanceTetAcrossFace.
-static const uint FaceCorners[4][3] = {
-    { 1, 2, 3 }, { 0, 2, 3 }, { 0, 1, 3 }, { 0, 1, 2 }
-};
-
 PsOut raymarchLatticePS(VsOut input)
 {
     PsOut result;
@@ -146,115 +140,17 @@ PsOut raymarchLatticePS(VsOut input)
             CornerLabelPot(cornerRef[c2], cornerLabel[c2], cornerPot[c2]);
         }
 
-        // Distinct labels present among this tet's 4 corners (up to 4,
-        // fewer whenever any corners share a label).
-        uint present[4]; uint presentCount = 0;
-        for (uint cp = 0; cp < 4; cp++) {
-            bool already = false;
-            for (uint pp = 0; pp < presentCount; pp++) if (present[pp] == cornerLabel[cp]) { already = true; break; }
-            if (!already) present[presentCount++] = cornerLabel[cp];
-        }
+        float3 Pw[4];
+        for (uint c4 = 0; c4 < 4; c4++) Pw[c4] = QWorldPos(qArr[c4]);
 
-        if (presentCount > 1) {
-            float3 Pw[4];
-            for (uint c4 = 0; c4 < 4; c4++) Pw[c4] = QWorldPos(qArr[c4]);
-            float3 w0, w1, w2, w3;
-            TetShapeGradients(Pw[0], Pw[1], Pw[2], Pw[3], w0, w1, w2, w3);
-            float3 wArr[4] = { w0, w1, w2, w3 };
-
-            // One field PER DISTINCT LABEL (not per corner) -- corners
-            // sharing a label pool into the SAME shared field (each
-            // contributing its own real potential as a genuine sample,
-            // exactly like every other corner's own reading), rather than
-            // competing as independent entries. Reverted back to this from
-            // an intermediate "always exactly 4 fields, one per corner,
-            // same-label crossings skipped via an envelope-of-lines search"
-            // version -- that version never actually merged same-labeled
-            // corners into one field at all, just avoided rendering a seam
-            // between them by special-casing the search; this restores a
-            // genuine single gradient for a repeated label instead. Field l's
-            // value at corner c is +itsOwnPotential where c's label matches
-            // l, -itsOwnPotential everywhere else -- unconditionally, plain
-            // own/foreign, no beta/gamma. Affine over the tet (same
-            // TetShapeGradients machinery), so each field's value along the
-            // ray, G_l(t) = base + slope*t, is a single line -- computed
-            // once via the same wArr (tet geometry only), no per-step
-            // re-solving.
-            float lineBase[4], lineSlope[4]; // indexed by position in `present`, not corner index
-            for (uint pi = 0; pi < presentCount; pi++) {
-                uint l = present[pi];
-                float G[4];
-                for (uint c5 = 0; c5 < 4; c5++) G[c5] = (cornerLabel[c5] == l) ? cornerPot[c5] : -cornerPot[c5];
-                float3 gradG = G[0] * wArr[0] + G[1] * wArr[1] + G[2] * wArr[2] + G[3] * wArr[3];
-                lineBase[pi] = G[0] + dot(ro - Pw[0], gradG);
-                lineSlope[pi] = dot(rd, gradG);
-            }
-
-            // First t (nearest the camera) after tCur where two present
-            // labels' lines tie AND are jointly the maximum among all
-            // present labels there -- the classic "first breakpoint of an
-            // upper envelope of lines" search, now genuinely simple since
-            // each present label is exactly one line (no per-label envelope-
-            // of-several-lines bookkeeping needed anymore).
-            float crossT = 1.0e30; uint crossA = 0, crossB = 0; bool foundCross = false;
-            for (uint pi = 0; pi < presentCount; pi++) {
-                for (uint pj = pi + 1; pj < presentCount; pj++) {
-                    float slopeDiff = lineSlope[pj] - lineSlope[pi];
-                    if (abs(slopeDiff) <= epsSlope) continue; // parallel (or coincident) -- never a fresh crossing
-                    float tc = (lineBase[pi] - lineBase[pj]) / slopeDiff;
-                    if (tc <= tCur + epsT || tc > bestT + epsT || tc >= crossT) continue;
-                    float tieVal = lineBase[pi] + lineSlope[pi] * tc;
-                    bool valid = true;
-                    for (uint pk = 0; pk < presentCount; pk++) {
-                        if (pk == pi || pk == pj) continue;
-                        float vk = lineBase[pk] + lineSlope[pk] * tc;
-                        if (vk > tieVal + 1.0e-6) { valid = false; break; } // a 3rd label is already ahead here -- not the true crossing
-                    }
-                    if (valid) { crossT = tc; crossA = pi; crossB = pj; foundCross = true; }
-                }
-            }
-
-            if (foundCross) {
-                // Whichever of the pair has the SMALLER slope was dominant
-                // just before the tie (the near/background side, receding);
-                // the other is what's actually beyond the surface from the
-                // camera's side (approaching, overtakes for t>tc).
-                uint winner = (lineSlope[crossA] < lineSlope[crossB]) ? crossA : crossB;
-                uint crossWinner = (winner == crossA) ? crossB : crossA;
-                uint winnerLabel = present[winner];
-                uint crossLabel = present[crossWinner];
-
-                float3 worldHit = ro + rd * crossT;
-                float4 clipHit = mul(float4(worldHit, 1), viewProjTransform);
-                result.depth = clipHit.z / clipHit.w;
-
-                // Interface normal: gradient of (G_crossLabel - G_winnerLabel),
-                // same convention as extractSurfaceSyntheticCS.hlsl's g[]/
-                // gradG (which label is "positive" is arbitrary there too --
-                // only the SIGN used for orienting toward the camera below
-                // matters for shading).
-                float gDiff[4];
-                for (uint c6 = 0; c6 < 4; c6++) {
-                    float gW = (cornerLabel[c6] == winnerLabel) ? cornerPot[c6] : -cornerPot[c6];
-                    float gO = (cornerLabel[c6] == crossLabel) ? cornerPot[c6] : -cornerPot[c6];
-                    gDiff[c6] = gO - gW;
-                }
-                float3 gradN = gDiff[0] * wArr[0] + gDiff[1] * wArr[1] + gDiff[2] * wArr[2] + gDiff[3] * wArr[3];
-                float3 n = (length(gradN) > 1.0e-8) ? normalize(gradN) : float3(0, 0, 1);
-                float3 toCam = -rd;
-                float3 nFacing = (dot(n, toCam) > 0.0) ? n : -n;
-
-                float3 lightDir = normalize(float3(0.4, 0.6, 0.7));
-                float diff = saturate(dot(nFacing, lightDir)) * 0.7 + 0.3;
-                // crossLabel is the label that overtakes as t increases --
-                // i.e. what's actually beyond the surface from the camera's
-                // side (winnerLabel is the near/background side that
-                // recedes), matching surfacePS.hlsl's "far side" color
-                // convention.
-                float3 baseColor = LabelColorA(crossLabel);
-                result.color = float4(baseColor * diff, 1.0);
-                return result;
-            }
+        // No edge data in this (pre-per-edge-revamp) path -- identity
+        // multipliers reproduce the original unmodified reconstruction.
+        float cornerDerivMult[4] = { 1.0, 1.0, 1.0, 1.0 };
+        JunctionHit jh = FindJunctionCrossing(Pw, cornerLabel, cornerPot, cornerDerivMult, ro, rd, viewProjTransform, tCur, bestT, epsT, epsSlope);
+        if (jh.hit) {
+            result.depth = jh.depthNdc;
+            result.color = float4(jh.color, 1.0);
+            return result;
         }
 
         if (!AdvanceTetAcrossFace(C, slot, (uint)bestExit)) break;

@@ -63,6 +63,18 @@ protected:
     virtual void PopulateEyeCommandList() = 0;
 
 public:
+    // Must be called BEFORE CreateResources(), instead of the usual
+    // App::SetDevice()/SetCommandQueue() dance a desktop main.cpp does.
+    // OpenXR requires knowing which GPU adapter to use (via
+    // xrGetD3D12GraphicsRequirementsKHR's adapterLuid) before the D3D12
+    // device is created -- unlike a desktop app, which can pick any
+    // adapter and create the device first. This creates the XrInstance
+    // and XrSystemId, queries the required adapter/feature level, resolves
+    // the matching IDXGIAdapter1 via EnumAdapterByLuid, creates the D3D12
+    // device and a DIRECT command queue on it, and calls SetDevice()/
+    // SetCommandQueue() on itself.
+    void CreateDeviceAndXrInstance(com_ptr<IDXGIFactory4> factory);
+
     virtual void CreateResources() override;
     virtual void CreateSwapChainResources() override;
     virtual void Render() override;

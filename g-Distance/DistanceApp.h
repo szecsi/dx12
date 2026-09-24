@@ -250,6 +250,17 @@ protected:
 	com_ptr<ID3D12Resource> nodeJunctionTangentBuffer;          // NodeCount float3: normalized local junction-line direction at the kept interface, extractJunctionFootVectorsCS.hlsl
 	com_ptr<ID3D12Resource> nodeJunctionFootVectorSmoothBuffer; // NodeCount float4: same layout, cubic-fit-reprojected, smoothJunctionFootVectorsCS.hlsl
 
+	// -- per-edge rendering revamp (see the approved plan) -- 7 float4 slots
+	// per node, one per canonical "forward" edge direction (ForwardEdgeOffsets,
+	// DistanceLattice.hlsli); each undirected lattice edge is stored exactly
+	// once, at whichever endpoint reaches it via a forward offset. Step 1:
+	// only slot.x (1.0=hetero/differing labels, 0.0=homo) is real; the rest
+	// is reserved for edge-derivative data later. float4 now, downsize once
+	// the final encoding is settled.
+	com_ptr<ID3D12Resource> nodeEdgeDataBuffer; // NodeCount*7 float4, buildEdgeDataCS.hlsl (.x=hetero bit only; .y/.z/.w reserved/unused)
+	com_ptr<ID3D12Resource> nodeEdgeDerivMultBuffer;        // NodeCount float: per-node edge-derivative multiplier, "current" (Jacobi read buffer) -- see smoothEdgeDerivMultCS.hlsl, the approved plan's per-face redesign
+	com_ptr<ID3D12Resource> nodeEdgeDerivMultScratchBuffer; // NodeCount float: same, Jacobi write buffer
+
 	Egg::Compute::ComputeShader rasterLabelCS;
 	Egg::Compute::ComputeShader computeConnectingNodesCS;
 	Egg::Compute::ComputeShader jfaInitCS;
@@ -269,6 +280,8 @@ protected:
 	Egg::Compute::ComputeShader commitAlienCS; // scratch->main commit for the alien-potential pass, see commitAlienCS.hlsl
 	Egg::Compute::ComputeShader extractJunctionFootVectorsCS; // step 1 of the junction-footvector feature, see the approved plan
 	Egg::Compute::ComputeShader smoothJunctionFootVectorsCS;  // step 2 (cubic-fit reprojection), see the approved plan
+	Egg::Compute::ComputeShader buildEdgeDataCS; // per-edge rendering revamp step 1, see the approved plan
+	Egg::Compute::ComputeShader smoothEdgeDerivMultCS; // TestShape_ClippedSpheres-only per-face Jacobi relaxation for edge-derivative multipliers, see the approved plan
 	Egg::Compute::ComputeShader commitPotentialCS;
 	Egg::Compute::ComputeShader commitPotentialBlockCS; // scratch->main commit for the block-smoothing path ONLY, see commitPotentialBlockCS.hlsl
 	Egg::Compute::ComputeShader commitSyntheticCS; // scratch->main commit for the synthetic-field path ONLY, see commitSyntheticCS.hlsl
@@ -289,6 +302,8 @@ protected:
 	com_ptr<ID3D12PipelineState> footVectorLinePso;
 	com_ptr<ID3D12RootSignature> raymarchLatticeRootSig;
 	com_ptr<ID3D12PipelineState> raymarchLatticePso;
+	com_ptr<ID3D12RootSignature> raymarchEdgeRootSig;
+	com_ptr<ID3D12PipelineState> raymarchEdgePso;
 
 	Egg::ConstantBuffer<DistanceFrameCb> frameCb;
 	Egg::ConstantBuffer<DistanceCb>      distanceCb;
@@ -314,6 +329,10 @@ protected:
 	bool needsAlienStep = false; // 'J' key / "Alien Step" button -- see RunAlienStep()
 	bool needsExtractFootVectors = false; // 'F' key / "Extract Junction Footvectors" button -- see RunExtractFootVectors(), the approved plan
 	bool needsSmoothFootVectors = false;  // 'G' key / "Smooth Junction Footvectors" button -- see RunSmoothFootVectors(), the approved plan ('S' is already the camera's own move-back key)
+	bool needsBuildEdgeData = false; // 'H' key / "Build Edge Data" button -- see RunBuildEdgeData(), the approved plan (per-edge rendering revamp)
+	bool needsSmoothEdgeDerivMult = false; // 'I' key / "Smooth Edge Derivatives" button -- TestShape_ClippedSpheres only, see RunSmoothEdgeDerivMult(), the approved plan's per-face Jacobi relaxation (run AFTER 'H')
+	int edgeDerivMultSweeps = 5; // GUI: "Edge Deriv Mult Sweeps" -- how many DAMPED Jacobi relaxation sweeps RunSmoothEdgeDerivMult() runs per press (purely incremental -- repeated presses keep converging, don't restart)
+	float edgeDerivMultRelaxFactor = 0.5f; // GUI: "Edge Deriv Mult Relax Factor" -- under-relaxation damping (mNew=mOld+factor*(mRaw-mOld)); plain (factor=1) Jacobi on this system isn't guaranteed to converge and was observed to overshoot
 	// True = the NEXT alien step must re-gather (fresh discriminator +
 	// beta reset to -phi) before solving -- set whenever Phase-1 smoothing
 	// (RunReinit/RunContinue) changes labels/phi, since a discriminator or
@@ -442,6 +461,13 @@ protected:
 	// extractSurfaceSyntheticCS.hlsl's static 2-label mesh extraction cannot
 	// represent -- synthetic-field pipeline only (see useSyntheticField).
 	bool showJunctionRaymarch = true; // default on -- useful for inspecting true 3/4-way junction crossings that the main single-label/single-potential mesh extraction (extractSurfaceSyntheticCS.hlsl) can't represent, independent of whether joint smoothing has been run
+	// Per-edge rendering revamp (see the approved plan) -- off by default
+	// since NodeEdgeData is meaningless (all-homo) until 'H' has actually
+	// been pressed; when on, the Show Junction Raymarch draw call below uses
+	// raymarchEdgePso (edge-data-driven walk) instead of raymarchLatticePso
+	// (reads corner labels every tet) -- both render identically once a
+	// non-homogeneous tet is found, this only changes HOW that tet is found.
+	bool useEdgeDataRaymarch = false;
 
 	// Debug: one line segment per node with a valid junction footvector (see
 	// RunExtractFootVectors/RunSmoothFootVectors, the approved plan) --
@@ -791,6 +817,9 @@ protected:
 			nodeJunctionFootVectorBuffer       = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float) * 4, L"nodeJunctionFootVectorBuffer");
 			nodeJunctionTangentBuffer          = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float) * 3, L"nodeJunctionTangentBuffer");
 			nodeJunctionFootVectorSmoothBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float) * 4, L"nodeJunctionFootVectorSmoothBuffer");
+			nodeEdgeDataBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * 7 * sizeof(float) * 4, L"nodeEdgeDataBuffer");
+			nodeEdgeDerivMultBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeEdgeDerivMultBuffer");
+			nodeEdgeDerivMultScratchBuffer = CreateRawUavBuffer(device.Get(), (UINT64)NodeCount * sizeof(float), L"nodeEdgeDerivMultScratchBuffer");
 		}
 		if (gridChanged || windowChanged) {
 			surfaceVertexBuffer = CreateRawUavBuffer(device.Get(), (UINT64)WindowTetCount * 6 * sizeof(float) * 8, L"surfaceVertexBuffer"); // pos(3)+normal(3)+labelI+labelJ, see DistanceSurface.hlsli
@@ -1430,6 +1459,101 @@ protected:
 		cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeJunctionFootVectorSmoothBuffer.Get()));
 
 		DX_API("close upload command list (smooth footvectors)") cmd->Close();
+		ID3D12CommandList* lists[] = { cmd.Get() };
+		commandQueue->ExecuteCommandLists(1, lists);
+		uploadFence.signal(commandQueue, ++uploadFenceValue);
+		uploadFence.cpuWait();
+		CheckDeviceRemoved();
+	}
+
+	// Manually-triggered edge-data build ('H' key / "Build Edge Data" button,
+	// per-edge rendering revamp, see the approved plan) -- step 1 of that
+	// revamp: for each node, for each of its 7 canonical forward edges,
+	// writes whether that edge is homo/hetero (labels agree/differ). Same
+	// one-shot upload-command-list shape as RunExtractFootVectors.
+	void RunBuildEdgeData() {
+		DX_API("reset upload allocator (build edge data)") uploadAllocator->Reset();
+		DX_API("reset upload command list (build edge data)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
+		auto& cmd = uploadCommandList;
+
+		cmd->SetComputeRootSignature(buildEdgeDataCS.rootSig.Get());
+		cmd->SetPipelineState(buildEdgeDataCS.pso.Get());
+		cmd->SetComputeRootUnorderedAccessView(0, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(1, nodeEdgeDataBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootUnorderedAccessView(2, nodeEdgeDerivMultBuffer->GetGPUVirtualAddress());
+		cmd->SetComputeRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+		GpuCrashTracker::Mark(aftermathUploadContext, "buildEdgeDataCS");
+		cmd->Dispatch(SmoothnessGroups, 1, 1);
+		{
+			D3D12_RESOURCE_BARRIER b[] = {
+				CD3DX12_RESOURCE_BARRIER::UAV(nodeEdgeDataBuffer.Get()),
+				CD3DX12_RESOURCE_BARRIER::UAV(nodeEdgeDerivMultBuffer.Get()),
+			};
+			cmd->ResourceBarrier(_countof(b), b);
+		}
+
+		DX_API("close upload command list (build edge data)") cmd->Close();
+		ID3D12CommandList* lists[] = { cmd.Get() };
+		commandQueue->ExecuteCommandLists(1, lists);
+		uploadFence.signal(commandQueue, ++uploadFenceValue);
+		uploadFence.cpuWait();
+		CheckDeviceRemoved();
+	}
+
+	// Manually-triggered edge-derivative-multiplier smoothing ('I' key /
+	// "Smooth Edge Derivatives" button, see the approved plan's per-face
+	// Jacobi redesign) -- TestShape_ClippedSpheres only: runs edgeDerivMultSweeps
+	// DAMPED relaxation sweeps, ping-ponging nodeEdgeDerivMultBuffer/Scratch
+	// each sweep (same Jacobi ping-pong shape as every other smoothing pass).
+	// Purely incremental -- continues from whatever nodeEdgeDerivMultBuffer
+	// currently holds (seeded to the identity 1.0 by 'H'/RunBuildEdgeData,
+	// not by this function), so repeated presses keep making progress
+	// instead of each one silently restarting from scratch (a real bug this
+	// replaced: an unconditional "first sweep" reset made every press
+	// reconverge to the identical result, which looked like "no further
+	// motion" -- and un-damped Jacobi on this system overshot badly enough
+	// to visibly break the rendered junction, "knocks the junction surfaces
+	// off"). Meant to be pressed AFTER 'H' (RunBuildEdgeData) -- the hetero
+	// bits it wrote are what the render uses to decide which tets even
+	// attempt a crossing search.
+	void RunSmoothEdgeDerivMult() {
+		DX_API("reset upload allocator (smooth edge deriv mult)") uploadAllocator->Reset();
+		DX_API("reset upload command list (smooth edge deriv mult)") uploadCommandList->Reset(uploadAllocator.Get(), nullptr);
+		auto& cmd = uploadCommandList;
+
+		cmd->SetComputeRootSignature(smoothEdgeDerivMultCS.rootSig.Get());
+		cmd->SetPipelineState(smoothEdgeDerivMultCS.pso.Get());
+
+		int totalPasses = (edgeDerivMultSweeps > 0) ? edgeDerivMultSweeps : 0;
+		for (int pass = 0; pass < totalPasses; pass++) {
+			// Standard alternating ping-pong: pass 0 reads Buffer/writes
+			// Scratch, pass 1 reads Scratch/writes Buffer, etc.
+			bool writeToScratch = (pass % 2 == 0);
+			auto& readBuf = writeToScratch ? nodeEdgeDerivMultBuffer : nodeEdgeDerivMultScratchBuffer;
+			auto& writeBuf = writeToScratch ? nodeEdgeDerivMultScratchBuffer : nodeEdgeDerivMultBuffer;
+			cmd->SetComputeRoot32BitConstants(0, 1, &edgeDerivMultRelaxFactor, 0);
+			cmd->SetComputeRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(3, readBuf->GetGPUVirtualAddress());
+			cmd->SetComputeRootUnorderedAccessView(4, writeBuf->GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+			cmd->SetComputeRootConstantBufferView(6, clippedSpheresCb.GetGPUVirtualAddress());
+			GpuCrashTracker::Mark(aftermathUploadContext, "smoothEdgeDerivMultCS");
+			cmd->Dispatch(SmoothnessGroups, 1, 1);
+			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(writeBuf.Get()));
+		}
+		// The render always reads nodeEdgeDerivMultBuffer. The last executed
+		// pass is index (totalPasses-1); per the writeToScratch formula
+		// above, that pass wrote to Scratch iff (totalPasses-1) is even,
+		// i.e. totalPasses is ODD -- copy back in that case so "current"
+		// holds the converged result. (totalPasses==0 is even, so this is
+		// also correctly a no-op then, matching the slider's min of 1 anyway.)
+		if (totalPasses > 0 && totalPasses % 2 == 1) {
+			cmd->CopyBufferRegion(nodeEdgeDerivMultBuffer.Get(), 0, nodeEdgeDerivMultScratchBuffer.Get(), 0, (UINT64)NodeCount * sizeof(float));
+			cmd->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(nodeEdgeDerivMultBuffer.Get()));
+		}
+
+		DX_API("close upload command list (smooth edge deriv mult)") cmd->Close();
 		ID3D12CommandList* lists[] = { cmd.Get() };
 		commandQueue->ExecuteCommandLists(1, lists);
 		uploadFence.signal(commandQueue, ++uploadFenceValue);
@@ -2121,6 +2245,25 @@ protected:
 		ImGui::SameLine();
 		if (useSyntheticField) ImGui::TextDisabled("(debug: true 3/4-way junction crossings)");
 		else ImGui::TextDisabled("(synthetic field only -- enable 'Use Synthetic Field')");
+		if (showJunctionRaymarch) {
+			ImGui::Checkbox("Use Edge Data Walk", &useEdgeDataRaymarch);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(per-edge revamp: walk via NodeEdgeData instead of reading corner labels every tet -- press 'H' first)");
+			if (dataValid) {
+				if (ImGui::Button("Build Edge Data")) needsBuildEdgeData = true;
+				ImGui::SameLine();
+				ImGui::TextDisabled("('H' key)");
+				if (testShapeKind == TestShape_ClippedSpheres || testShapeKind == TestShape_ClippedSpheresZeroBeta) {
+					ImGui::SliderInt("Edge Deriv Mult Sweeps", &edgeDerivMultSweeps, 1, 100);
+					ImGui::SliderFloat("Edge Deriv Mult Relax Factor", &edgeDerivMultRelaxFactor, 0.05f, 1.0f);
+					ImGui::SameLine();
+					ImGui::TextDisabled("(damping -- 1.0=plain Jacobi, can overshoot; lower is more stable but slower)");
+					if (ImGui::Button("Smooth Edge Derivatives")) needsSmoothEdgeDerivMult = true;
+					ImGui::SameLine();
+					ImGui::TextDisabled("('I' key -- run after 'H'; incremental, press repeatedly to keep converging)");
+				}
+			}
+		}
 
 		ImGui::Checkbox("Show Junction Footvectors", &showJunctionFootVectors);
 		ImGui::SameLine();
@@ -2489,6 +2632,8 @@ public:
 		commitAlienCS.createResources(device, "Shaders/commitAlienCS.cso");
 		extractJunctionFootVectorsCS.createResources(device, "Shaders/extractJunctionFootVectorsCS.cso");
 		smoothJunctionFootVectorsCS.createResources(device, "Shaders/smoothJunctionFootVectorsCS.cso");
+		buildEdgeDataCS.createResources(device, "Shaders/buildEdgeDataCS.cso");
+		smoothEdgeDerivMultCS.createResources(device, "Shaders/smoothEdgeDerivMultCS.cso");
 		commitPotentialCS.createResources(device, "Shaders/commitPotentialCS.cso");
 		commitPotentialBlockCS.createResources(device, "Shaders/commitPotentialBlockCS.cso");
 		commitSyntheticCS.createResources(device, "Shaders/commitSyntheticCS.cso");
@@ -2726,6 +2871,39 @@ public:
 				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(raymarchLatticePso.GetAddressOf()));
 		}
 
+		{
+			// Per-edge rendering revamp (see the approved plan) -- same PSO
+			// shape as raymarchLatticePso (full-screen-triangle debug
+			// raymarch, real spatially-accurate depth), just a different
+			// root signature/shader pair (raymarchEdgeVS/PS, walks via
+			// NodeEdgeData instead of reading corner labels every tet).
+			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/raymarchEdgeVS.cso");
+			com_ptr<ID3DBlob> ps = Egg::Shader::LoadCso("Shaders/raymarchEdgePS.cso");
+			raymarchEdgeRootSig = Egg::Shader::LoadRootSignature(device.Get(), vs.Get());
+
+			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = raymarchEdgeRootSig.Get();
+			psoDesc.VS = { vs->GetBufferPointer(), vs->GetBufferSize() };
+			psoDesc.PS = { ps->GetBufferPointer(), ps->GetBufferSize() };
+			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+			psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+			psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+			psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+			psoDesc.DepthStencilState.DepthEnable = TRUE;
+			psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+			psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+			psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+			D3D12_INPUT_LAYOUT_DESC emptyLayout = { nullptr, 0 };
+			psoDesc.InputLayout = emptyLayout;
+			psoDesc.NumRenderTargets = 1;
+			psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.SampleMask = UINT_MAX;
+			psoDesc.SampleDesc.Count = 1;
+			DX_API("create raymarch-edge PSO")
+				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(raymarchEdgePso.GetAddressOf()));
+		}
+
 		DX_API("create upload command allocator.")
 			device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
 				IID_PPV_ARGS(uploadAllocator.ReleaseAndGetAddressOf()));
@@ -2796,6 +2974,14 @@ public:
 		} else if (needsSmoothFootVectors) {
 			RunSmoothFootVectors();
 			needsSmoothFootVectors = false;
+			if (pickedTetValid) ReadBackPickedTetDiagnostics();
+		} else if (needsBuildEdgeData) {
+			RunBuildEdgeData();
+			needsBuildEdgeData = false;
+			if (pickedTetValid) ReadBackPickedTetDiagnostics();
+		} else if (needsSmoothEdgeDerivMult) {
+			RunSmoothEdgeDerivMult();
+			needsSmoothEdgeDerivMult = false;
 			if (pickedTetValid) ReadBackPickedTetDiagnostics();
 		}
 
@@ -2896,12 +3082,23 @@ public:
 		}
 
 		if (dataValid && useSyntheticField && showJunctionRaymarch) {
-			commandList->SetGraphicsRootSignature(raymarchLatticeRootSig.Get());
-			commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
-			commandList->SetGraphicsRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
-			commandList->SetPipelineState(raymarchLatticePso.Get());
+			if (useEdgeDataRaymarch) {
+				commandList->SetGraphicsRootSignature(raymarchEdgeRootSig.Get());
+				commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
+				commandList->SetGraphicsRootUnorderedAccessView(1, nodeEdgeDataBuffer->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootUnorderedAccessView(2, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootUnorderedAccessView(3, nodePotentialBuffer->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootUnorderedAccessView(4, nodeEdgeDerivMultBuffer->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootConstantBufferView(5, distanceGridCb.GetGPUVirtualAddress());
+				commandList->SetPipelineState(raymarchEdgePso.Get());
+			} else {
+				commandList->SetGraphicsRootSignature(raymarchLatticeRootSig.Get());
+				commandList->SetGraphicsRootConstantBufferView(0, frameCb.GetGPUVirtualAddress());
+				commandList->SetGraphicsRootUnorderedAccessView(1, nodeCandidateLabelBuffer->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootUnorderedAccessView(2, nodePotentialBuffer->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootConstantBufferView(3, distanceGridCb.GetGPUVirtualAddress());
+				commandList->SetPipelineState(raymarchLatticePso.Get());
+			}
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced(3, 1, 0, 0);
 		}
@@ -2985,6 +3182,10 @@ public:
 				needsExtractFootVectors = true;
 			} else if (wParam == 'G' && dataValid) {
 				needsSmoothFootVectors = true;
+			} else if (wParam == 'H' && dataValid) {
+				needsBuildEdgeData = true;
+			} else if (wParam == 'I' && dataValid && (testShapeKind == TestShape_ClippedSpheres || testShapeKind == TestShape_ClippedSpheresZeroBeta)) {
+				needsSmoothEdgeDerivMult = true;
 			} else if (wParam >= '1' && wParam <= '9') {
 				int digit = (int)(wParam - '0');
 				iterations = digit;

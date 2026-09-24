@@ -98,6 +98,8 @@
     <FxCompile Include="Shaders\commitAlienCS.hlsl" />
     <FxCompile Include="Shaders\extractJunctionFootVectorsCS.hlsl" />
     <FxCompile Include="Shaders\smoothJunctionFootVectorsCS.hlsl" />
+    <FxCompile Include="Shaders\buildEdgeDataCS.hlsl" />
+    <FxCompile Include="Shaders\smoothEdgeDerivMultCS.hlsl" />
     <FxCompile Include="Shaders\raymarchVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
     </FxCompile>
@@ -140,6 +142,12 @@
     <FxCompile Include="Shaders\raymarchLatticePS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
     </FxCompile>
+    <FxCompile Include="Shaders\raymarchEdgeVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="Shaders\raymarchEdgePS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\DistanceConfig.hlsli" />
@@ -155,6 +163,7 @@
     <None Include="Shaders\JunctionRefCb.hlsli" />
     <None Include="Shaders\ClippedSpheresCb.hlsli" />
     <None Include="Shaders\TorusSdf.hlsli" />
+    <None Include="Shaders\JunctionCrossing.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

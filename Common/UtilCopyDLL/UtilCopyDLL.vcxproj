@@ -46,10 +46,11 @@
     <CustomBuildStep>
       <Command>xcopy $(SolutionDir)Common\PhysX\bin\*.dll $(SolutionDir)Bin\* /Y
 xcopy $(SolutionDir)Common\PhysX\bin\*.pdb $(SolutionDir)Bin\* /Y
-xcopy $(SolutionDir)Common\assimp\bin\*.dll $(SolutionDir)Bin\* /Y</Command>
+xcopy $(SolutionDir)Common\assimp\bin\*.dll $(SolutionDir)Bin\* /Y
+xcopy $(SolutionDir)Common\OpenXR\bin\*.dll $(SolutionDir)Bin\* /Y</Command>
     </CustomBuildStep>
     <CustomBuildStep>
-      <Outputs>$(SolutionDir)Bin\PhysXCommon_64.dll;$(SolutionDir)Bin\PhysXCommon_64.pdb;$(SolutionDir)Bin\PhysXCooking_64.dll;$(SolutionDir)Bin\PhysXCooking_64.pdb;$(SolutionDir)Bin\PhysXFoundation_64.dll;$(SolutionDir)Bin\PhysXFoundation_64.pdb;$(SolutionDir)Bin\PhysXGpu_64.dll;$(SolutionDir)Bin\PhysX_64.dll;$(SolutionDir)Bin\PhysX_64.pdb;$(SolutionDir)Bin\assimp-vc142-mt.dll;$(SolutionDir)Bin\zlib1.dll;%(Outputs)</Outputs>
+      <Outputs>$(SolutionDir)Bin\PhysXCommon_64.dll;$(SolutionDir)Bin\PhysXCommon_64.pdb;$(SolutionDir)Bin\PhysXCooking_64.dll;$(SolutionDir)Bin\PhysXCooking_64.pdb;$(SolutionDir)Bin\PhysXFoundation_64.dll;$(SolutionDir)Bin\PhysXFoundation_64.pdb;$(SolutionDir)Bin\PhysXGpu_64.dll;$(SolutionDir)Bin\PhysX_64.dll;$(SolutionDir)Bin\PhysX_64.pdb;$(SolutionDir)Bin\assimp-vc142-mt.dll;$(SolutionDir)Bin\zlib1.dll;$(SolutionDir)Bin\openxr_loader.dll;%(Outputs)</Outputs>
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
