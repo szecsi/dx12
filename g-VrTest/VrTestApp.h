@@ -156,7 +156,11 @@ public:
 		commandList->RSSetScissorRects(1, &eyeScissorRects[xrCurrentEye]);
 		commandList->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
 
-		const float clearColor[] = { 0.05f, 0.05f, 0.08f, 1.0f };
+		// Pure black, not near-black: written to an sRGB render target, a
+		// low-but-nonzero linear value like 0.05 gets perceptually
+		// brightened a lot on display (sRGB's encoding curve is steep near
+		// zero) -- easy to mistake for "everything is grey" on its own.
+		const float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		commandList->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
 		commandList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 

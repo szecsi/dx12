@@ -206,12 +206,21 @@ Egg::Math::float4x4 OpenXRApp::XrPoseToViewMatrix(const XrPosef& pose) {
     float ty = -(R01*px + R11*py + R21*pz);
     float tz = -(R02*px + R12*py + R22*pz);
 
+    // The matrix built above is correct for column-vector multiplication
+    // (v' = M*v), per its own comment. This engine uses row-vector
+    // convention throughout instead (world*view*proj composition order,
+    // HLSL's mul(pos, wvp)), which needs M^T -- verified numerically:
+    // for identity rotation and p=(0,0,-1), a row-vector-multiplied
+    // origin should land at view-space z=1 (one unit in front of the
+    // camera); un-transposed it lands at z=0 (silently wrong, no crash,
+    // just nothing ever rendering in the right place -- exactly the
+    // "grey/blank headset" symptom this fixes).
     return Egg::Math::float4x4(
         R00, R10, R20, tx,
         R01, R11, R21, ty,
         R02, R12, R22, tz,
         0,   0,   0,   1
-    );
+    ).Transpose();
 }
 
 Egg::Math::float4x4 OpenXRApp::XrFovToProjectionMatrix(const XrFovf& fov, float nearZ, float farZ) {
@@ -232,12 +241,16 @@ Egg::Math::float4x4 OpenXRApp::XrFovToProjectionMatrix(const XrFovf& fov, float 
     float e = -farZ / (farZ - nearZ);
     float f = -(nearZ * farZ) / (farZ - nearZ);
 
+    // Same row-vector-vs-column-vector fix as XrPoseToViewMatrix above --
+    // this is a standard column-vector-convention (v'=M*v) off-axis
+    // projection (verify: M*(x,y,z,1) gives w'=-z, the expected clip w),
+    // transposed to work with this engine's v'=v*M / mul(pos, wvp) usage.
     return Egg::Math::float4x4(
         a, 0,  c,  0,
         0, b,  d,  0,
         0, 0,  e,  f,
         0, 0, -1,  0
-    );
+    ).Transpose();
 }
 
 void OpenXRApp::BuildEyeMatrices() {

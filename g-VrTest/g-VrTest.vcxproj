@@ -51,7 +51,7 @@
       <EntryPointName>%(Filename)</EntryPointName>
     </FxCompile>
     <FxCompile>
-      <ShaderModel>6.8</ShaderModel>
+      <ShaderModel>6.4</ShaderModel>
       <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).cso</ObjectFileOutput>
     </FxCompile>
   </ItemDefinitionGroup>
