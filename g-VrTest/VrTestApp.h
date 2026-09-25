@@ -3,6 +3,8 @@
 #include <Egg/OpenXR/OpenXRApp.h>
 #include <Egg/Shader.h>
 #include <Egg/Math/Float4x4.h>
+#include <string>
+#include <vector>
 
 // Minimal proof-of-pipeline VR sample: a single slowly-spinning, per-face-
 // colored cube, 1.5m in front of the headset's initial position. No
@@ -78,8 +80,31 @@ public:
 		psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT; // must match CreateSwapChainResources()'s eye depth buffers
 		psoDesc.SampleMask = UINT_MAX;
 		psoDesc.SampleDesc.Count = 1;
-		DX_API("Failed to create vrTest PSO")
-			device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(pso.GetAddressOf()));
+		{
+			HRESULT hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(pso.GetAddressOf()));
+			if (FAILED(hr)) {
+				// The generic HRESULT ("the parameter is incorrect") doesn't say
+				// WHICH field -- the D3D12 debug layer (enabled in main.cpp)
+				// knows exactly, but normally only reports it via
+				// OutputDebugString/a debugger. Pull it directly instead so it
+				// shows up in the assert dialog even without one attached.
+				std::string details;
+				com_ptr<ID3D12InfoQueue> infoQueue;
+				if (SUCCEEDED(device.As(&infoQueue))) {
+					UINT64 n = infoQueue->GetNumStoredMessages();
+					for (UINT64 i = 0; i < n; i++) {
+						SIZE_T len = 0;
+						infoQueue->GetMessage(i, nullptr, &len);
+						std::vector<char> buf(len);
+						D3D12_MESSAGE* msg = reinterpret_cast<D3D12_MESSAGE*>(buf.data());
+						infoQueue->GetMessage(i, msg, &len);
+						details += msg->pDescription;
+						details += "\n";
+					}
+				}
+				ASSERT(false, "Failed to create vrTest PSO (HR=0x%08X). Debug layer messages:\n%s", hr, details.c_str());
+			}
+		}
 
 		// 0.4m cube, one flat color per face, centered at the local origin.
 		const float e = 0.2f;
