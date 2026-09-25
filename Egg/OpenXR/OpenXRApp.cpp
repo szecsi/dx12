@@ -42,7 +42,16 @@ void OpenXRApp::InitXrInstance() {
     appInfo.applicationVersion = 1;
     strcpy_s(appInfo.engineName, "Egg");
     appInfo.engineVersion = 1;
-    appInfo.apiVersion = XR_CURRENT_API_VERSION;
+    // Request core 1.0 explicitly, not XR_CURRENT_API_VERSION (1.1.x, from
+    // the vendored headers) -- this code uses no 1.1-only feature, and
+    // requesting a version newer than the installed runtime supports (e.g.
+    // Windows Mixed Reality's, which only implements 1.0) makes
+    // xrCreateInstance fail with XR_ERROR_API_VERSION_UNSUPPORTED.
+    // Hardcoded to 1.0.0 rather than the XR_API_VERSION_1_0 macro: in this
+    // header that macro reuses XR_CURRENT_API_VERSION's PATCH component
+    // (1.0.60, not 1.0.0) -- a compliant runtime should only compare
+    // major.minor, but an older/stricter one may not.
+    appInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
 
     const char* extensions[] = { XR_KHR_D3D12_ENABLE_EXTENSION_NAME };
 
@@ -115,10 +124,25 @@ void OpenXRApp::CreateXrSwapchains() {
             "Failed to create XR swapchain");
 
         uint32_t imgCount = 0;
-        xrEnumerateSwapchainImages(xrSwapchains[eye], 0, &imgCount, nullptr);
+        XrCheck(xrEnumerateSwapchainImages(xrSwapchains[eye], 0, &imgCount, nullptr),
+            "Failed to query XR swapchain image count");
+        ASSERT(imgCount > 0, "XR swapchain reported zero images for eye %u", eye);
+
         xrSwapchainImages[eye].resize(imgCount, { XR_TYPE_SWAPCHAIN_IMAGE_D3D12_KHR });
-        xrEnumerateSwapchainImages(xrSwapchains[eye], imgCount, &imgCount,
-            reinterpret_cast<XrSwapchainImageBaseHeader*>(xrSwapchainImages[eye].data()));
+        XrCheck(xrEnumerateSwapchainImages(xrSwapchains[eye], imgCount, &imgCount,
+            reinterpret_cast<XrSwapchainImageBaseHeader*>(xrSwapchainImages[eye].data())),
+            "Failed to enumerate XR swapchain images");
+
+        // xrEnumerateSwapchainImages succeeding doesn't guarantee non-null
+        // textures on every runtime -- a null one here would make the RTV
+        // creation loop in CreateSwapChainResources() an invalid D3D12 call
+        // (CreateRenderTargetView with pResource=nullptr, pDesc=nullptr),
+        // which is exactly the kind of thing that shows up later as a
+        // mystifying device removal instead of a clear error right here.
+        for (uint32_t img = 0; img < imgCount; img++) {
+            ASSERT(xrSwapchainImages[eye][img].texture != nullptr,
+                "XR swapchain image %u for eye %u has a null D3D12 texture", img, eye);
+        }
 
         eyeViewports[eye] = { 0.0f, 0.0f, (float)w, (float)h, 0.0f, 1.0f };
         eyeScissorRects[eye] = { 0, 0, (LONG)w, (LONG)h };
@@ -320,6 +344,20 @@ void OpenXRApp::CreateSwapChainResources() {
             auto handle = GetEyeRtv(eye, img);
             device->CreateRenderTargetView(xrSwapchainImages[eye][img].texture, nullptr, handle);
         }
+    }
+
+    // CreateRenderTargetView() above returns void -- it cannot report a
+    // failed/removed device, so if the loop above is where the device
+    // actually died (e.g. a cross-process issue with the compositor-owned
+    // swapchain textures it was just handed), this is the first point that
+    // can catch it, with the SPECIFIC removed-reason rather than the
+    // generic DXGI_ERROR_DEVICE_REMOVED the next DX_API call downstream
+    // would otherwise report.
+    {
+        HRESULT removedReason = device->GetDeviceRemovedReason();
+        ASSERT(removedReason == S_OK,
+            "D3D12 device was removed while/after creating RTVs for the OpenXR swapchain images (GetDeviceRemovedReason=0x%08X). Likely causes: D3D12 debug layer enabled while sharing the compositor's swapchain textures, a driver TDR, or an adapter/LUID mismatch with the compositor.",
+            removedReason);
     }
 
     // DSVs + depth buffers: one per eye
