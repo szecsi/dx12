@@ -338,11 +338,23 @@ void OpenXRApp::CreateSwapChainResources() {
     DX_API("Failed to create eye DSV descriptor heap")
         device->CreateDescriptorHeap(&dsvDesc, IID_PPV_ARGS(eyeDsvHeap.GetAddressOf()));
 
-    // RTVs: one per XR swapchain image
+    // RTVs: one per XR swapchain image. Explicit format, NOT nullptr --
+    // OpenXR compositors commonly hand back swapchain textures created
+    // TYPELESS (so the app can choose an sRGB or UNORM view of the same
+    // resource), and CreateRenderTargetView(resource, nullptr, handle)
+    // asks D3D12 to infer the format from the resource itself, which is
+    // invalid for a typeless resource. Unlike most D3D12 calls this one
+    // returns void, so there's no HRESULT to fail cleanly with -- the
+    // only way the driver can signal "that was invalid" is by removing
+    // the device, which is exactly the device-removed-at-RTV-creation
+    // failure this replaces.
+    D3D12_RENDER_TARGET_VIEW_DESC rtvViewDesc = {};
+    rtvViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; // must match CreateXrSwapchains()'s XrSwapchainCreateInfo::format
+    rtvViewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
     for (uint32_t eye = 0; eye < EYE_COUNT; eye++) {
         for (uint32_t img = 0; img < (uint32_t)xrSwapchainImages[eye].size(); img++) {
             auto handle = GetEyeRtv(eye, img);
-            device->CreateRenderTargetView(xrSwapchainImages[eye][img].texture, nullptr, handle);
+            device->CreateRenderTargetView(xrSwapchainImages[eye][img].texture, &rtvViewDesc, handle);
         }
     }
 

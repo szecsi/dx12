@@ -46,13 +46,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	com_ptr<ID3D12Debug> debugController{ nullptr };
 	DX_API("Failed to create debug layer")
 		D3D12GetDebugInterface(IID_PPV_ARGS(debugController.GetAddressOf()));
-	// Deliberately NOT calling debugController->EnableDebugLayer() here (unlike
-	// its declaration, matching every desktop sample in this repo). The debug
-	// layer validates OUR device only -- the WMR compositor's own device (which
-	// actually owns the swapchain textures xrEnumerateSwapchainImages hands us)
-	// has no idea about it, and that mismatch around cross-process shared
-	// resources is a known cause of spurious DXGI_ERROR_DEVICE_REMOVED when
-	// mixing the debug layer with OpenXR/compositor interop.
+	debugController->EnableDebugLayer();
+	// (Briefly suspected this of causing the device removal seen while
+	// bringing this sample up -- it wasn't; the real cause was an invalid
+	// CreateRenderTargetView call, see CreateSwapChainResources()'s RTV
+	// loop. Debug-layer messages go to OutputDebugString/the debugger
+	// output window, not a MessageBox, so they're only visible if you're
+	// running under a debugger or something like DebugView -- but it's
+	// genuinely useful for catching exactly this class of bug early.)
 
 	// Needed to load WIC files (Windows Imaging Component); harmless if unused here.
 	DX_API("Failed to initialize COM library")
