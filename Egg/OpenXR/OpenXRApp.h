@@ -62,6 +62,22 @@ protected:
     // GetEyeRtv(xrCurrentEye, xrCurrentImageIndex[xrCurrentEye]), GetEyeDsv(xrCurrentEye).
     virtual void PopulateEyeCommandList() = 0;
 
+    // Diagnostics. The D3D12 debug layer only reports via OutputDebugString,
+    // and a GPU fault inside PopulateEyeCommandList() otherwise surfaces
+    // later as a confusing failure inside the XR runtime (e.g. xrEndFrame)
+    // -- these pull the actual cause into the assert dialog instead.
+    std::string DebugLayerMessages();
+    // Needs DRED enabled before device creation (see g-RetamVr's main.cpp).
+    std::string DredReport();
+    void CheckDeviceNotRemoved(const char* where);
+    void XrCheckFrame(XrResult result, const char* call);
+
+    // Blocks until everything submitted to commandQueue has finished.
+    // fenceValue is always the NEXT value to signal -- subclasses doing
+    // their own submissions (e.g. uploads) should call this rather than
+    // signalling the fence themselves.
+    void WaitForGpu();
+
 public:
     // Must be called BEFORE CreateResources(), instead of the usual
     // App::SetDevice()/SetCommandQueue() dance a desktop main.cpp does.
@@ -92,7 +108,6 @@ private:
     void InitXrSession();
     void CreateXrSwapchains();
     void PollXrEvents();
-    void WaitForGpu();
     void BuildEyeMatrices();
     static Egg::Math::float4x4 XrPoseToViewMatrix(const XrPosef& pose);
     static Egg::Math::float4x4 XrFovToProjectionMatrix(const XrFovf& fov, float nearZ, float farZ);

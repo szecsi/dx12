@@ -79,7 +79,7 @@ class HipHopAnimation {
     com_ptr<ID3D12PipelineState>  pso[4];   // indexed by mien
 
     // ---- instances ----
-    struct Instance { XMFLOAT3 pos; float timeOff; };
+    struct Instance { XMFLOAT3 pos; float yaw; float timeOff; };
     std::vector<Instance> instances;
     int baseObjectIndex = 0;
 
@@ -181,12 +181,16 @@ class HipHopAnimation {
     }
 
 public:
-    void createResources(ID3D12Device* device, int objectSlotBase) {
+    // finalRtFormat: render target format of the mien-0 (final shading) pass --
+    // UNORM for the desktop eye buffers, UNORM_SRGB for OpenXR swapchains.
+    void createResources(ID3D12Device* device, int objectSlotBase,
+                         DXGI_FORMAT finalRtFormat = DXGI_FORMAT_R8G8B8A8_UNORM) {
         baseObjectIndex = objectSlotBase;
 
         instances.resize(N_INSTANCES);
         for (int i = 0; i < N_INSTANCES; ++i) {
             instances[i].pos     = { -24.0f , -10.0f, 30.0f + i * 20.0f };
+            instances[i].yaw     = 0.0f;
             instances[i].timeOff = i * 0.5f;
         }
 
@@ -331,7 +335,7 @@ public:
 
         D3D12_INPUT_LAYOUT_DESC il = geometry->GetInputLayout();
 
-        pso[0] = makePso(device, rootSigSkinned.Get(),        vsS.Get(), ps0.Get(), il, true,  D3D12_COMPARISON_FUNC_LESS,          1, DXGI_FORMAT_R8G8B8A8_UNORM);
+        pso[0] = makePso(device, rootSigSkinned.Get(),        vsS.Get(), ps0.Get(), il, true,  D3D12_COMPARISON_FUNC_LESS,          1, finalRtFormat);
         pso[1] = makePso(device, rootSigSkinnedCollect.Get(), vsC.Get(), ps1.Get(), il, true,  D3D12_COMPARISON_FUNC_LESS_EQUAL,    1, DXGI_FORMAT_R8G8B8A8_UNORM);
         pso[2] = makePso(device, rootSigSkinned.Get(),        vsS.Get(), ps2.Get(), il, true,  D3D12_COMPARISON_FUNC_LESS,          0);
         pso[3] = makePso(device, rootSigSkinnedCollect.Get(), vsC.Get(), ps3.Get(), il, true,  D3D12_COMPARISON_FUNC_LESS_EQUAL,    1, DXGI_FORMAT_R8G8B8A8_UNORM);
@@ -355,8 +359,9 @@ public:
                 XMStoreFloat4x4(&cb->bones[b], offset * global * globalInv);
             }
 
-            // Model matrix for this instance (simple translation)
-            XMMATRIX model    = XMMatrixTranslation(instances[inst].pos.x, instances[inst].pos.y, instances[inst].pos.z);
+            // Model matrix for this instance (yaw about its own origin, then translation)
+            XMMATRIX model    = XMMatrixRotationY(instances[inst].yaw)
+                              * XMMatrixTranslation(instances[inst].pos.x, instances[inst].pos.y, instances[inst].pos.z);
             XMMATRIX modelInv = XMMatrixInverse(nullptr, model);
             XMStoreFloat4x4(reinterpret_cast<XMFLOAT4X4*>(&objectSlots[inst].modelTransform),        model);
             XMStoreFloat4x4(reinterpret_cast<XMFLOAT4X4*>(&objectSlots[inst].modelTransformInverse), modelInv);
@@ -401,6 +406,12 @@ public:
     }
 
     int getBaseObjectIndex() const { return baseObjectIndex; }
+
+    // Overrides the default placement of instance i (call after createResources).
+    void setPlacement(int i, XMFLOAT3 pos, float yaw) {
+        instances[i].pos = pos;
+        instances[i].yaw = yaw;
+    }
 
     void releaseResources() {
         if (skinCbMapped) { skinCbBuffer->Unmap(0, nullptr); skinCbMapped = nullptr; }

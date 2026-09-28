@@ -140,8 +140,27 @@ com_ptr<ID3D12PipelineState> Egg::PsoManager::Get(const D3D12_GRAPHICS_PIPELINE_
 	if(indexOf == -1) {
 		com_ptr<ID3D12PipelineState> pso{ nullptr };
 
-		DX_API("PSOManager: Failed to create GPSO")
-			device->CreateGraphicsPipelineState(&gpsoDesc, IID_PPV_ARGS(pso.GetAddressOf()));
+		HRESULT hr = device->CreateGraphicsPipelineState(&gpsoDesc, IID_PPV_ARGS(pso.GetAddressOf()));
+		if(FAILED(hr)) {
+			// The HRESULT alone ("the parameter is incorrect") doesn't say which
+			// field is wrong; the debug layer does, but only via
+			// OutputDebugString -- pull its messages into the assert dialog.
+			std::string details;
+			com_ptr<ID3D12InfoQueue> infoQueue;
+			if(SUCCEEDED(device.As(&infoQueue))) {
+				UINT64 n = infoQueue->GetNumStoredMessages();
+				for(UINT64 i = 0; i < n; i++) {
+					SIZE_T len = 0;
+					infoQueue->GetMessage(i, nullptr, &len);
+					std::vector<char> buf(len);
+					D3D12_MESSAGE * msg = reinterpret_cast<D3D12_MESSAGE *>(buf.data());
+					infoQueue->GetMessage(i, msg, &len);
+					details += msg->pDescription;
+					details += "\n";
+				}
+			}
+			ASSERT(false, "PSOManager: Failed to create GPSO (HR=0x%08X). Debug layer messages:\n%s", hr, details.c_str());
+		}
 
 		gpsos.push_back(pso);
 		gpsoDescs.push_back(gpsoDesc);

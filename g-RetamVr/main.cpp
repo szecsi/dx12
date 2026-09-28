@@ -45,6 +45,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 		D3D12GetDebugInterface(IID_PPV_ARGS(debugController.GetAddressOf()));
 	debugController->EnableDebugLayer();
 
+	// DRED: on device removal, OpenXRApp::CheckDeviceNotRemoved() reports
+	// which GPU command faulted (breadcrumbs) and which resource a page
+	// fault hit. Must be enabled before the device is created.
+	com_ptr<ID3D12DeviceRemovedExtendedDataSettings> dredSettings;
+	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(dredSettings.GetAddressOf())))) {
+		dredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+		dredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+	}
+
 	DX_API("Failed to initialize COM library")
 		CoInitialize(NULL);
 

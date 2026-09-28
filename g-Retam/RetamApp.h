@@ -243,6 +243,7 @@ public:
 		showRetam = true;
 		showStrokes = true;
 		showReCollect = false;
+		showAnim = true;
 
 		uploadFence.createResources(device);
 
@@ -554,6 +555,14 @@ public:
 		retamMaterialCb.data.overdraw    = 1.0f;
 
 		RunScript("scene.lua");
+
+		// Start framed on the hip-hop dancer (HipHopAnimation's instance at
+		// (-24,-10,30), ~2 world units per cm-scale FBX unit) instead of the
+		// FirstPerson default of (0,0,-10), which sits inside the figure.
+		if (auto headCam = std::dynamic_pointer_cast<Egg::Cam::FirstPerson>(cameras[currentCameraIndex])) {
+			headCam->SetView(Egg::Math::float3(-24.0f, 80.0f, -100.0f), Egg::Math::float3::UnitZ);
+			headCam->SetSpeed(50.0f);
+		}
 
 		GG_STRUCT(RetamMaterialCb)
 			GG_MEMBER(lineSize)

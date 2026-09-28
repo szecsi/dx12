@@ -9,9 +9,16 @@ void Egg::Internal::Assert(bool trueMeansOk, const char * msgOnFail, ...) {
 	va_list argList;
 	va_start(argList, msgOnFail);
 
-	if(!trueMeansOk) { 
+	if(!trueMeansOk) {
+		// Sized to the formatted message: diagnostic reports (e.g. DRED
+		// dumps from OpenXRApp) can far exceed a fixed buffer, which makes
+		// vsprintf_s itself assert with "Buffer too small".
+		va_list sizeArgs;
+		va_copy(sizeArgs, argList);
+		int len = _vscprintf(msgOnFail, sizeArgs);
+		va_end(sizeArgs);
 		std::string buffer;
-		buffer.resize(1024);
+		buffer.resize(len > 0 ? len + 1 : 1);
 		/*
 		vsprintf_s:
 		v: takes a va_list (variadic arg list)
@@ -19,7 +26,7 @@ void Egg::Internal::Assert(bool trueMeansOk, const char * msgOnFail, ...) {
 		printf
 		_s: secure, takes buffer size as argument
 		*/
-		vsprintf_s(&(buffer.at(0)), 1024, msgOnFail, argList);
+		vsprintf_s(&(buffer.at(0)), buffer.size(), msgOnFail, argList);
 		MessageBoxA(NULL, buffer.c_str(), "Assertion failed!", MB_ICONSTOP | MB_OK);
 		exit(-1);
 	}

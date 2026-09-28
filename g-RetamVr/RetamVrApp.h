@@ -13,6 +13,7 @@
 #include <Egg/Compute/ComputeShader.h>
 
 #include "../g-Retam/Shaders/Retam/RetamCb.hlsli"
+#include "../g-Retam/HipHopAnimation.h"
 
 // VR port of g-Retam's stroke pipeline onto Egg::OpenXRApp. Ports the CORE
 // pipeline (collect -> GPU sort/compact/extract-strokes -> cubic stroke
@@ -75,11 +76,15 @@ protected:
 	com_ptr<ID3D12Resource> collectColorBuffer;
 	com_ptr<ID3D12DescriptorHeap> collectRtvHeap;
 
-	Egg::Mesh::Geometry::P knightGeometry;
-	Egg::Mesh::Material::P retam256Material, retam256CollectMaterial, layDownDepthMaterial;
-	Egg::Mesh::Shaded::P   retam256Shaded, retam256CollectShaded, layDownDepthShaded;
+	// g-Retam's skinned hip-hop dancer, in its native (cm-like, ~170 units
+	// tall) FBX units. The world stays in those units rather than being
+	// shrunk to meters: the stroke LOD in retam256PS/retam256CollectPS is
+	// driven by camera-to-surface distance, so a 100x smaller world would
+	// hatch ~100x denser than on desktop. Instead the headset side is scaled
+	// (see WORLD_UNITS_PER_METER in PopulateEyeCommandList()).
+	HipHopAnimation hipHop;
+	static constexpr float WORLD_UNITS_PER_METER = 100.0f;
 
-	float rotationAngle = 0.0f;
 	float timeT = 0.0f;
 
 	com_ptr<ID3D12Resource> CreateUploadBuffer(const void* data, size_t sizeBytes) {
@@ -111,7 +116,7 @@ public:
 
 	virtual void Update(float dt, float T) override {
 		timeT = T;
-		rotationAngle = T * 0.4f;
+		hipHop.update(T, &perObjectCb->objects[hipHop.getBaseObjectIndex()]);
 	}
 
 	virtual void CreateResources() override {
@@ -216,8 +221,9 @@ public:
 			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.SampleDesc.Count = 1;
-			DX_API("create cubic extrude PSO")
-				device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(cubicExtrudePSO.GetAddressOf()));
+			HRESULT hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(cubicExtrudePSO.GetAddressOf()));
+			if (FAILED(hr))
+				ASSERT(false, "Failed to create cubic extrude PSO (HR=0x%08X). Debug layer messages:\n%s", hr, DebugLayerMessages().c_str());
 		}
 
 		sortCS.createResources(device, "Shaders/Retam/sortCS.cso");
@@ -273,8 +279,6 @@ public:
 	}
 
 	virtual void LoadAssets() override {
-		uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
 		retamMaterialCb.CreateResources(device.Get());
 		retamMaterialCb.data.lineSize   = { 0.2f, 0.06f };
 		retamMaterialCb.data.fading     = { 1.0f, 1.0f };
@@ -286,12 +290,6 @@ public:
 
 		perFrameCb.CreateResources(device.Get());
 		perObjectCb.CreateResources(device.Get());
-
-		// VR-appropriate scale: real-world meters, not the desktop scene's
-		// enormous (~207m) torus scale -- see chat for the measured-height
-		// story. 0.6m tall knight, comfortably in front of the headset's
-		// starting pose.
-		knightGeometry = Egg::Importer::ImportWithTangentSpace(device.Get(), "chess/knight.obj", 0.6f);
 
 		// Textures into uavHeap: slot 10 = uvmask (only read by
 		// retam256CollectPS via a root-parameter slot RetamApp's own
@@ -305,91 +303,39 @@ public:
 
 		SceneUploadResources();
 
-		// -- retam256 (mien 0 equivalent): the final visible base pass --
-		{
-			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/Retam/retamVS.cso");
-			com_ptr<ID3DBlob> ps = Egg::Shader::LoadCso("Shaders/Retam/retam256PS.cso");
-			com_ptr<ID3D12RootSignature> rootSig = Egg::Shader::LoadRootSignature(device.Get(), vs.Get());
-
-			retam256Material = Egg::Mesh::Material::Create();
-			retam256Material->SetRootSignature(rootSig);
-			retam256Material->SetVertexShader(vs);
-			retam256Material->SetPixelShader(ps);
-			retam256Material->SetDepthStencilState(CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT));
-			retam256Material->SetDSVFormat(DXGI_FORMAT_D32_FLOAT);
-			retam256Material->SetConstantBuffer(perObjectCb, sizeof(Egg::Scene::PerObjectData));
-			retam256Material->SetConstantBuffer(perFrameCb);
-			retam256Material->SetConstantBuffer(retamMaterialCb);
-			retam256Material->SetSrvHeap(3, uavHeap, 11 * dhIncrSize);
-
-			retam256Shaded = Egg::Mesh::Shaded::Create(psoManager, retam256Material, knightGeometry,
-				std::vector<DXGI_FORMAT>{ DXGI_FORMAT_R8G8B8A8_UNORM_SRGB });
-		}
-
-		// -- layDownDepth (mien 2 equivalent): depth-only prepass, no RTV --
-		{
-			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/Retam/retamVS.cso");
-			com_ptr<ID3DBlob> ps = Egg::Shader::LoadCso("Shaders/Retam/layDownDepthPS.cso");
-			com_ptr<ID3D12RootSignature> rootSig = Egg::Shader::LoadRootSignature(device.Get(), vs.Get());
-
-			layDownDepthMaterial = Egg::Mesh::Material::Create();
-			layDownDepthMaterial->SetRootSignature(rootSig);
-			layDownDepthMaterial->SetVertexShader(vs);
-			layDownDepthMaterial->SetPixelShader(ps);
-			layDownDepthMaterial->SetDepthStencilState(CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT));
-			layDownDepthMaterial->SetDSVFormat(DXGI_FORMAT_D32_FLOAT);
-			layDownDepthMaterial->SetConstantBuffer(perObjectCb, sizeof(Egg::Scene::PerObjectData));
-			layDownDepthMaterial->SetConstantBuffer(perFrameCb);
-			layDownDepthMaterial->SetSrvHeap(3, uavHeap, 11 * dhIncrSize);
-
-			layDownDepthShaded = Egg::Mesh::Shaded::Create(psoManager, layDownDepthMaterial, knightGeometry,
-				std::vector<DXGI_FORMAT>{});
-		}
-
-		// -- retam256Collect (mien 1 equivalent): fragment collection into UAV buffers --
-		{
-			com_ptr<ID3DBlob> vs = Egg::Shader::LoadCso("Shaders/Retam/retamCollectVS.cso");
-			com_ptr<ID3DBlob> ps = Egg::Shader::LoadCso("Shaders/Retam/retam256CollectPS.cso");
-			com_ptr<ID3D12RootSignature> rootSig = Egg::Shader::LoadRootSignature(device.Get(), vs.Get());
-
-			retam256CollectMaterial = Egg::Mesh::Material::Create();
-			retam256CollectMaterial->SetRootSignature(rootSig);
-			retam256CollectMaterial->SetVertexShader(vs);
-			retam256CollectMaterial->SetPixelShader(ps);
-			retam256CollectMaterial->SetDepthStencilState(CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT));
-			retam256CollectMaterial->SetDepthCompLessEqual();
-			retam256CollectMaterial->SetDSVFormat(DXGI_FORMAT_D32_FLOAT);
-			retam256CollectMaterial->SetConstantBuffer(perObjectCb, sizeof(Egg::Scene::PerObjectData));
-			retam256CollectMaterial->SetConstantBuffer(perFrameCb);
-			retam256CollectMaterial->SetConstantBuffer(retamMaterialCb);
-			retam256CollectMaterial->SetSrvHeap(3, uavHeap, 0); // UAV(u0,u1) table -- fragmentCounts/fragments
-
-			retam256CollectShaded = Egg::Mesh::Shaded::Create(psoManager, retam256CollectMaterial, knightGeometry,
-				std::vector<DXGI_FORMAT>{ DXGI_FORMAT_R8G8B8A8_UNORM });
-		}
-
-		// Single static object: knight at (0,0,-1.2), spun slowly for visual
-		// interest (see Update()). modelTransform rebuilt per-frame below.
+		// g-Retam's skinned hip-hop dancer, drawing itself for each retam
+		// pass (mien 0 = final shading into the SRGB XR swapchain, 1 =
+		// fragment collect, 2 = depth prepass) with its own PSOs.
+		// Placement in world units (see WORLD_UNITS_PER_METER): the LOCAL
+		// reference space origin is the headset's starting pose, so the
+		// floor is roughly 1.5m below it; 2.5m in front along -Z. Yawed
+		// 180 degrees -- desktop views it from -Z looking +Z, the headset
+		// looks the other way.
+		hipHop.createResources(device.Get(), 0, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
+		hipHop.setPlacement(0, XMFLOAT3(0.0f, -1.5f * WORLD_UNITS_PER_METER, -2.5f * WORLD_UNITS_PER_METER), XM_PI);
 	}
 
 	virtual void ReleaseAssets() override {
-		retam256Shaded = nullptr; layDownDepthShaded = nullptr; retam256CollectShaded = nullptr;
-		retam256Material = nullptr; layDownDepthMaterial = nullptr; retam256CollectMaterial = nullptr;
-		knightGeometry = nullptr;
+		hipHop.releaseResources();
+		textures.clear();
 	}
 
 private:
 	Egg::Texture2D LoadTexture2D(const std::string& filename, unsigned int uavHeapSlot) {
 		std::string path = "../Media/" + filename;
 		Egg::Texture2D tex = Egg::Importer::ImportTexture2D(device.Get(), path);
-		uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-		CD3DX12_CPU_DESCRIPTOR_HANDLE handle(uavHeap->GetCPUDescriptorHandleForHeapStart(), uavHeapSlot, dhIncrSize);
 		tex.CreateSRV(device.Get(), uavHeap.Get(), uavHeapSlot);
 		pendingTextureUploads.push_back(tex);
+		textures.push_back(tex);
 		return tex;
 	}
 
 	std::vector<Egg::Texture2D> pendingTextureUploads;
+	// Keeps the texture resources alive for the app's lifetime -- the SRVs
+	// in uavHeap don't hold a reference, and pendingTextureUploads is
+	// cleared after upload. Without this they were freed right after
+	// loading, and the dancer's shaders sampled released memory (GPU hang).
+	std::vector<Egg::Texture2D> textures;
 
 	void SceneUploadResources() {
 		DX_API("Failed to reset command allocator (UploadResources)")
@@ -405,9 +351,11 @@ private:
 		ID3D12CommandList* lists[] = { commandList.Get() };
 		commandQueue->ExecuteCommandLists(1, lists);
 
-		DX_API("Failed to signal fence") commandQueue->Signal(fence.Get(), ++fenceValue);
-		DX_API("Failed to register fence completion") fence->SetEventOnCompletion(fenceValue, fenceEvent);
-		WaitForSingleObject(fenceEvent, INFINITE);
+		// OpenXRApp's own fence convention (fenceValue = next value to
+		// signal) -- signalling ++fenceValue here instead left the next
+		// WaitForGpu() waiting on an already-reached value, so it returned
+		// before the first eye's GPU work finished.
+		WaitForGpu();
 
 		for (auto& tex : pendingTextureUploads)
 			tex.ReleaseUploadResources();
@@ -425,33 +373,44 @@ protected:
 		// eyeSeparation-slider math -- xrViews[eye]/eyeViewMatrix/
 		// eyeProjMatrix are already built by OpenXRApp::BuildEyeMatrices()
 		// before PopulateEyeCommandList() is called for either eye.
-		float3 eyePos(xrViews[xrCurrentEye].pose.position.x,
+		// Headset poses are in meters, the world is in the dancer's native
+		// units: eye position scaled up, and world->meters folded into the
+		// front of the view-projection (row-vector: v * S * V * P).
+		float3 eyePos = float3(xrViews[xrCurrentEye].pose.position.x,
 			xrViews[xrCurrentEye].pose.position.y,
-			xrViews[xrCurrentEye].pose.position.z);
+			xrViews[xrCurrentEye].pose.position.z) * WORLD_UNITS_PER_METER;
+		const float m = 1.0f / WORLD_UNITS_PER_METER;
+		float4x4 worldToMeters = float4x4::Scaling(float3(m, m, m));
 
-		// World-space forward: rotate the view-space forward axis (+Z --
-		// see XrFovToProjectionMatrix's w_clip=-v_z comment, and the
-		// verified-by-construction view matrix, which puts what's in front
-		// of the eye at positive view-space Z) by the eye's own pose
-		// quaternion. retam256PS.hlsl's stroke-density/LOD calculation
-		// (dot(viewDiff, -ahead.xyz)) genuinely depends on this being the
-		// real per-eye heading, not a fixed world axis.
+		// World-space forward: the eye's pose quaternion applied to OpenXR's
+		// view direction, -Z (XrFovToProjectionMatrix: w_clip = -v_z, so
+		// visible points have negative view-space z). retam256PS/
+		// retam256CollectPS's stroke LOD divides by dot(cameraPos - x,
+		// -ahead), which is only the positive distance-along-view it is
+		// meant to be when ahead is the true forward -- with +Z it went
+		// negative and got clamped, flattening the LOD.
 		const auto& q = xrViews[xrCurrentEye].pose.orientation;
 		float3 qv(q.x, q.y, q.z);
-		float3 localForward(0.0f, 0.0f, 1.0f);
+		float3 localForward(0.0f, 0.0f, -1.0f);
 		float3 t = qv.Cross(localForward) * 2.0f;
 		float3 worldAhead = localForward + t * q.w + qv.Cross(t);
 
-		perFrameCb->viewProjTransform = eyeViewMatrix[xrCurrentEye] * eyeProjMatrix[xrCurrentEye];
+		perFrameCb->viewProjTransform = worldToMeters * eyeViewMatrix[xrCurrentEye] * eyeProjMatrix[xrCurrentEye];
 		perFrameCb->cameraPos = float4(eyePos, 1.0f);
 		perFrameCb->ahead = float4(worldAhead, 0.0f);
 		perFrameCb->time = float4(timeT, 0, 0, 0);
 		perFrameCb.Upload();
 
-		float4x4 world = float4x4::Rotation(float3::UnitY, rotationAngle) * float4x4::Translation(float3(0.0f, 0.0f, -1.2f));
-		perObjectCb->objects[0].modelTransform = world;
-		perObjectCb->objects[0].modelTransformInverse = world.Invert();
+		// Dancer's model transform + bone matrices were written in Update().
 		perObjectCb.Upload();
+
+		uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		auto drawDancer = [&](int mien) {
+			hipHop.draw(commandList.Get(), mien, uavHeap.Get(), dhIncrSize,
+				retamMaterialCb.GetGPUVirtualAddress(),
+				perFrameCb.GetGPUVirtualAddress(),
+				perObjectCb.GetGPUVirtualAddress());
+		};
 
 		CD3DX12_CPU_DESCRIPTOR_HANDLE collectDsvHandle(collectDsvHeap->GetCPUDescriptorHandleForHeapStart());
 		CD3DX12_CPU_DESCRIPTOR_HANDLE collectRtvHandle(collectRtvHeap->GetCPUDescriptorHandleForHeapStart());
@@ -465,12 +424,12 @@ protected:
 		fragmentCountsBuffer.upload(commandList);
 		commandList->OMSetRenderTargets(0, nullptr, FALSE, &collectDsvHandle);
 		commandList->ClearDepthStencilView(collectDsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-		layDownDepthShaded->Draw(commandList.Get(), 0);
+		drawDancer(2);
 
 		const float collectClearColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		commandList->ClearRenderTargetView(collectRtvHandle, collectClearColor, 0, nullptr);
 		commandList->OMSetRenderTargets(1, &collectRtvHandle, FALSE, &collectDsvHandle);
-		retam256CollectShaded->Draw(commandList.Get(), 0);
+		drawDancer(1);
 
 		{
 			D3D12_RESOURCE_BARRIER b[] = { fragmentCountsBuffer.uavBarrier(), fragmentsBuffer.uavBarrier() };
@@ -540,7 +499,7 @@ protected:
 		commandList->ClearRenderTargetView(eyeRtv, whiteClear, 0, nullptr);
 		commandList->ClearDepthStencilView(eyeDsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-		retam256Shaded->Draw(commandList.Get(), 0);
+		drawDancer(0);
 
 		{
 			D3D12_RESOURCE_BARRIER barriers[] = {
@@ -553,7 +512,6 @@ protected:
 			commandList->ResourceBarrier(2, barriers);
 		}
 		{
-			uint dhIncrSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 			CD3DX12_GPU_DESCRIPTOR_HANDLE cubicSrvGpu(uavHeap->GetGPUDescriptorHandleForHeapStart(), 9, dhIncrSize);
 			CD3DX12_GPU_DESCRIPTOR_HANDLE carrotSrvGpu(uavHeap->GetGPUDescriptorHandleForHeapStart(), 11, dhIncrSize);
 			commandList->SetGraphicsRootSignature(cubicExtrudeRootSig.Get());

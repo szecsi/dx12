@@ -9,6 +9,111 @@ static void XrCheck(XrResult result, const char* msg) {
     ASSERT(result >= 0, msg);
 }
 
+// ---- Diagnostics ---------------------------------------------------------
+
+std::string OpenXRApp::DebugLayerMessages() {
+    std::string details;
+    com_ptr<ID3D12InfoQueue> infoQueue;
+    if (SUCCEEDED(device.As(&infoQueue))) {
+        UINT64 n = infoQueue->GetNumStoredMessages();
+        for (UINT64 i = 0; i < n; i++) {
+            SIZE_T len = 0;
+            infoQueue->GetMessage(i, nullptr, &len);
+            std::vector<char> buf(len);
+            D3D12_MESSAGE* msg = reinterpret_cast<D3D12_MESSAGE*>(buf.data());
+            infoQueue->GetMessage(i, msg, &len);
+            details += msg->pDescription;
+            details += "\n";
+        }
+    }
+    return details;
+}
+
+static const char* BreadcrumbOpName(D3D12_AUTO_BREADCRUMB_OP op) {
+    switch (op) {
+    case D3D12_AUTO_BREADCRUMB_OP_SETMARKER:                return "SetMarker";
+    case D3D12_AUTO_BREADCRUMB_OP_BEGINEVENT:               return "BeginEvent";
+    case D3D12_AUTO_BREADCRUMB_OP_ENDEVENT:                 return "EndEvent";
+    case D3D12_AUTO_BREADCRUMB_OP_DRAWINSTANCED:            return "DrawInstanced";
+    case D3D12_AUTO_BREADCRUMB_OP_DRAWINDEXEDINSTANCED:     return "DrawIndexedInstanced";
+    case D3D12_AUTO_BREADCRUMB_OP_EXECUTEINDIRECT:          return "ExecuteIndirect";
+    case D3D12_AUTO_BREADCRUMB_OP_DISPATCH:                 return "Dispatch";
+    case D3D12_AUTO_BREADCRUMB_OP_COPYBUFFERREGION:         return "CopyBufferRegion";
+    case D3D12_AUTO_BREADCRUMB_OP_COPYTEXTUREREGION:        return "CopyTextureRegion";
+    case D3D12_AUTO_BREADCRUMB_OP_COPYRESOURCE:             return "CopyResource";
+    case D3D12_AUTO_BREADCRUMB_OP_CLEARRENDERTARGETVIEW:    return "ClearRenderTargetView";
+    case D3D12_AUTO_BREADCRUMB_OP_CLEARUNORDEREDACCESSVIEW: return "ClearUnorderedAccessView";
+    case D3D12_AUTO_BREADCRUMB_OP_CLEARDEPTHSTENCILVIEW:    return "ClearDepthStencilView";
+    case D3D12_AUTO_BREADCRUMB_OP_RESOURCEBARRIER:          return "ResourceBarrier";
+    default:                                                return nullptr;
+    }
+}
+
+std::string OpenXRApp::DredReport() {
+    com_ptr<ID3D12DeviceRemovedExtendedData> dred;
+    if (FAILED(device.As(&dred)))
+        return "(DRED not available)\n";
+
+    std::string report;
+    char line[512];
+
+    // Breadcrumbs: every command list still in flight, with the ops it
+    // recorded and an arrow at the first one the GPU never finished.
+    D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT crumbs = {};
+    if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput(&crumbs))) {
+        for (const D3D12_AUTO_BREADCRUMB_NODE* node = crumbs.pHeadAutoBreadcrumbNode; node; node = node->pNext) {
+            UINT done = node->pLastBreadcrumbValue ? *node->pLastBreadcrumbValue : 0;
+            if (done >= node->BreadcrumbCount) continue; // this list completed
+            sprintf_s(line, "Command list '%ls': %u of %u ops completed\n",
+                node->pCommandListDebugNameW ? node->pCommandListDebugNameW : L"?", done, node->BreadcrumbCount);
+            report += line;
+            for (UINT i = 0; i < node->BreadcrumbCount; i++) {
+                const char* name = BreadcrumbOpName(node->pCommandHistory[i]);
+                if (name) sprintf_s(line, "%s %3u %s\n", i == done ? "-->" : "   ", i, name);
+                else      sprintf_s(line, "%s %3u op#%d\n", i == done ? "-->" : "   ", i, (int)node->pCommandHistory[i]);
+                report += line;
+            }
+        }
+    }
+    if (report.empty())
+        report = "(no incomplete command lists in DRED breadcrumbs)\n";
+
+    D3D12_DRED_PAGE_FAULT_OUTPUT fault = {};
+    if (SUCCEEDED(dred->GetPageFaultAllocationOutput(&fault)) && fault.PageFaultVA) {
+        sprintf_s(line, "Page fault at GPU VA 0x%llX\n", (unsigned long long)fault.PageFaultVA);
+        report += line;
+        for (auto* a = fault.pHeadExistingAllocationNode; a; a = a->pNext) {
+            sprintf_s(line, "  existing allocation: %s\n", a->ObjectNameA ? a->ObjectNameA : "?");
+            report += line;
+        }
+        for (auto* a = fault.pHeadRecentFreedAllocationNode; a; a = a->pNext) {
+            sprintf_s(line, "  recently freed: %s\n", a->ObjectNameA ? a->ObjectNameA : "?");
+            report += line;
+        }
+    }
+    return report;
+}
+
+void OpenXRApp::CheckDeviceNotRemoved(const char* where) {
+    HRESULT reason = device->GetDeviceRemovedReason();
+    if (reason == S_OK) return;
+    std::string dredReport = DredReport();
+    std::string messages = DebugLayerMessages();
+    ASSERT(false, "D3D12 device removed %s (GetDeviceRemovedReason=0x%08X).\n\nDRED:\n%s\nDebug layer messages:\n%s",
+        where, reason, dredReport.c_str(), messages.c_str());
+}
+
+void OpenXRApp::XrCheckFrame(XrResult result, const char* call) {
+    if (result >= 0) return;
+    char name[XR_MAX_RESULT_STRING_SIZE] = "?";
+    xrResultToString(xrInstance, result, name);
+    HRESULT reason = device->GetDeviceRemovedReason();
+    std::string dredReport = reason != S_OK ? DredReport() : std::string("(device not removed)\n");
+    std::string messages = DebugLayerMessages();
+    ASSERT(false, "%s failed: %s (%d). GetDeviceRemovedReason=0x%08X\n\nDRED:\n%s\nDebug layer messages:\n%s",
+        call, name, (int)result, reason, dredReport.c_str(), messages.c_str());
+}
+
 // ---- Descriptor handle accessors ----------------------------------------
 
 D3D12_CPU_DESCRIPTOR_HANDLE OpenXRApp::GetEyeRtv(uint32_t eye, uint32_t imageIndex) const {
@@ -316,6 +421,7 @@ void OpenXRApp::CreateResources() {
     DX_API("Failed to create command list")
         device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
             commandAllocator.Get(), nullptr, IID_PPV_ARGS(commandList.GetAddressOf()));
+    commandList->SetName(L"OpenXRApp eye command list"); // shows up in DRED reports
     commandList->Close();
 
     WaitForGpu();
@@ -419,8 +525,8 @@ void OpenXRApp::Render() {
     // --- OpenXR frame loop ---
     XrFrameWaitInfo waitInfo = { XR_TYPE_FRAME_WAIT_INFO };
     xrFrameState = { XR_TYPE_FRAME_STATE };
-    xrWaitFrame(xrSession, &waitInfo, &xrFrameState);
-    xrBeginFrame(xrSession, nullptr);
+    XrCheckFrame(xrWaitFrame(xrSession, &waitInfo, &xrFrameState), "xrWaitFrame");
+    XrCheckFrame(xrBeginFrame(xrSession, nullptr), "xrBeginFrame");
 
     XrCompositionLayerProjectionView projViews[EYE_COUNT] = {};
     bool didRender = (xrFrameState.shouldRender == XR_TRUE);
@@ -442,11 +548,11 @@ void OpenXRApp::Render() {
         for (uint32_t eye = 0; eye < EYE_COUNT; eye++) {
             // Acquire a compositor-owned swapchain image
             XrSwapchainImageAcquireInfo acquireInfo = { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
-            xrAcquireSwapchainImage(xrSwapchains[eye], &acquireInfo, &xrCurrentImageIndex[eye]);
+            XrCheckFrame(xrAcquireSwapchainImage(xrSwapchains[eye], &acquireInfo, &xrCurrentImageIndex[eye]), "xrAcquireSwapchainImage");
 
             XrSwapchainImageWaitInfo imgWait = { XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO };
             imgWait.timeout = XR_INFINITE_DURATION;
-            xrWaitSwapchainImage(xrSwapchains[eye], &imgWait);
+            XrCheckFrame(xrWaitSwapchainImage(xrSwapchains[eye], &imgWait), "xrWaitSwapchainImage");
 
             // Record rendering commands
             xrCurrentEye = eye;
@@ -477,10 +583,15 @@ void OpenXRApp::Render() {
             ID3D12CommandList* lists[] = { commandList.Get() };
             commandQueue->ExecuteCommandLists(1, lists);
             WaitForGpu();
+            // A GPU fault in PopulateEyeCommandList() would otherwise go
+            // unnoticed here and only blow up inside the compositor at
+            // xrEndFrame -- catch it at the eye that caused it.
+            CheckDeviceNotRemoved(eye == 0 ? "after executing the left eye's command list"
+                                           : "after executing the right eye's command list");
 
             // Return image to the compositor
             XrSwapchainImageReleaseInfo releaseInfo = { XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
-            xrReleaseSwapchainImage(xrSwapchains[eye], &releaseInfo);
+            XrCheckFrame(xrReleaseSwapchainImage(xrSwapchains[eye], &releaseInfo), "xrReleaseSwapchainImage");
 
             projViews[eye] = { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW };
             projViews[eye].pose = xrViews[eye].pose;
@@ -509,7 +620,7 @@ void OpenXRApp::Render() {
     endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     endInfo.layerCount = didRender ? 1u : 0u;
     endInfo.layers = didRender ? layers : nullptr;
-    xrEndFrame(xrSession, &endInfo);
+    XrCheckFrame(xrEndFrame(xrSession, &endInfo), "xrEndFrame");
 }
 
 void OpenXRApp::ReleaseSwapChainResources() {

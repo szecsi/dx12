@@ -54,7 +54,7 @@
       <ShaderType>Compute</ShaderType>
     </FxCompile>
     <FxCompile>
-      <ShaderModel>6.8</ShaderModel>
+      <ShaderModel>6.5</ShaderModel>
       <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).cso</ObjectFileOutput>
       <AdditionalIncludeDirectories>$(SolutionDir)Egg\Shaders</AdditionalIncludeDirectories>
     </FxCompile>
@@ -123,19 +123,19 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="Shaders\Retam\sortCS.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.5</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\Retam\prefixSumCS.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.5</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\Retam\compactCS.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.5</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\Retam\argsCS.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.5</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\Retam\cubicCS.hlsl">
-      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.8</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.5</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\Retam\extrudeVS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
